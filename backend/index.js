@@ -66,6 +66,7 @@ const videoCallRoutes = require('./routes/videoCalls');
 const healthRoutes = require('./routes/health');
 const webhooksAdminRoutes = require('./routes/webhooks-admin');
 const queuesAdminRoutes = require('./routes/queues-admin');
+const backupsAdminRoutes = require('./routes/admin-backups');
 
 // Firebase initialization
 const { initializeFirebase, getMessaging } = require('./config/firebase-admin');
@@ -246,6 +247,7 @@ app.use('/api/admin/referrals', injectAdminCookie, referralAdminRoutes);
 app.use('/api/admin/kpis', injectAdminCookie, kpisAdminRoutes);
 app.use('/api/admin/webhooks', injectAdminCookie, webhooksAdminRoutes);
 app.use('/api/admin/queues', injectAdminCookie, queuesAdminRoutes);
+app.use('/api/admin/backups', injectAdminCookie, backupsAdminRoutes);
 app.use('/api/role-permissions', injectAdminCookie, rolePermissionsRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/portfolio-projects', portfolioProjectsRoutes);
