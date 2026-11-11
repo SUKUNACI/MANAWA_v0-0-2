@@ -64,10 +64,16 @@ const kpisAdminRoutes = require('./routes/kpis-admin');
 const analyticsRoutes = require('./routes/analytics');
 const videoCallRoutes = require('./routes/videoCalls');
 const healthRoutes = require('./routes/health');
+const webhooksAdminRoutes = require('./routes/webhooks-admin');
+const queuesAdminRoutes = require('./routes/queues-admin');
 
 // Firebase initialization
 const { initializeFirebase, getMessaging } = require('./config/firebase-admin');
 const { setMessaging } = require('./config/pushNotifications');
+
+// Redis initialization for caching
+const redis = require('./config/redis');
+const { cacheGet, cacheInvalidate } = require('./middleware/cacheMiddleware');
 
 const helmet = require('helmet');
 
@@ -238,6 +244,8 @@ app.use('/api/admin', injectAdminCookie, adminRoutes);
 app.use('/api/admin/badges', injectAdminCookie, badgeAdminRoutes);
 app.use('/api/admin/referrals', injectAdminCookie, referralAdminRoutes);
 app.use('/api/admin/kpis', injectAdminCookie, kpisAdminRoutes);
+app.use('/api/admin/webhooks', injectAdminCookie, webhooksAdminRoutes);
+app.use('/api/admin/queues', injectAdminCookie, queuesAdminRoutes);
 app.use('/api/role-permissions', injectAdminCookie, rolePermissionsRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/portfolio-projects', portfolioProjectsRoutes);
@@ -610,11 +618,43 @@ async function startServer() {
 
     console.log('✓ Connexion à la base de données établie');
 
+    // Initialize Redis cache
+    console.log('⏳ Initialisation du cache Redis...');
+    await redis.initializeRedis();
+    const cacheHealth = await redis.healthCheck();
+    console.log(`✓ Cache ${cacheHealth.mode}: ${cacheHealth.message}`);
+
+    // Initialize job queue workers
+    console.log('⏳ Initialisation des workers de file d\'attente...');
+    const { initializeWorkers, shutdownWorkers } = require('./jobs/workers');
+    try {
+      await initializeWorkers();
+      console.log('✓ Workers de file d\'attente initialisés');
+    } catch (err) {
+      console.error('⚠️  Erreur initialisation workers (non-bloquant):', err.message);
+    }
+
     server.listen(PORT, () => {
       console.log(`✓ Serveur MANAWA démarré sur le port ${PORT}`);
       logger.info('Server started', { port: PORT });
       seedConfig().catch(err => console.error('[Config] Erreur seed:', err.message));
       ensureSuperAdmin().catch(err => console.error('[Boot] Erreur ensureSuperAdmin:', err.message));
+    });
+
+    // Graceful shutdown
+    process.on('SIGTERM', async () => {
+      console.log('⏳ Arrêt du serveur MANAWA...');
+      server.close(() => {
+        console.log('✓ Serveur arrêté');
+      });
+      try {
+        const { shutdownWorkers } = require('./jobs/workers');
+        await shutdownWorkers();
+      } catch (err) {
+        console.error('Erreur lors de l\'arrêt des workers:', err.message);
+      }
+      await redis.disconnect();
+      process.exit(0);
     });
   } catch (error) {
     console.error('❌ Erreur lors du démarrage du serveur:', error.message);

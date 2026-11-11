@@ -2,6 +2,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { checkDatabaseHealth } = require('../utils/health-check');
+const redis = require('../config/redis');
 const logger = require('../utils/logger');
 
 // Rate limiters
@@ -13,16 +14,21 @@ const healthLimiter = rateLimit({
   message: { error: 'Trop de requêtes de santé, réessayez dans une minute' },
 });
 
-// GET /api/health — Health check endpoint
+// GET /api/health — Health check endpoint (includes Redis cache)
 router.get('/health', healthLimiter, async (req, res) => {
   try {
-    const db = await checkDatabaseHealth();
+    const [db, cache] = await Promise.all([
+      checkDatabaseHealth(),
+      redis.healthCheck()
+    ]);
 
-    const status = db.status === 'healthy' ? 200 : 503;
+    const isHealthy = db.status === 'healthy' && cache.status === 'ok';
+    const status = isHealthy ? 200 : 503;
     const response = {
-      status: db.status,
+      status: isHealthy ? 'healthy' : 'degraded',
       services: {
         database: db,
+        cache: cache,
       },
       timestamp: new Date().toISOString(),
     };

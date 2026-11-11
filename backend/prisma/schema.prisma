@@ -854,3 +854,37 @@ model RolePermissionHistory {
   @@index([changedByAdminId])
   @@index([createdAt])
 }
+
+model Webhook {
+  id          String   @id @default(uuid())
+  url         String
+  secret      String
+  events      String[] @default([]) // ["booking.created", "payment.completed", ...]
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  logs WebhookLog[]
+
+  @@index([isActive])
+  @@index([createdAt])
+}
+
+model WebhookLog {
+  id          String   @id @default(uuid())
+  webhookId   String
+  event       String
+  payload     String   // JSON payload
+  status      String   // "success" | "failed" | "pending"
+  response    String?  // Response from endpoint
+  attempt     Int      @default(1)
+  nextRetryAt DateTime?
+  createdAt   DateTime @default(now())
+
+  webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId])
+  @@index([event])
+  @@index([status])
+  @@index([createdAt])
+}
