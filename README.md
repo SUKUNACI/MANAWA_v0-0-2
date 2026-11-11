@@ -7,12 +7,12 @@
 ## 📚 Table des Matières
 
 1. [Vue d'ensemble](#vue-densemble)
-2. [Fonctionnalités](#fonctionnalités)
+2. [Fonctionnalites](#fonctionnalites)
 3. [Architecture](#architecture)
 4. [Stack Technique](#stack-technique)
 5. [Installation](#installation)
 6. [Configuration](#configuration)
-7. [Déploiement](#déploiement)
+7. [Deploiement](#deploiement)
 8. [Standards ECC](#standards-ecc)
 9. [Roadmap](#roadmap)
 10. [Support](#support)
@@ -44,7 +44,7 @@ Permettre aux petits professionnels indépendants de se concentrer sur leur mét
 
 ---
 
-## ✨ Fonctionnalités
+## ✨ Fonctionnalites
 
 ### Pour les Professionnels
 
@@ -381,7 +381,7 @@ CORS_ORIGINS="https://manawa.com,https://app.manawa.com"
 
 ---
 
-## 🌐 Déploiement
+## 🌐 Deploiement
 
 ### Backend (Render)
 
