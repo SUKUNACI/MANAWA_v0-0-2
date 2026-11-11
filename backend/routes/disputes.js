@@ -1,9 +1,31 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
+const { param, body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendPushNotification } = require('../config/pushNotifications');
+const { handleValidationErrors } = require('../middleware/validateInput');
 
 const router = express.Router();
+
+// Rate limiters
+const readLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
+
+const writeLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30, // 30 requests per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
 
 // Helper: Get payment with nested project and professional data
 async function getPaymentWithDetails(paymentId) {
@@ -58,7 +80,14 @@ async function notifyProfessionalDispute(dispute, payment) {
 }
 
 // POST /api/disputes — ouvrir un litige sur un paiement
-router.post('/', requireAuth, requireRole('CLIENT'), async (req, res, next) => {
+router.post('/', writeLimiter, requireAuth, requireRole('CLIENT'),
+  [
+    body('paymentId').trim().notEmpty().withMessage('paymentId requis'),
+    body('reason').trim().notEmpty().isLength({ max: 100 }).withMessage('reason required and max 100 chars'),
+    body('description').optional().trim().isLength({ max: 1000 }).withMessage('description max 1000 chars'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { paymentId, reason, description } = req.body;
 
@@ -113,7 +142,7 @@ function getDisputeInclude() {
 }
 
 // GET /api/disputes/mine — litiges du client connecté
-router.get('/mine', requireAuth, requireRole('CLIENT'), async (req, res, next) => {
+router.get('/mine', readLimiter, requireAuth, requireRole('CLIENT'), handleValidationErrors, async (req, res, next) => {
   try {
     const disputes = await prisma.dispute.findMany({
       where: { clientId: req.user.id },
@@ -162,7 +191,12 @@ function getDisputeDetailInclude() {
 }
 
 // GET /api/disputes/:id — détail d'un litige
-router.get('/:id', requireAuth, async (req, res, next) => {
+router.get('/:id', readLimiter, requireAuth,
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const whereClause = buildDisputeWhereClause(req.user.id, req.user.role, req.params.id);
     if (whereClause === null) {

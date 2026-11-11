@@ -1,12 +1,41 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
+const { param, body, query, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth } = require('../middleware/auth');
 const { detectTokenType } = require('../config/pushNotifications');
+const { handleValidationErrors } = require('../middleware/validateInput');
 
 const router = express.Router();
 
+// Rate limiters
+const readLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
+
+const writeLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30, // 30 requests per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
+
 // POST /api/notifications/register-token — Register push token (FCM, APNs, or Expo)
-router.post('/register-token', requireAuth, async (req, res, next) => {
+router.post('/register-token', writeLimiter, requireAuth,
+  [
+    body('token').trim().notEmpty().isLength({ min: 10 }).withMessage('token required and min 10 chars'),
+    body('type').optional().trim().isIn(['EXPO', 'FCM', 'APNs']).withMessage('invalid type'),
+    body('deviceId').optional().trim().isLength({ max: 500 }).withMessage('deviceId too long'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { token, type, deviceId } = req.body;
 
@@ -73,7 +102,7 @@ router.post('/register-token', requireAuth, async (req, res, next) => {
 });
 
 // DELETE /api/notifications/unregister-token — Unregister all tokens (logout)
-router.delete('/unregister-token', requireAuth, async (req, res, next) => {
+router.delete('/unregister-token', writeLimiter, requireAuth, handleValidationErrors, async (req, res, next) => {
   try {
     // Mark all tokens as inactive (don't delete, keep history)
     await prisma.pushToken.updateMany({
@@ -97,7 +126,7 @@ router.delete('/unregister-token', requireAuth, async (req, res, next) => {
 });
 
 // GET /api/notifications/tokens — List user's registered tokens (admin/debug)
-router.get('/tokens', requireAuth, async (req, res, next) => {
+router.get('/tokens', readLimiter, requireAuth, handleValidationErrors, async (req, res, next) => {
   try {
     const tokens = await prisma.pushToken.findMany({
       where: { userId: req.user.id },
@@ -124,7 +153,13 @@ router.get('/tokens', requireAuth, async (req, res, next) => {
 });
 
 // GET /api/notifications/history — List user's notifications
-router.get('/history', requireAuth, async (req, res, next) => {
+router.get('/history', readLimiter, requireAuth,
+  [
+    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
+    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1-100'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(50, parseInt(req.query.limit) || 30);
@@ -142,7 +177,7 @@ router.get('/history', requireAuth, async (req, res, next) => {
   }
 });
 
-router.patch('/read-all', requireAuth, async (req, res, next) => {
+router.patch('/read-all', writeLimiter, requireAuth, handleValidationErrors, async (req, res, next) => {
   try {
     await prisma.notification.updateMany({
       where: { userId: req.user.id, read: false },
@@ -154,7 +189,12 @@ router.patch('/read-all', requireAuth, async (req, res, next) => {
   }
 });
 
-router.patch('/:id/read', requireAuth, async (req, res, next) => {
+router.patch('/:id/read', writeLimiter, requireAuth,
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const notification = await prisma.notification.findUnique({
       where: { id: req.params.id },

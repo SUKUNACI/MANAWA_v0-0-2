@@ -1,11 +1,44 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
+const { param, query, body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth } = require('../middleware/auth');
+const { handleValidationErrors } = require('../middleware/validateInput');
 
 const router = express.Router();
 
+// Rate limiters
+const readLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
+
+const writeLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30, // 30 requests per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
+
 // GET /api/bookings - List all bookings
-router.get('/', requireAuth, async (req, res, next) => {
+router.get('/', readLimiter, requireAuth,
+  [
+    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
+    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1-100'),
+    query('status').optional().isIn(['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED']).withMessage('invalid status'),
+    query('professionalId').optional().trim().notEmpty(),
+    query('dateFrom').optional().isISO8601().withMessage('invalid dateFrom format'),
+    query('dateTo').optional().isISO8601().withMessage('invalid dateTo format'),
+    query('search').optional().trim().isLength({ max: 100 }).withMessage('search too long'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { page = 1, limit = 50, status, professionalId, dateFrom, dateTo, search } = req.query;
     const skip = (page - 1) * limit;
@@ -75,7 +108,12 @@ router.get('/', requireAuth, async (req, res, next) => {
 });
 
 // GET /api/bookings/:id - Get booking detail
-router.get('/:id', requireAuth, async (req, res, next) => {
+router.get('/:id', requireAuth,
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const booking = await prisma.booking.findUnique({
       where: { id: req.params.id },
@@ -100,7 +138,14 @@ router.get('/:id', requireAuth, async (req, res, next) => {
 });
 
 // PATCH /api/bookings/:id/cancel - Cancel booking
-router.patch('/:id/cancel', requireAuth, async (req, res, next) => {
+router.patch('/:id/cancel', requireAuth,
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+    body('reason').optional().trim().isLength({ max: 500 }).withMessage('reason too long'),
+    body('notifyByEmail').optional().isBoolean().withMessage('notifyByEmail must be boolean'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { reason, notifyByEmail } = req.body;
 

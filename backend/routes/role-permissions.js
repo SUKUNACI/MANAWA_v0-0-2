@@ -1,8 +1,17 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
+const { param, body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
+const { handleValidationErrors } = require('../middleware/validateInput');
 
 const router = express.Router();
+
+// Rate limiters
+const adminLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 20, keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
 
 // Middleware d'authentification pour cette route (plus permissif que requireAuth)
 router.use((req, res, next) => {
@@ -29,7 +38,7 @@ router.use((req, res, next) => {
 // GET /api/role-permissions/all-sections
 // Liste toutes les sections disponibles
 // ============================================
-router.get('/all-sections', async (req, res, next) => {
+router.get('/all-sections', handleValidationErrors, async (req, res, next) => {
   try {
     const sections = [
       { name: 'reviews', description: 'Gestion des avis' },
@@ -76,7 +85,12 @@ router.get('/all-sections', async (req, res, next) => {
 // GET /api/role-permissions/:roleId
 // Récupère les permissions actuelles d'un rôle
 // ============================================
-router.get('/:roleId', async (req, res, next) => {
+router.get('/:roleId',
+  [
+    param('roleId').trim().notEmpty().withMessage('roleId requis'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { roleId } = req.params;
 

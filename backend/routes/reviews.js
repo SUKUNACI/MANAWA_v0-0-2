@@ -1,20 +1,33 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
+const { body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { handleValidationErrors } = require('../middleware/validateInput');
 
 const router = express.Router();
 
+// Rate limiters
 // 10 avis max par heure par utilisateur
 const createReviewLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 10,
   keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { error: 'Trop d\'avis postés, réessayez dans une heure' },
 });
 
 // POST /api/reviews
-router.post('/', requireAuth, requireRole('CLIENT'), createReviewLimiter, async (req, res, next) => {
+router.post('/', requireAuth, requireRole('CLIENT'), createReviewLimiter,
+  [
+    body('professionalId').trim().notEmpty().withMessage('professionalId requis'),
+    body('rating').isInt({ min: 1, max: 5 }).withMessage('rating must be 1-5'),
+    body('projectId').trim().notEmpty().withMessage('projectId requis'),
+    body('comment').optional().trim().isLength({ max: 1000 }).withMessage('comment max 1000 chars'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { professionalId, rating, comment, projectId } = req.body;
 

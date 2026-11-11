@@ -1,11 +1,31 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
+const { param, query, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth, requirePermission } = require('../middleware/auth');
+const { handleValidationErrors } = require('../middleware/validateInput');
 
 const router = express.Router();
 
+// Rate limiters
+const adminLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20, // 20 requests per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
+
 // GET /api/companies - List all companies
-router.get('/', requireAuth, requirePermission('companies'), async (req, res, next) => {
+router.get('/', adminLimiter, requireAuth, requirePermission('companies'),
+  [
+    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
+    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1-100'),
+    query('search').optional().trim().isLength({ max: 100 }).withMessage('search too long'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { page = 1, limit = 50, search } = req.query;
     const skip = (page - 1) * limit;
@@ -67,7 +87,12 @@ router.get('/', requireAuth, requirePermission('companies'), async (req, res, ne
 });
 
 // GET /api/companies/:id - Get company detail
-router.get('/:id', requireAuth, async (req, res, next) => {
+router.get('/:id', requireAuth,
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const company = await prisma.professional.findUnique({
       where: { id: req.params.id },

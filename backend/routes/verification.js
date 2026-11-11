@@ -1,17 +1,27 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
+const { body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { sendVerificationEmail } = require('../config/mailer');
 const { sendVerificationSms } = require('../config/sms');
 const { requireAuth } = require('../middleware/auth');
+const { handleValidationErrors } = require('../middleware/validateInput');
 
 const router = express.Router();
 
+// Rate limiters
 const otpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { error: 'Trop de demandes de code, réessayez dans 15 minutes' },
+});
+
+const readLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 100, keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de requêtes, réessayez dans une minute' },
 });
 
 const { randomInt } = require('crypto');
@@ -21,7 +31,7 @@ function generateCode() {
 }
 
 // POST /api/verification/email/send
-router.post('/email/send', requireAuth, otpLimiter, async (req, res, next) => {
+router.post('/email/send', requireAuth, otpLimiter, handleValidationErrors, async (req, res, next) => {
   try {
     const code = generateCode();
     const expiry = new Date(Date.now() + 15 * 60 * 1000);
@@ -39,7 +49,12 @@ router.post('/email/send', requireAuth, otpLimiter, async (req, res, next) => {
 });
 
 // POST /api/verification/email/confirm
-router.post('/email/confirm', requireAuth, async (req, res, next) => {
+router.post('/email/confirm', requireAuth,
+  [
+    body('code').trim().notEmpty().isLength({ min: 6, max: 6 }).isNumeric().withMessage('code must be 6 digits'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { code } = req.body;
     const user = await prisma.user.findUnique({ where: { id: req.user.id } });

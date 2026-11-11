@@ -1,8 +1,17 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
+const { param, body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { handleValidationErrors } = require('../middleware/validateInput');
 
 const router = express.Router();
+
+// Rate limiters
+const adminLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 20, keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
 
 // Tous les endpoints referrals-admin nécessitent auth + rôle admin
 router.use(requireAuth, requireRole('ADMIN'));
@@ -11,7 +20,7 @@ router.use(requireAuth, requireRole('ADMIN'));
  * GET /admin/referrals/stats
  * Statistiques globales sur le parrainage
  */
-router.get('/stats', async (req, res, next) => {
+router.get('/stats', handleValidationErrors, async (req, res, next) => {
   try {
     const totalReferrals = await prisma.referral.count();
     const pendingReferrals = await prisma.referral.count({

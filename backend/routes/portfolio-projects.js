@@ -1,18 +1,23 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
+const { param, body, query, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const upload = require('../config/upload');
 const { verifyMagicBytes } = require('../config/upload');
 const { uploadBuffer } = require('../config/cloudinary');
+const { handleValidationErrors } = require('../middleware/validateInput');
 
 const router = express.Router();
 
+// Rate limiters
 // 10 réalisations max par heure, 30 commentaires max par heure
 const createPortfolioLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 10,
   keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { error: 'Trop de réalisations créées, réessayez dans une heure' },
 });
 
@@ -20,11 +25,39 @@ const createCommentLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 30,
   keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { error: 'Trop de commentaires postés, réessayez dans une heure' },
 });
 
+const readLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
+
+const likeLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 50, // 50 likes per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de likes, réessayez dans une minute' },
+});
+
 // GET /api/portfolio-projects — feed public
-router.get('/', async (req, res, next) => {
+router.get('/', readLimiter,
+  [
+    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
+    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1-100'),
+    query('trade').optional().trim().isLength({ max: 100 }).withMessage('trade too long'),
+    query('professionalId').optional().trim().notEmpty(),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(50, parseInt(req.query.limit) || 10);
@@ -89,7 +122,12 @@ router.get('/', async (req, res, next) => {
 });
 
 // GET /api/portfolio-projects/:id — détail avec tous les commentaires + réponses imbriquées
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', readLimiter,
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const project = await prisma.portfolioProject.findUnique({
       where: { id: req.params.id },
@@ -124,7 +162,14 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // POST /api/portfolio-projects — créer une réalisation (pro uniquement)
-router.post('/', requireAuth, requireRole('PROFESSIONAL'), createPortfolioLimiter, upload.array('images', 10), verifyMagicBytes, async (req, res, next) => {
+router.post('/', requireAuth, requireRole('PROFESSIONAL'), createPortfolioLimiter, upload.array('images', 10), verifyMagicBytes,
+  [
+    body('title').trim().notEmpty().isLength({ min: 1, max: 200 }).withMessage('title required, max 200 chars'),
+    body('description').trim().notEmpty().isLength({ min: 1, max: 5000 }).withMessage('description required, max 5000 chars'),
+    body('tradeCategory').optional().trim().isLength({ max: 100 }).withMessage('tradeCategory too long'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { title, description, tradeCategory } = req.body;
     if (!title || !description) return res.status(400).json({ error: 'Titre et description requis' });
@@ -157,7 +202,15 @@ router.post('/', requireAuth, requireRole('PROFESSIONAL'), createPortfolioLimite
 });
 
 // PATCH /api/portfolio-projects/:id — modifier une réalisation (propriétaire)
-router.patch('/:id', requireAuth, async (req, res, next) => {
+router.patch('/:id', readLimiter, requireAuth,
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+    body('title').optional().trim().isLength({ min: 1, max: 200 }).withMessage('title max 200 chars'),
+    body('description').optional().trim().isLength({ min: 1, max: 5000 }).withMessage('description max 5000 chars'),
+    body('tradeCategory').optional().trim().isLength({ max: 100 }).withMessage('tradeCategory too long'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { title, description, tradeCategory } = req.body;
     const project = await prisma.portfolioProject.findUnique({
@@ -181,7 +234,12 @@ router.patch('/:id', requireAuth, async (req, res, next) => {
 });
 
 // DELETE /api/portfolio-projects/:id — supprimer une réalisation (propriétaire)
-router.delete('/:id', requireAuth, async (req, res, next) => {
+router.delete('/:id', readLimiter, requireAuth,
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const project = await prisma.portfolioProject.findUnique({
       where: { id: req.params.id },
@@ -199,7 +257,12 @@ router.delete('/:id', requireAuth, async (req, res, next) => {
 });
 
 // POST /api/portfolio-projects/:id/like — liker / unliker
-router.post('/:id/like', requireAuth, async (req, res, next) => {
+router.post('/:id/like', likeLimiter, requireAuth,
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const existing = await prisma.portfolioProjectLike.findUnique({
       where: { userId_portfolioProjectId: { userId: req.user.id, portfolioProjectId: req.params.id } },
@@ -216,7 +279,15 @@ router.post('/:id/like', requireAuth, async (req, res, next) => {
 });
 
 // POST /api/portfolio-projects/:id/comments — ajouter un commentaire ou une réponse
-router.post('/:id/comments', requireAuth, createCommentLimiter, async (req, res, next) => {
+router.post('/:id/comments', requireAuth, createCommentLimiter,
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+    body('content').trim().notEmpty().isLength({ min: 1, max: 2000 }).withMessage('content required, max 2000 chars'),
+    body('rating').optional().isInt({ min: 1, max: 5 }).withMessage('rating must be 1-5'),
+    body('parentId').optional().trim().notEmpty(),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { content, rating, parentId } = req.body;
     if (!content || content.trim().length === 0) return res.status(400).json({ error: 'Commentaire requis' });
@@ -250,7 +321,13 @@ router.post('/:id/comments', requireAuth, createCommentLimiter, async (req, res,
 });
 
 // DELETE /api/portfolio-projects/:projectId/comments/:commentId — supprimer un commentaire
-router.delete('/:projectId/comments/:commentId', requireAuth, async (req, res, next) => {
+router.delete('/:projectId/comments/:commentId', readLimiter, requireAuth,
+  [
+    param('projectId').trim().notEmpty().withMessage('projectId requis'),
+    param('commentId').trim().notEmpty().withMessage('commentId requis'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const comment = await prisma.portfolioComment.findUnique({ where: { id: req.params.commentId } });
     if (!comment) return res.status(404).json({ error: 'Commentaire non trouvé' });

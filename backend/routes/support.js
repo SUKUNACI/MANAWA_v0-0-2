@@ -1,18 +1,23 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
+const { param, body, query, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth } = require('../middleware/auth');
 const { sendPushNotification } = require('../config/pushNotifications');
+const { handleValidationErrors } = require('../middleware/validateInput');
 
 const router = express.Router();
 
 router.use(requireAuth);
 
+// Rate limiters
 // 5 tickets max par heure, 20 messages par heure
 const createTicketLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
   keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { error: 'Trop de tickets créés, réessayez dans une heure' },
 });
 
@@ -20,11 +25,18 @@ const ticketMessageLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 20,
   keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { error: 'Trop de messages envoyés, réessayez dans une heure' },
 });
 
+const readLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 100, keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
+
 // GET /api/support/tickets — mes tickets
-router.get('/tickets', async (req, res, next) => {
+router.get('/tickets', handleValidationErrors, async (req, res, next) => {
   try {
     const tickets = await prisma.supportTicket.findMany({
       where: { userId: req.user.id },
@@ -40,7 +52,14 @@ router.get('/tickets', async (req, res, next) => {
 });
 
 // POST /api/support/tickets — créer un ticket
-router.post('/tickets', createTicketLimiter, async (req, res, next) => {
+router.post('/tickets', createTicketLimiter,
+  [
+    body('category').trim().notEmpty().isLength({ max: 100 }).withMessage('category required'),
+    body('subject').trim().notEmpty().isLength({ min: 5, max: 200 }).withMessage('subject required, 5-200 chars'),
+    body('message').trim().notEmpty().isLength({ min: 10, max: 2000 }).withMessage('message required, 10-2000 chars'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { category, subject, message } = req.body;
     if (!category || !subject || !message) {

@@ -1,8 +1,21 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
+const { query, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth, optionalAuth } = require('../middleware/auth');
+const { handleValidationErrors } = require('../middleware/validateInput');
 
 const router = express.Router();
+
+// Rate limiters
+const searchLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes de recherche, réessayez dans une minute' },
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -234,7 +247,15 @@ async function clearHistory(userId) {
 // ---------------------------------------------------------------------------
 // GET /api/search?q=&type=&page=&limit=
 // ---------------------------------------------------------------------------
-router.get('/', optionalAuth, async (req, res, next) => {
+router.get('/', searchLimiter, optionalAuth,
+  [
+    query('q').trim().notEmpty().isLength({ min: 2, max: 200 }).withMessage('q required, 2-200 chars'),
+    query('type').optional().isIn(['all', 'professionals', 'portfolio', 'packages']).withMessage('invalid type'),
+    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
+    query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('limit must be 1-50'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { q, type = 'all', page, limit } = req.query;
 
@@ -328,7 +349,7 @@ router.get('/', optionalAuth, async (req, res, next) => {
 // ---------------------------------------------------------------------------
 // POST /api/search/history — enregistre une recherche (si user connecté)
 // ---------------------------------------------------------------------------
-router.post('/history', optionalAuth, async (req, res, next) => {
+router.post('/history', searchLimiter, optionalAuth, async (req, res, next) => {
   try {
     if (!req.user) {
       return res.status(401).json({ error: 'Authentification requise pour sauvegarder l\'historique' });
@@ -349,7 +370,7 @@ router.post('/history', optionalAuth, async (req, res, next) => {
 // ---------------------------------------------------------------------------
 // GET /api/search/history — retourne l'historique
 // ---------------------------------------------------------------------------
-router.get('/history', requireAuth, async (req, res, next) => {
+router.get('/history', searchLimiter, requireAuth, async (req, res, next) => {
   try {
     const history = await getHistory(req.user.id);
     res.json({ history });
@@ -361,7 +382,7 @@ router.get('/history', requireAuth, async (req, res, next) => {
 // ---------------------------------------------------------------------------
 // DELETE /api/search/history — vide l'historique
 // ---------------------------------------------------------------------------
-router.delete('/history', requireAuth, async (req, res, next) => {
+router.delete('/history', searchLimiter, requireAuth, async (req, res, next) => {
   try {
     await clearHistory(req.user.id);
     res.json({ success: true });

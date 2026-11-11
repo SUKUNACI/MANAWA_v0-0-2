@@ -1,11 +1,33 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
+const { query, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth, requirePermission } = require('../middleware/auth');
+const { handleValidationErrors } = require('../middleware/validateInput');
 
 const router = express.Router();
 
+// Rate limiters
+const adminLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20, // 20 requests per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
+
 // GET /api/finances - Financial summary and transactions
-router.get('/', requireAuth, requirePermission('finances'), async (req, res, next) => {
+router.get('/', adminLimiter, requireAuth, requirePermission('finances'),
+  [
+    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
+    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1-100'),
+    query('startDate').optional().isISO8601().withMessage('invalid startDate format'),
+    query('endDate').optional().isISO8601().withMessage('invalid endDate format'),
+    query('status').optional().isIn(['PENDING', 'COMPLETED', 'FAILED']).withMessage('invalid status'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { page = 1, limit = 50, startDate, endDate, status } = req.query;
     const skip = (page - 1) * limit;
@@ -71,7 +93,7 @@ router.get('/', requireAuth, requirePermission('finances'), async (req, res, nex
 });
 
 // GET /api/finances/summary - Quick financial overview
-router.get('/summary', requireAuth, requirePermission('finances'), async (req, res, next) => {
+router.get('/summary', requireAuth, requirePermission('finances'), handleValidationErrors, async (req, res, next) => {
   try {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 

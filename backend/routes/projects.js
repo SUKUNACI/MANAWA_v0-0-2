@@ -1,5 +1,6 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
+const { param, body, query, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth, requireRole, requireEmailVerified } = require('../middleware/auth');
 const { getActiveTier, getTierConfig } = require('./subscriptions');
@@ -8,6 +9,8 @@ const geniuspay = require('../utils/geniuspay');
 const upload = require('../config/upload');
 const { verifyMagicBytes } = require('../config/upload');
 const { uploadBuffer } = require('../config/cloudinary');
+const { handleValidationErrors } = require('../middleware/validateInput');
+const logger = require('../utils/logger');
 
 const router = express.Router();
 
@@ -166,21 +169,64 @@ async function applySubscriptionDelay(userId, where) {
   }
 }
 
+// Rate limiters
 // 10 projets max par heure par utilisateur
 const createProjectLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 10,
   keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { error: 'Trop de projets créés, réessayez dans une heure' },
 });
 
+const readLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
+
+const writeLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30, // 30 requests per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
+
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30, // 30 uploads per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de téléchargements, réessayez dans une minute' },
+});
+
 // POST /api/projects
-router.post('/', requireAuth, requireRole('CLIENT'), requireEmailVerified, createProjectLimiter, async (req, res, next) => {
+router.post('/', requireAuth, requireRole('CLIENT'), requireEmailVerified, createProjectLimiter,
+  [
+    body('title').trim().notEmpty().isLength({ min: 5, max: 200 }).withMessage('title required, 5-200 chars'),
+    body('description').trim().notEmpty().isLength({ min: 20, max: 5000 }).withMessage('description required, 20-5000 chars'),
+    body('tradeNeeded').trim().notEmpty().isLength({ max: 100 }).withMessage('tradeNeeded required'),
+    body('budgetMin').optional().isNumeric().withMessage('budgetMin must be numeric'),
+    body('budgetMax').optional().isNumeric().withMessage('budgetMax must be numeric'),
+    body('city').trim().notEmpty().isLength({ max: 100 }).withMessage('city required'),
+    body('latitude').optional().isNumeric(),
+    body('longitude').optional().isNumeric(),
+    body('photos').optional().isArray().withMessage('photos must be array'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { title, description, tradeNeeded, budgetMin, budgetMax, city, latitude, longitude, photos } = req.body;
 
     if (!title || !description || !tradeNeeded || !city) {
-      return res.status(400).json({ error: 'title, description, tradeNeeded et city sont requis' });
+      return res.status(400).json({ error: 'title, description, tradeNeeded et city sont requis', code: 'MISSING_REQUIRED_FIELDS' });
     }
 
     const project = await prisma.project.create({
@@ -201,12 +247,23 @@ router.post('/', requireAuth, requireRole('CLIENT'), requireEmailVerified, creat
 
     res.status(201).json(project);
   } catch (err) {
-    next(err);
+    logger.error('POST /api/projects failed', { userId: req.user.id, error: err.message });
+    res.status(500).json({ error: 'Erreur lors de la création du projet', code: 'PROJECT_CREATE_ERROR' });
   }
 });
 
 // GET /api/projects
-router.get('/', requireAuth, async (req, res, next) => {
+router.get('/', readLimiter, requireAuth,
+  [
+    query('trade').optional().trim().isLength({ max: 100 }),
+    query('trades').optional().trim().isLength({ max: 500 }),
+    query('city').optional().trim().isLength({ max: 100 }),
+    query('status').optional().isIn(['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']),
+    query('page').optional().isInt({ min: 1 }),
+    query('limit').optional().isInt({ min: 1, max: 100 }),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { trade, trades, city, status } = req.query;
     const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -222,7 +279,11 @@ router.get('/', requireAuth, async (req, res, next) => {
     if (req.user.role === 'CLIENT') {
       where.clientId = { not: req.user.id };
     } else if (req.user.role === 'PROFESSIONAL') {
-      await applySubscriptionDelay(req.user.id, where);
+      try {
+        await applySubscriptionDelay(req.user.id, where);
+      } catch (err) {
+        logger.error('GET /api/projects - subscription delay failed', { userId: req.user.id, error: err.message });
+      }
     }
 
     const projects = await prisma.project.findMany({
@@ -246,12 +307,13 @@ router.get('/', requireAuth, async (req, res, next) => {
       alreadyQuoted: alreadyQuotedIds.has(p.id),
     })));
   } catch (err) {
-    next(err);
+    logger.error('GET /api/projects failed', { userId: req.user.id, error: err.message });
+    res.status(500).json({ error: 'Erreur lors de la récupération des projets', code: 'PROJECT_FETCH_ERROR' });
   }
 });
 
 // GET /api/projects/mine
-router.get('/mine', requireAuth, requireRole('CLIENT'), async (req, res, next) => {
+router.get('/mine', readLimiter, requireAuth, requireRole('CLIENT'), handleValidationErrors, async (req, res, next) => {
   try {
     const projects = await prisma.project.findMany({
       where: { clientId: req.user.id },
@@ -261,12 +323,18 @@ router.get('/mine', requireAuth, requireRole('CLIENT'), async (req, res, next) =
     });
     res.json(projects);
   } catch (err) {
-    next(err);
+    logger.error('GET /api/projects/mine failed', { userId: req.user.id, error: err.message });
+    res.status(500).json({ error: 'Erreur lors de la récupération de vos projets', code: 'MY_PROJECTS_FETCH_ERROR' });
   }
 });
 
 // GET /api/projects/:id
-router.get('/:id', requireAuth, async (req, res, next) => {
+router.get('/:id', readLimiter, requireAuth,
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const project = await prisma.project.findUnique({
       where: { id: req.params.id },
@@ -274,32 +342,43 @@ router.get('/:id', requireAuth, async (req, res, next) => {
     });
 
     if (!project) {
-      return res.status(404).json({ error: 'Projet introuvable' });
+      return res.status(404).json({ error: 'Projet introuvable', code: 'PROJECT_NOT_FOUND' });
     }
 
     if (!checkProjectAccess(project, req.user.id, req.user.role)) {
-      return res.status(403).json({ error: 'Accès refusé' });
+      return res.status(403).json({ error: 'Accès refusé', code: 'ACCESS_DENIED' });
     }
 
-    await processPendingPayments(project.quotes);
+    try {
+      await processPendingPayments(project.quotes);
+    } catch (err) {
+      logger.error('GET /api/projects/:id - payment processing failed', { projectId: req.params.id, error: err.message });
+    }
 
     res.json({ ...project, alreadyReviewed: !!project.review });
   } catch (err) {
-    next(err);
+    logger.error('GET /api/projects/:id failed', { projectId: req.params.id, userId: req.user.id, error: err.message });
+    res.status(500).json({ error: 'Erreur lors de la récupération du projet', code: 'PROJECT_DETAIL_FETCH_ERROR' });
   }
 });
 
 // PATCH /api/projects/:id
-router.patch('/:id', requireAuth, requireRole('CLIENT'), async (req, res, next) => {
+router.patch('/:id', writeLimiter, requireAuth, requireRole('CLIENT'),
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+    body('status').optional().isIn(['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).withMessage('invalid status'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const project = await prisma.project.findUnique({ where: { id: req.params.id } });
     if (!project || project.clientId !== req.user.id) {
-      return res.status(403).json({ error: 'Accès refusé' });
+      return res.status(403).json({ error: 'Accès refusé', code: 'ACCESS_DENIED' });
     }
 
     const allowedStatuses = ['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
     if (req.body.status && !allowedStatuses.includes(req.body.status)) {
-      return res.status(400).json({ error: 'Statut invalide' });
+      return res.status(400).json({ error: 'Statut invalide', code: 'INVALID_STATUS' });
     }
 
     const updated = await prisma.project.update({
@@ -308,19 +387,25 @@ router.patch('/:id', requireAuth, requireRole('CLIENT'), async (req, res, next) 
     });
     res.json(updated);
   } catch (err) {
-    next(err);
+    logger.error('PATCH /api/projects/:id failed', { projectId: req.params.id, userId: req.user.id, status: req.body.status, error: err.message });
+    res.status(500).json({ error: 'Erreur lors de la mise à jour du projet', code: 'PROJECT_UPDATE_ERROR' });
   }
 });
 
 // PATCH /api/projects/:id/complete
-router.patch('/:id/complete', requireAuth, requireRole('CLIENT'), async (req, res, next) => {
+router.patch('/:id/complete', writeLimiter, requireAuth, requireRole('CLIENT'),
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const project = await prisma.project.findUnique({
       where: { id: req.params.id },
       include: { quotes: { where: { status: 'ACCEPTED' } } },
     });
-    if (!project || project.clientId !== req.user.id) return res.status(403).json({ error: 'Accès refusé' });
-    if (project.status !== 'IN_PROGRESS') return res.status(400).json({ error: 'Ce projet doit être en cours pour être marqué comme terminé' });
+    if (!project || project.clientId !== req.user.id) return res.status(403).json({ error: 'Accès refusé', code: 'ACCESS_DENIED' });
+    if (project.status !== 'IN_PROGRESS') return res.status(400).json({ error: 'Ce projet doit être en cours pour être marqué comme terminé', code: 'INVALID_PROJECT_STATUS' });
 
     const bothConfirmed = project.proConfirmedCompletion;
     await prisma.project.update({
@@ -330,34 +415,65 @@ router.patch('/:id/complete', requireAuth, requireRole('CLIENT'), async (req, re
 
     const acceptedQuote = project.quotes[0];
     if (bothConfirmed && acceptedQuote) {
-      await prisma.professional.update({ where: { id: acceptedQuote.professionalId }, data: { completedMissionsCount: { increment: 1 } } });
+      try {
+        await prisma.professional.update({ where: { id: acceptedQuote.professionalId }, data: { completedMissionsCount: { increment: 1 } } });
+      } catch (err) {
+        logger.error('PATCH /api/projects/:id/complete - failed to update missions count', { projectId: req.params.id, error: err.message });
+      }
       const pro = await prisma.professional.findUnique({ where: { id: acceptedQuote.professionalId }, select: { userId: true } });
-      if (pro) sendPushNotification(pro.userId, 'Mission terminée !', `La mission "${project.title}" est officiellement terminée. Bravo !`, { type: 'mission_completed', projectId: project.id });
-      sendPushNotification(project.clientId, 'Mission terminée !', `La mission "${project.title}" est terminée. Vous pouvez laisser un avis.`, { type: 'mission_completed', projectId: project.id });
+      if (pro) {
+        try {
+          sendPushNotification(pro.userId, 'Mission terminée !', `La mission "${project.title}" est officiellement terminée. Bravo !`, { type: 'mission_completed', projectId: project.id });
+        } catch (err) {
+          logger.error('PATCH /api/projects/:id/complete - failed to send pro notification', { projectId: req.params.id, error: err.message });
+        }
+      }
+      try {
+        sendPushNotification(project.clientId, 'Mission terminée !', `La mission "${project.title}" est terminée. Vous pouvez laisser un avis.`, { type: 'mission_completed', projectId: project.id });
+      } catch (err) {
+        logger.error('PATCH /api/projects/:id/complete - failed to send client notification', { projectId: req.params.id, error: err.message });
+      }
       // Recalcul badges (fire-and-forget) — peut débloquer FIRST_MISSION, TEN_MISSIONS, FIFTY_MISSIONS
       const { computeBadges } = require('../utils/badges');
       computeBadges(acceptedQuote.professionalId).catch(() => {});
     } else if (!bothConfirmed && acceptedQuote) {
       const pro = await prisma.professional.findUnique({ where: { id: acceptedQuote.professionalId }, select: { userId: true } });
-      if (pro) sendPushNotification(pro.userId, 'Confirmation de fin demandée', `Le client a confirmé la fin de "${project.title}". Confirmez à votre tour.`, { type: 'confirm_completion', projectId: project.id });
+      if (pro) {
+        try {
+          sendPushNotification(pro.userId, 'Confirmation de fin demandée', `Le client a confirmé la fin de "${project.title}". Confirmez à votre tour.`, { type: 'confirm_completion', projectId: project.id });
+        } catch (err) {
+          logger.error('PATCH /api/projects/:id/complete - failed to send pending notification', { projectId: req.params.id, error: err.message });
+        }
+      }
     }
 
     res.json({ completed: bothConfirmed, waitingForOtherParty: !bothConfirmed });
   } catch (err) {
-    next(err);
+    logger.error('PATCH /api/projects/:id/complete failed', { projectId: req.params.id, userId: req.user.id, error: err.message });
+    res.status(500).json({ error: 'Erreur lors de la marque du projet comme complété', code: 'PROJECT_COMPLETE_ERROR' });
   }
 });
 
 // PATCH /api/projects/:id/confirm-completion
-router.patch('/:id/confirm-completion', requireAuth, requireRole('PROFESSIONAL'), async (req, res, next) => {
+router.patch('/:id/confirm-completion', writeLimiter, requireAuth, requireRole('PROFESSIONAL'),
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const pro = await prisma.professional.findUnique({ where: { userId: req.user.id } });
+    if (!pro) {
+      logger.error('PATCH /api/projects/:id/confirm-completion - professional not found', { userId: req.user.id });
+      return res.status(404).json({ error: 'Profil professionnel introuvable', code: 'PRO_PROFILE_NOT_FOUND' });
+    }
+
     const project = await prisma.project.findUnique({
       where: { id: req.params.id },
       include: { quotes: { where: { status: 'ACCEPTED', professionalId: pro.id } } },
     });
-    if (!project || project.quotes.length === 0) return res.status(403).json({ error: 'Accès refusé' });
-    if (project.status !== 'IN_PROGRESS') return res.status(400).json({ error: 'Ce projet doit être en cours' });
+    if (!project || project.quotes.length === 0) return res.status(403).json({ error: 'Accès refusé', code: 'ACCESS_DENIED' });
+    if (project.status !== 'IN_PROGRESS') return res.status(400).json({ error: 'Ce projet doit être en cours', code: 'INVALID_PROJECT_STATUS' });
 
     const bothConfirmed = project.clientConfirmedCompletion;
     await prisma.project.update({
@@ -366,44 +482,71 @@ router.patch('/:id/confirm-completion', requireAuth, requireRole('PROFESSIONAL')
     });
 
     if (bothConfirmed) {
-      await prisma.professional.update({ where: { id: pro.id }, data: { completedMissionsCount: { increment: 1 } } });
-      sendPushNotification(project.clientId, 'Mission terminée !', `La mission "${project.title}" est officiellement terminée. Vous pouvez laisser un avis.`, { type: 'mission_completed', projectId: project.id });
-      sendPushNotification(pro.userId, 'Mission terminée !', `La mission "${project.title}" est terminée. Bravo !`, { type: 'mission_completed', projectId: project.id });
+      try {
+        await prisma.professional.update({ where: { id: pro.id }, data: { completedMissionsCount: { increment: 1 } } });
+      } catch (err) {
+        logger.error('PATCH /api/projects/:id/confirm-completion - failed to update missions count', { projectId: req.params.id, error: err.message });
+      }
+      try {
+        sendPushNotification(project.clientId, 'Mission terminée !', `La mission "${project.title}" est officiellement terminée. Vous pouvez laisser un avis.`, { type: 'mission_completed', projectId: project.id });
+      } catch (err) {
+        logger.error('PATCH /api/projects/:id/confirm-completion - failed to send client notification', { projectId: req.params.id, error: err.message });
+      }
+      try {
+        sendPushNotification(pro.userId, 'Mission terminée !', `La mission "${project.title}" est terminée. Bravo !`, { type: 'mission_completed', projectId: project.id });
+      } catch (err) {
+        logger.error('PATCH /api/projects/:id/confirm-completion - failed to send pro notification', { projectId: req.params.id, error: err.message });
+      }
       // Recalcul badges (fire-and-forget) — peut débloquer FIRST_MISSION, TEN_MISSIONS, FIFTY_MISSIONS
       const { computeBadges } = require('../utils/badges');
       computeBadges(pro.id).catch(() => {});
     } else {
-      sendPushNotification(project.clientId, 'Confirmation de fin demandée', `Le professionnel a confirmé la fin de "${project.title}". Confirmez à votre tour.`, { type: 'confirm_completion', projectId: project.id });
+      try {
+        sendPushNotification(project.clientId, 'Confirmation de fin demandée', `Le professionnel a confirmé la fin de "${project.title}". Confirmez à votre tour.`, { type: 'confirm_completion', projectId: project.id });
+      } catch (err) {
+        logger.error('PATCH /api/projects/:id/confirm-completion - failed to send pending notification', { projectId: req.params.id, error: err.message });
+      }
     }
 
     res.json({ completed: bothConfirmed, waitingForOtherParty: !bothConfirmed });
   } catch (err) {
-    next(err);
+    logger.error('PATCH /api/projects/:id/confirm-completion failed', { projectId: req.params.id, userId: req.user.id, error: err.message });
+    res.status(500).json({ error: 'Erreur lors de la confirmation de fin', code: 'PROJECT_CONFIRM_COMPLETION_ERROR' });
   }
 });
 
 // PATCH /api/projects/:id/cancel
-router.patch('/:id/cancel', requireAuth, requireRole('CLIENT'), async (req, res, next) => {
+router.patch('/:id/cancel', writeLimiter, requireAuth, requireRole('CLIENT'),
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const project = await prisma.project.findUnique({
       where: { id: req.params.id },
       include: { quotes: { where: { status: 'ACCEPTED' } } },
     });
-    if (!project || project.clientId !== req.user.id) return res.status(403).json({ error: 'Accès refusé' });
+    if (!project || project.clientId !== req.user.id) return res.status(403).json({ error: 'Accès refusé', code: 'ACCESS_DENIED' });
 
     const wasInProgress = project.status === 'IN_PROGRESS';
     await prisma.project.update({ where: { id: req.params.id }, data: { status: 'CANCELLED' } });
 
     const acceptedQuote = project.quotes[0];
     if (wasInProgress && acceptedQuote) {
-      await prisma.professional.update({
-        where: { id: acceptedQuote.professionalId },
-        data: { cancelledMissionsCount: { increment: 1 } },
-      });
+      try {
+        await prisma.professional.update({
+          where: { id: acceptedQuote.professionalId },
+          data: { cancelledMissionsCount: { increment: 1 } },
+        });
+      } catch (err) {
+        logger.error('PATCH /api/projects/:id/cancel - failed to update cancelled count', { projectId: req.params.id, error: err.message });
+      }
     }
     res.json({ cancelled: true });
   } catch (err) {
-    next(err);
+    logger.error('PATCH /api/projects/:id/cancel failed', { projectId: req.params.id, userId: req.user.id, error: err.message });
+    res.status(500).json({ error: 'Erreur lors de l\'annulation du projet', code: 'PROJECT_CANCEL_ERROR' });
   }
 });
 
@@ -424,23 +567,42 @@ async function createPhotoRecords(projectId, imageUrls) {
 }
 
 // POST /api/projects/:id/photos — Upload photos to an existing project
-router.post('/:id/photos', requireAuth, requireRole('CLIENT'), upload.array('photos', 5), verifyMagicBytes, async (req, res, next) => {
+router.post('/:id/photos', uploadLimiter, requireAuth, requireRole('CLIENT'), upload.array('photos', 5), verifyMagicBytes,
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const project = await prisma.project.findUnique({ where: { id: req.params.id } });
     if (!project || project.clientId !== req.user.id) {
-      return res.status(403).json({ error: 'Accès refusé' });
+      return res.status(403).json({ error: 'Accès refusé', code: 'ACCESS_DENIED' });
     }
 
     if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: 'Aucune photo fournie' });
+      return res.status(400).json({ error: 'Aucune photo fournie', code: 'NO_FILES_PROVIDED' });
     }
 
-    const imageUrls = await uploadProjectPhotos(req.files);
-    const photos = await createPhotoRecords(project.id, imageUrls);
+    let imageUrls;
+    try {
+      imageUrls = await uploadProjectPhotos(req.files);
+    } catch (err) {
+      logger.error('POST /api/projects/:id/photos - upload failed', { projectId: req.params.id, error: err.message });
+      return res.status(503).json({ error: 'Erreur lors du téléchargement des photos', code: 'UPLOAD_FAILED' });
+    }
+
+    let photos;
+    try {
+      photos = await createPhotoRecords(project.id, imageUrls);
+    } catch (err) {
+      logger.error('POST /api/projects/:id/photos - photo record creation failed', { projectId: req.params.id, error: err.message });
+      return res.status(500).json({ error: 'Erreur lors de l\'enregistrement des photos', code: 'PHOTO_RECORD_ERROR' });
+    }
 
     res.status(201).json(photos);
   } catch (err) {
-    next(err);
+    logger.error('POST /api/projects/:id/photos failed', { projectId: req.params.id, userId: req.user.id, error: err.message });
+    res.status(500).json({ error: 'Erreur lors du traitement des photos', code: 'PHOTO_PROCESSING_ERROR' });
   }
 });
 
