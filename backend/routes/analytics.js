@@ -1,10 +1,23 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
+const { query, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { computeTrustScore } = require('../utils/trustScore');
 const { getActiveTier } = require('./subscriptions');
+const { handleValidationErrors } = require('../middleware/validateInput');
 
 const router = express.Router();
+
+// Rate limiters
+const analyticsLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
 
 // ---------------------------------------------------------------------------
 // Helper : vérifie que le pro a un abonnement Premium (PRO / ELITE / TRIAL)
@@ -42,8 +55,10 @@ async function requirePremium(req, res) {
 // ---------------------------------------------------------------------------
 router.get(
   '/overview',
+  analyticsLimiter,
   requireAuth,
   requireRole('PROFESSIONAL'),
+  handleValidationErrors,
   async (req, res, next) => {
     try {
       const pro = await prisma.professional.findUnique({

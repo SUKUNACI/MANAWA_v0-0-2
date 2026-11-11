@@ -1,9 +1,22 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
+const { body, query, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { sendPushNotification } = require('../config/pushNotifications');
+const { handleValidationErrors } = require('../middleware/validateInput');
 
 const router = express.Router();
+
+// Rate limiters
+const readLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 100, keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
+const writeLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 30, keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
 
 // Génère un code de parrainage unique format REF-XXXXXX
 function generateReferralCode() {
@@ -28,7 +41,7 @@ async function findReferrerByCode(code) {
 }
 
 // GET /api/referrals/my-code — retourne le code de parrainage du pro connecté
-router.get('/my-code', requireAuth, requireRole('PROFESSIONAL'), async (req, res, next) => {
+router.get('/my-code', requireAuth, requireRole('PROFESSIONAL'), handleValidationErrors, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const configKey = `referral_code_${userId}`;
@@ -74,7 +87,12 @@ router.get('/my-code', requireAuth, requireRole('PROFESSIONAL'), async (req, res
 });
 
 // POST /api/referrals/use — utiliser un code de parrainage
-router.post('/use', requireAuth, requireRole('PROFESSIONAL'), async (req, res, next) => {
+router.post('/use', requireAuth, requireRole('PROFESSIONAL'),
+  [
+    body('code').trim().notEmpty().isLength({ min: 5, max: 20 }).withMessage('code required, 5-20 chars'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { code } = req.body;
     if (!code) return res.status(400).json({ error: 'Le code de parrainage est requis' });

@@ -1,23 +1,54 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
+const { param, body, query, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth, requireEmailVerified } = require('../middleware/auth');
 const { sendPushNotification } = require('../config/pushNotifications');
 const upload = require('../config/upload');
 const { uploadBuffer } = require('../config/cloudinary');
+const { handleValidationErrors } = require('../middleware/validateInput');
 
 const router = express.Router();
 
+// Rate limiters
 // 60 messages max par heure par utilisateur
 const messageLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 60,
   keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { error: 'Trop de messages envoyés, réessayez dans une heure' },
 });
 
+const readLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
+
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30, // 30 uploads per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de téléchargements, réessayez dans une minute' },
+});
+
 // POST /api/messages
-router.post('/', requireAuth, requireEmailVerified, messageLimiter, async (req, res, next) => {
+router.post('/', requireAuth, requireEmailVerified, messageLimiter,
+  [
+    body('receiverId').trim().notEmpty().withMessage('receiverId requis'),
+    body('content').trim().notEmpty().isLength({ min: 1, max: 5000 }).withMessage('content required, max 5000 chars'),
+    body('attachmentUrl').optional().trim().isLength({ max: 2000 }).withMessage('attachmentUrl too long'),
+    body('attachmentType').optional().trim().isIn(['image', 'pdf']).withMessage('invalid attachmentType'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { receiverId, content } = req.body;
     if (!receiverId || !content || !content.trim()) {
@@ -112,7 +143,7 @@ router.post('/', requireAuth, requireEmailVerified, messageLimiter, async (req, 
 });
 
 // GET /api/messages/conversations
-router.get('/conversations', requireAuth, async (req, res, next) => {
+router.get('/conversations', readLimiter, requireAuth, handleValidationErrors, async (req, res, next) => {
   try {
     const messages = await prisma.message.findMany({
       where: { OR: [{ senderId: req.user.id }, { receiverId: req.user.id }] },
@@ -138,7 +169,7 @@ router.get('/conversations', requireAuth, async (req, res, next) => {
 });
 
 // GET /api/messages/unread-count
-router.get('/unread-count', requireAuth, async (req, res, next) => {
+router.get('/unread-count', readLimiter, requireAuth, handleValidationErrors, async (req, res, next) => {
   try {
     const count = await prisma.message.count({ where: { receiverId: req.user.id, read: false } });
     res.json({ count });
@@ -148,7 +179,14 @@ router.get('/unread-count', requireAuth, async (req, res, next) => {
 });
 
 // GET /api/messages/:userId
-router.get('/:userId', requireAuth, async (req, res, next) => {
+router.get('/:userId', readLimiter, requireAuth,
+  [
+    param('userId').trim().notEmpty().withMessage('userId requis'),
+    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
+    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1-100'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, parseInt(req.query.limit) || 50);
@@ -178,7 +216,7 @@ router.get('/:userId', requireAuth, async (req, res, next) => {
 
 const ATTACHMENT_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
-router.post('/upload-attachment', requireAuth, upload.single('file'), async (req, res, next) => {
+router.post('/upload-attachment', uploadLimiter, requireAuth, upload.single('file'), handleValidationErrors, async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Fichier requis' });
     if (!ATTACHMENT_MIMES.includes(req.file.mimetype)) {

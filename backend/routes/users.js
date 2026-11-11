@@ -1,4 +1,5 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
 const prisma = require('../config/db');
@@ -8,6 +9,20 @@ const { uploadBuffer } = require('../config/cloudinary');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
+
+// Rate limiters
+const readLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 100, keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
+const writeLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 30, keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 30, keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de téléchargements, réessayez dans une minute' },
+});
 
 // PATCH /api/users/me
 router.patch('/me',

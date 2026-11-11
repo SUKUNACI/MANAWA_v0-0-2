@@ -1,12 +1,34 @@
 const express = require('express');
 const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
+const { param, body, query, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const geniuspay = require('../utils/geniuspay');
 const { sendPushNotification } = require('../config/pushNotifications');
 const { getConfig } = require('../utils/appConfig');
+const { handleValidationErrors } = require('../middleware/validateInput');
 
 const router = express.Router();
+
+// Rate limiters
+const subscriptionReadLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes, réessayez dans une minute' },
+});
+
+const paymentLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // 10 requests per hour
+  keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes de paiement, réessayez dans une heure' },
+});
 
 const TIERS = {
   GRATUIT: {
@@ -149,7 +171,7 @@ async function getDynamicPrices() {
 }
 
 // GET /api/subscriptions/me
-router.get('/me', requireAuth, requireRole('PROFESSIONAL'), async (req, res, next) => {
+router.get('/me', subscriptionReadLimiter, requireAuth, requireRole('PROFESSIONAL'), async (req, res, next) => {
   try {
     const [pro, prices] = await Promise.all([
       prisma.professional.findUnique({ where: { userId: req.user.id }, include: { subscription: true } }),
@@ -218,7 +240,13 @@ async function validatePromoForCheckout(code, tier, proId) {
 }
 
 // POST /api/subscriptions/validate-promo
-router.post('/validate-promo', requireAuth, requireRole('PROFESSIONAL'), async (req, res, next) => {
+router.post('/validate-promo', paymentLimiter, requireAuth, requireRole('PROFESSIONAL'),
+  [
+    body('code').trim().notEmpty().isLength({ min: 3, max: 50 }).withMessage('code required, 3-50 chars'),
+    body('tier').optional().isIn(['GRATUIT', 'ESSENTIEL', 'PREMIUM', 'ELITE']).withMessage('invalid tier'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { code, tier = 'ESSENTIEL' } = req.body;
     if (!code) return res.status(400).json({ error: 'Code requis' });
@@ -246,7 +274,13 @@ router.post('/validate-promo', requireAuth, requireRole('PROFESSIONAL'), async (
 });
 
 // POST /api/subscriptions/checkout
-router.post('/checkout', requireAuth, requireRole('PROFESSIONAL'), async (req, res, next) => {
+router.post('/checkout', paymentLimiter, requireAuth, requireRole('PROFESSIONAL'),
+  [
+    body('tier').isIn(['GRATUIT', 'ESSENTIEL', 'PREMIUM', 'ELITE']).withMessage('invalid tier'),
+    body('promoCode').optional().trim().isLength({ min: 3, max: 50 }).withMessage('promoCode too long'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { tier = 'ESSENTIEL', promoCode } = req.body;
     if (!TIERS[tier] || tier === 'GRATUIT') {
