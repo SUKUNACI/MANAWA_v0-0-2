@@ -11,6 +11,160 @@ const { uploadBuffer } = require('../config/cloudinary');
 
 const router = express.Router();
 
+// ============ HELPER FUNCTIONS ============
+
+// Helper: Build project include for GET /mine
+function getMyProjectInclude() {
+  return {
+    photos: true,
+    quotes: {
+      include: {
+        professional: {
+          include: {
+            user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true, avatarUrl: true, city: true } },
+          },
+        },
+      },
+    },
+  };
+}
+
+// Helper: Build project include for GET /:id
+function getProjectDetailInclude() {
+  return {
+    photos: true,
+    client: { select: { firstName: true, lastName: true, city: true, phone: true } },
+    quotes: {
+      include: {
+        professional: {
+          include: {
+            user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true, avatarUrl: true } },
+          },
+        },
+        items: { orderBy: { sortOrder: 'asc' } },
+        payments: { select: { id: true, status: true, isDeposit: true, geniuspayRef: true } },
+      },
+      orderBy: { version: 'desc' },
+    },
+    review: true,
+  };
+}
+
+// Helper: Verify pending payment with GeniusPay
+async function verifyPendingPayment(payment) {
+  if (payment.status !== 'pending' || !payment.geniuspayRef) {
+    return null;
+  }
+
+  try {
+    const gpResponse = await geniuspay.getPayment(payment.geniuspayRef);
+    const gpData = gpResponse?.data || gpResponse;
+
+    if (gpData?.status !== 'completed' && gpData?.status !== 'success') {
+      return null;
+    }
+
+    const receivedAmount = gpData?.amount || gpData?.paid_amount;
+    if (receivedAmount === undefined) {
+      return null;
+    }
+
+    const amountMismatch = Math.abs(receivedAmount - payment.amount) > 1;
+    return {
+      amountMismatch,
+      receivedAmount,
+      gpStatus: gpData?.status,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Helper: Update payment status based on verification
+async function updatePaymentStatus(payment, verification) {
+  if (verification.amountMismatch) {
+    console.error(`[Payment] MONTANT INCORRECT — id: ${payment.id}, attendu: ${payment.amount}, reçu: ${verification.receivedAmount}`);
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: 'failed',
+        metadata: JSON.stringify({
+          reason: 'amount_mismatch',
+          expected: payment.amount,
+          received: verification.receivedAmount,
+        }),
+      },
+    });
+    return 'failed';
+  }
+
+  await prisma.payment.update({
+    where: { id: payment.id },
+    data: { status: 'succeeded', completedAt: new Date() },
+  });
+  return 'succeeded';
+}
+
+// Helper: Process all pending payments for quotes
+async function processPendingPayments(quotes) {
+  for (const quote of quotes) {
+    for (const payment of quote.payments) {
+      const verification = await verifyPendingPayment(payment);
+      if (verification) {
+        payment.status = await updatePaymentStatus(payment, verification);
+      }
+    }
+  }
+}
+
+// Helper: Check project access permissions
+function checkProjectAccess(project, userId, userRole) {
+  const isOwner = project.clientId === userId;
+  const isInvolvedPro = project.quotes.some(q => q.professional?.user?.id === userId);
+  const isAdmin = userRole === 'ADMIN';
+  return isOwner || isInvolvedPro || isAdmin;
+}
+
+// Helper: Mark already quoted projects for professional
+async function markAlreadyQuotedProjects(projects, userId, userRole) {
+  const alreadyQuotedIds = new Set();
+
+  if (userRole !== 'PROFESSIONAL') {
+    return alreadyQuotedIds;
+  }
+
+  const pro = await prisma.professional.findUnique({ where: { userId } });
+  if (!pro) {
+    return alreadyQuotedIds;
+  }
+
+  const existingQuotes = await prisma.quote.findMany({
+    where: { professionalId: pro.id, projectId: { in: projects.map(p => p.id) } },
+    select: { projectId: true },
+  });
+
+  return new Set(existingQuotes.map(q => q.projectId));
+}
+
+// Helper: Apply subscription delay to projects query
+async function applySubscriptionDelay(userId, where) {
+  const pro = await prisma.professional.findUnique({
+    where: { userId },
+    include: { subscription: true },
+  });
+
+  if (!pro) {
+    return;
+  }
+
+  const projectsTier = getActiveTier(pro?.subscription, pro);
+  const delayMs = getTierConfig(projectsTier).projectsDelayMs;
+
+  if (delayMs > 0) {
+    where.createdAt = { lte: new Date(Date.now() - delayMs) };
+  }
+}
+
 // 10 projets max par heure par utilisateur
 const createProjectLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -58,27 +212,16 @@ router.get('/', requireAuth, async (req, res, next) => {
     const limit = Math.min(50, parseInt(req.query.limit) || 20);
     const tradesArray = trades ? trades.split(',') : undefined;
 
-    // Les clients ne voient que les projets OPEN sur la marketplace (pas les leurs ni ceux en cours)
-    // Les pros voient les projets OPEN pour soumettre des devis
-    const allowedStatus = 'OPEN';
     const where = {
       tradeNeeded: tradesArray ? { in: tradesArray } : trade || undefined,
       city: city || undefined,
-      status: allowedStatus,
+      status: 'OPEN',
     };
 
-    // Un CLIENT ne voit pas ses propres projets dans la marketplace (il utilise /mine pour ça)
     if (req.user.role === 'CLIENT') {
       where.clientId = { not: req.user.id };
-    }
-
-    if (req.user.role === 'PROFESSIONAL') {
-      const pro = await prisma.professional.findUnique({ where: { userId: req.user.id }, include: { subscription: true } });
-      const projectsTier = getActiveTier(pro?.subscription, pro);
-      const delayMs = getTierConfig(projectsTier).projectsDelayMs;
-      if (delayMs > 0) {
-        where.createdAt = { lte: new Date(Date.now() - delayMs) };
-      }
+    } else if (req.user.role === 'PROFESSIONAL') {
+      await applySubscriptionDelay(req.user.id, where);
     }
 
     const projects = await prisma.project.findMany({
@@ -93,20 +236,14 @@ router.get('/', requireAuth, async (req, res, next) => {
       skip: (page - 1) * limit,
     });
 
-    // Marquer les projets où le pro a déjà soumis un devis
-    let alreadyQuotedIds = new Set();
-    if (req.user.role === 'PROFESSIONAL') {
-      const pro = await prisma.professional.findUnique({ where: { userId: req.user.id } });
-      if (pro) {
-        const existing = await prisma.quote.findMany({
-          where: { professionalId: pro.id, projectId: { in: projects.map(p => p.id) } },
-          select: { projectId: true },
-        });
-        alreadyQuotedIds = new Set(existing.map(q => q.projectId));
-      }
-    }
+    const alreadyQuotedIds = await markAlreadyQuotedProjects(projects, req.user.id, req.user.role);
 
-    res.json(projects.map(p => ({ ...p, quoteCount: p._count.quotes, _count: undefined, alreadyQuoted: alreadyQuotedIds.has(p.id) })));
+    res.json(projects.map(p => ({
+      ...p,
+      quoteCount: p._count.quotes,
+      _count: undefined,
+      alreadyQuoted: alreadyQuotedIds.has(p.id),
+    })));
   } catch (err) {
     next(err);
   }
@@ -117,7 +254,7 @@ router.get('/mine', requireAuth, requireRole('CLIENT'), async (req, res, next) =
   try {
     const projects = await prisma.project.findMany({
       where: { clientId: req.user.id },
-      include: { photos: true, quotes: { include: { professional: { include: { user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true, avatarUrl: true, city: true } } } } } } },
+      include: getMyProjectInclude(),
       orderBy: { createdAt: 'desc' },
       take: 50,
     });
@@ -132,58 +269,18 @@ router.get('/:id', requireAuth, async (req, res, next) => {
   try {
     const project = await prisma.project.findUnique({
       where: { id: req.params.id },
-      include: {
-        photos: true,
-        client: { select: { firstName: true, lastName: true, city: true, phone: true } },
-        quotes: {
-          include: {
-            professional: { include: { user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true, avatarUrl: true } } } },
-            items: { orderBy: { sortOrder: 'asc' } },
-            payments: { select: { id: true, status: true, isDeposit: true, geniuspayRef: true } },
-          },
-          orderBy: { version: 'desc' },
-        },
-        review: true,
-      },
+      include: getProjectDetailInclude(),
     });
-    if (!project) return res.status(404).json({ error: 'Projet introuvable' });
 
-    // Seul le client propriétaire ou un professionnel ayant soumis un devis peut voir ce projet
-    const isOwner = project.clientId === req.user.id;
-    const isInvolvedPro = project.quotes.some(q => q.professional?.user?.id === req.user.id);
-    const isAdmin = req.user.role === 'ADMIN';
-    if (!isOwner && !isInvolvedPro && !isAdmin) {
+    if (!project) {
+      return res.status(404).json({ error: 'Projet introuvable' });
+    }
+
+    if (!checkProjectAccess(project, req.user.id, req.user.role)) {
       return res.status(403).json({ error: 'Accès refusé' });
     }
 
-    // Re-vérifier les paiements pending chez GeniusPay (webhook peut avoir manqué)
-    for (const quote of project.quotes) {
-      for (const payment of quote.payments) {
-        if (payment.status === 'pending' && payment.geniuspayRef) {
-          try {
-            const gpResponse = await geniuspay.getPayment(payment.geniuspayRef);
-            const gpData = gpResponse?.data || gpResponse;
-            if (gpData?.status === 'completed' || gpData?.status === 'success') {
-              const receivedAmount = gpData?.amount || gpData?.paid_amount;
-              if (receivedAmount !== undefined && Math.abs(receivedAmount - payment.amount) > 1) {
-                console.error(`[Payment] MONTANT INCORRECT — id: ${payment.id}, attendu: ${payment.amount}, reçu: ${receivedAmount}`);
-                await prisma.payment.update({
-                  where: { id: payment.id },
-                  data: { status: 'failed', metadata: JSON.stringify({ reason: 'amount_mismatch', expected: payment.amount, received: receivedAmount }) },
-                });
-                payment.status = 'failed';
-              } else {
-                await prisma.payment.update({
-                  where: { id: payment.id },
-                  data: { status: 'succeeded', completedAt: new Date() },
-                });
-                payment.status = 'succeeded';
-              }
-            }
-          } catch {}
-        }
-      }
-    }
+    await processPendingPayments(project.quotes);
 
     res.json({ ...project, alreadyReviewed: !!project.review });
   } catch (err) {
@@ -309,6 +406,22 @@ router.patch('/:id/cancel', requireAuth, requireRole('CLIENT'), async (req, res,
   }
 });
 
+// Helper: Upload files to Cloudinary
+async function uploadProjectPhotos(files) {
+  return Promise.all(files.map((file) => uploadBuffer(file.buffer, 'manawa/projects')));
+}
+
+// Helper: Create photo records in database
+async function createPhotoRecords(projectId, imageUrls) {
+  return Promise.all(
+    imageUrls.map((imageUrl) =>
+      prisma.projectPhoto.create({
+        data: { projectId, imageUrl },
+      })
+    )
+  );
+}
+
 // POST /api/projects/:id/photos — Upload photos to an existing project
 router.post('/:id/photos', requireAuth, requireRole('CLIENT'), upload.array('photos', 5), verifyMagicBytes, async (req, res, next) => {
   try {
@@ -321,16 +434,8 @@ router.post('/:id/photos', requireAuth, requireRole('CLIENT'), upload.array('pho
       return res.status(400).json({ error: 'Aucune photo fournie' });
     }
 
-    const imageUrls = await Promise.all(
-      req.files.map((file) => uploadBuffer(file.buffer, 'manawa/projects'))
-    );
-    const photos = await Promise.all(
-      imageUrls.map((imageUrl) =>
-        prisma.projectPhoto.create({
-          data: { projectId: project.id, imageUrl },
-        })
-      )
-    );
+    const imageUrls = await uploadProjectPhotos(req.files);
+    const photos = await createPhotoRecords(project.id, imageUrls);
 
     res.status(201).json(photos);
   } catch (err) {

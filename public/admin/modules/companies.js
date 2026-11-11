@@ -1,49 +1,42 @@
 // Companies Module - Entreprises Management
-import { apiCall } from './api.js';
+import { apiCall, loadModuleTable, debounceModuleTableSearch } from './api.js';
 import { setState, getState } from './state.js';
 import { showToast, openModal, closeModal, escHtml, formatDate, debounce } from './ui.js';
 
 export async function loadCompanies(page = 1) {
-  try {
-    const search = document.getElementById('companies-search')?.value || '';
-
-    let url = '/api/companies?page=' + page + '&limit=50';
-    if (search) url += '&search=' + encodeURIComponent(search);
-
-    const res = await apiCall(url);
-    const { companies = [], total = 0, page: currentPage = 1, totalPages = 1 } = res;
-
-    let html = companies.length === 0 ? '' : companies.map(c => {
-      const contactName = c.user ? `${c.user.firstName} ${c.user.lastName}` : '—';
-      const trades = (c.trades || []).join(', ') || '—';
-
-      return `<tr onclick="window.Companies.openCompanyDetail('${c.id}')" style="cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.08);" onmouseover="this.style.background='rgba(255,255,255,.04)'" onmouseout="this.style.background='transparent'">
-        <td style="padding:10px 12px;font-size:12px;"><strong>${escHtml(c.companyName)}</strong></td>
-        <td style="padding:10px 12px;font-size:12px;">
-          <strong>${escHtml(contactName)}</strong><br>
-          <span style="color:var(--muted);font-size:11px;">${escHtml(c.user?.email || '')}</span>
-        </td>
-        <td style="padding:10px 12px;font-size:11px;">${escHtml(trades)}</td>
-        <td style="padding:10px 12px;text-align:center;">
-          <strong style="color:var(--orange);">${(c.trustScore || 0).toFixed(0)}</strong>
-        </td>
-        <td style="padding:10px 12px;font-size:11px;">${formatDate(c.createdAt)}</td>
-      </tr>`;
-    }).join('');
-
-    document.getElementById('companies-tbody').innerHTML = html;
-    document.getElementById('companies-empty').style.display = companies.length === 0 ? 'block' : 'none';
-
-    let paginationHtml = '';
-    if (totalPages > 1) {
-      if (currentPage > 1) paginationHtml += `<button class="btn btn-secondary" onclick="window.Companies.loadCompanies(1)">⏮️ Première</button><button class="btn btn-secondary" onclick="window.Companies.loadCompanies(${currentPage - 1})">◀️ Précédente</button>`;
-      paginationHtml += `<span style="align-self:center;font-size:12px;color:var(--muted);">Page ${currentPage} / ${totalPages}</span>`;
-      if (currentPage < totalPages) paginationHtml += `<button class="btn btn-secondary" onclick="window.Companies.loadCompanies(${currentPage + 1})">Suivante ▶️</button><button class="btn btn-secondary" onclick="window.Companies.loadCompanies(${totalPages})">Dernière ⏭️</button>`;
-    }
-    document.getElementById('companies-pagination').innerHTML = paginationHtml;
-  } catch (err) {
-    showToast('Erreur : ' + err.message, true);
-  }
+  return loadModuleTable({
+    endpoint: '/api/companies?page={page}&limit={limit}',
+    selector: {
+      tbody: 'companies-tbody',
+      empty: 'companies-empty',
+      pagination: 'companies-pagination',
+    },
+    columns: [
+      { key: 'companyName', label: 'Entreprise', render: (val) => `<strong>${escHtml(val)}</strong>` },
+      {
+        key: 'user',
+        label: 'Contact',
+        render: (val) => {
+          const name = val ? `${val.firstName} ${val.lastName}` : '—';
+          const email = val?.email || '';
+          return `<strong>${escHtml(name)}</strong><br><span style="color:var(--muted);font-size:11px;">${escHtml(email)}</span>`;
+        },
+      },
+      {
+        key: 'trades',
+        label: 'Domaines',
+        render: (val) => escHtml((val || []).join(', ') || '—'),
+      },
+      {
+        key: 'trustScore',
+        label: 'Score',
+        render: (val) => `<strong style="color:var(--orange);">${(val || 0).toFixed(0)}</strong>`,
+      },
+      { key: 'createdAt', label: 'Inscrite', render: (val) => formatDate(val) },
+    ],
+    onRowClick: (row) => window.Companies.openCompanyDetail(row.id),
+    searchInput: 'companies-search',
+  }, page);
 }
 
 export async function openCompanyDetail(companyId) {
@@ -119,8 +112,43 @@ export function viewProfessionals(companyId) {
 }
 
 export function debounceLoadCompanies() {
-  clearTimeout(window._companiesSearchTimer);
-  window._companiesSearchTimer = setTimeout(() => loadCompanies(1), 300);
+  debounceModuleTableSearch(
+    {
+      endpoint: '/api/companies?page={page}&limit={limit}',
+      selector: {
+        tbody: 'companies-tbody',
+        empty: 'companies-empty',
+        pagination: 'companies-pagination',
+      },
+      columns: [
+        { key: 'companyName', label: 'Entreprise', render: (val) => `<strong>${escHtml(val)}</strong>` },
+        {
+          key: 'user',
+          label: 'Contact',
+          render: (val) => {
+            const name = val ? `${val.firstName} ${val.lastName}` : '—';
+            const email = val?.email || '';
+            return `<strong>${escHtml(name)}</strong><br><span style="color:var(--muted);font-size:11px;">${escHtml(email)}</span>`;
+          },
+        },
+        {
+          key: 'trades',
+          label: 'Domaines',
+          render: (val) => escHtml((val || []).join(', ') || '—'),
+        },
+        {
+          key: 'trustScore',
+          label: 'Score',
+          render: (val) => `<strong style="color:var(--orange);">${(val || 0).toFixed(0)}</strong>`,
+        },
+        { key: 'createdAt', label: 'Inscrite', render: (val) => formatDate(val) },
+      ],
+      onRowClick: (row) => window.Companies.openCompanyDetail(row.id),
+      searchInput: 'companies-search',
+    },
+    'companies',
+    300
+  );
 }
 
 export const Companies = {

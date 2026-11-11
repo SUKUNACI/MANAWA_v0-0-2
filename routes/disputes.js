@@ -5,6 +5,58 @@ const { sendPushNotification } = require('../config/pushNotifications');
 
 const router = express.Router();
 
+// Helper: Get payment with nested project and professional data
+async function getPaymentWithDetails(paymentId) {
+  return prisma.payment.findUnique({
+    where: { id: paymentId },
+    include: {
+      quote: {
+        include: {
+          project: { select: { clientId: true, title: true } },
+          professional: {
+            include: { user: { select: { id: true, firstName: true, lastName: true } } },
+          },
+        },
+      },
+    },
+  });
+}
+
+// Helper: Validate dispute creation prerequisites
+function validateDisputeCreation(payment, userId) {
+  if (!payment) {
+    return { valid: false, status: 404, error: 'Paiement introuvable' };
+  }
+  if (payment.quote.project.clientId !== userId) {
+    return { valid: false, status: 403, error: 'Ce paiement ne vous appartient pas' };
+  }
+  if (payment.status !== 'succeeded') {
+    return { valid: false, status: 400, error: 'Un litige ne peut être ouvert que sur un paiement confirmé' };
+  }
+  return { valid: true };
+}
+
+// Helper: Check if dispute already exists
+async function checkExistingDispute(paymentId) {
+  return prisma.dispute.findFirst({
+    where: { paymentId, status: { in: ['OPEN', 'UNDER_REVIEW'] } },
+  });
+}
+
+// Helper: Notify professional about opened dispute
+async function notifyProfessionalDispute(dispute, payment) {
+  const pro = payment.quote.professional;
+  const proTokens = await prisma.pushToken.findMany({ where: { userId: pro.user.id } });
+  if (proTokens.length > 0) {
+    await sendPushNotification(
+      proTokens.map(t => t.token),
+      'Litige ouvert',
+      `Un litige a été ouvert sur le projet "${payment.quote.project.title}"`,
+      { type: 'DISPUTE_OPENED', disputeId: dispute.id }
+    );
+  }
+}
+
 // POST /api/disputes — ouvrir un litige sur un paiement
 router.post('/', requireAuth, requireRole('CLIENT'), async (req, res, next) => {
   try {
@@ -14,35 +66,13 @@ router.post('/', requireAuth, requireRole('CLIENT'), async (req, res, next) => {
       return res.status(400).json({ error: 'paymentId et reason sont requis' });
     }
 
-    const payment = await prisma.payment.findUnique({
-      where: { id: paymentId },
-      include: {
-        quote: {
-          include: {
-            project: { select: { clientId: true, title: true } },
-            professional: {
-              include: { user: { select: { id: true, firstName: true, lastName: true } } },
-            },
-          },
-        },
-      },
-    });
-
-    if (!payment) {
-      return res.status(404).json({ error: 'Paiement introuvable' });
+    const payment = await getPaymentWithDetails(paymentId);
+    const validation = validateDisputeCreation(payment, req.user.id);
+    if (!validation.valid) {
+      return res.status(validation.status).json({ error: validation.error });
     }
 
-    if (payment.quote.project.clientId !== req.user.id) {
-      return res.status(403).json({ error: 'Ce paiement ne vous appartient pas' });
-    }
-
-    if (payment.status !== 'succeeded') {
-      return res.status(400).json({ error: 'Un litige ne peut être ouvert que sur un paiement confirmé' });
-    }
-
-    const existing = await prisma.dispute.findFirst({
-      where: { paymentId, status: { in: ['OPEN', 'UNDER_REVIEW'] } },
-    });
+    const existing = await checkExistingDispute(paymentId);
     if (existing) {
       return res.status(409).json({ error: 'Un litige est déjà ouvert sur ce paiement' });
     }
@@ -57,43 +87,37 @@ router.post('/', requireAuth, requireRole('CLIENT'), async (req, res, next) => {
       },
     });
 
-    // Notifier le pro
-    const pro = payment.quote.professional;
-    const proTokens = await prisma.pushToken.findMany({ where: { userId: pro.user.id } });
-    if (proTokens.length > 0) {
-      await sendPushNotification(
-        proTokens.map(t => t.token),
-        'Litige ouvert',
-        `Un litige a été ouvert sur le projet "${payment.quote.project.title}"`,
-        { type: 'DISPUTE_OPENED', disputeId: dispute.id }
-      );
-    }
-
+    await notifyProfessionalDispute(dispute, payment);
     res.status(201).json(dispute);
   } catch (err) {
     next(err);
   }
 });
 
+// Helper: Build dispute include for nested relations
+function getDisputeInclude() {
+  return {
+    payment: {
+      include: {
+        quote: {
+          include: {
+            project: { select: { title: true } },
+            professional: {
+              include: { user: { select: { firstName: true, lastName: true, avatarUrl: true } } },
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
 // GET /api/disputes/mine — litiges du client connecté
 router.get('/mine', requireAuth, requireRole('CLIENT'), async (req, res, next) => {
   try {
     const disputes = await prisma.dispute.findMany({
       where: { clientId: req.user.id },
-      include: {
-        payment: {
-          include: {
-            quote: {
-              include: {
-                project: { select: { title: true } },
-                professional: {
-                  include: { user: { select: { firstName: true, lastName: true, avatarUrl: true } } },
-                },
-              },
-            },
-          },
-        },
-      },
+      include: getDisputeInclude(),
       orderBy: { createdAt: 'desc' },
     });
 
@@ -103,41 +127,56 @@ router.get('/mine', requireAuth, requireRole('CLIENT'), async (req, res, next) =
   }
 });
 
+// Helper: Build where clause for dispute access based on role
+function buildDisputeWhereClause(userId, role, disputeId) {
+  let whereClause = { id: disputeId };
+
+  if (role === 'CLIENT') {
+    whereClause.clientId = userId;
+  } else if (role === 'PROFESSIONAL') {
+    whereClause.payment = { quote: { professional: { userId } } };
+  } else if (role !== 'ADMIN') {
+    return null; // Indicates access denied
+  }
+
+  return whereClause;
+}
+
+// Helper: Build dispute detail include
+function getDisputeDetailInclude() {
+  return {
+    payment: {
+      include: {
+        quote: {
+          include: {
+            project: { select: { title: true, clientId: true } },
+            professional: {
+              include: { user: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } } },
+            },
+          },
+        },
+      },
+    },
+    client: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
+  };
+}
+
 // GET /api/disputes/:id — détail d'un litige
 router.get('/:id', requireAuth, async (req, res, next) => {
   try {
-    const userId = req.user.id;
-    const role = req.user.role;
-
-    let whereClause = { id: req.params.id };
-    if (role === 'CLIENT') {
-      whereClause.clientId = userId;
-    } else if (role === 'PROFESSIONAL') {
-      whereClause.payment = { quote: { professional: { userId } } };
-    } else if (role !== 'ADMIN') {
+    const whereClause = buildDisputeWhereClause(req.user.id, req.user.role, req.params.id);
+    if (whereClause === null) {
       return res.status(403).json({ error: 'Accès refusé' });
     }
 
     const dispute = await prisma.dispute.findFirst({
       where: whereClause,
-      include: {
-        payment: {
-          include: {
-            quote: {
-              include: {
-                project: { select: { title: true, clientId: true } },
-                professional: {
-                  include: { user: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } } },
-                },
-              },
-            },
-          },
-        },
-        client: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
-      },
+      include: getDisputeDetailInclude(),
     });
 
-    if (!dispute) return res.status(404).json({ error: 'Litige introuvable' });
+    if (!dispute) {
+      return res.status(404).json({ error: 'Litige introuvable' });
+    }
 
     res.json(dispute);
   } catch (err) {

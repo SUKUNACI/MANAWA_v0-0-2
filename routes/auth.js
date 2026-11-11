@@ -320,7 +320,8 @@ router.get('/admin-session', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'Utilisateur non trouvé' });
 
     res.json({ user, token });
-  } catch {
+  } catch (err) {
+    logger.error('Session verification failed', { error: err.message, stack: err.stack, ip: req.ip });
     res.status(401).json({ error: 'Session expirée' });
   }
 });

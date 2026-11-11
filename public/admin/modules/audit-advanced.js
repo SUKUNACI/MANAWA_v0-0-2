@@ -1,59 +1,56 @@
 // Audit Advanced Module - Logs avancés avec filtrage temporal & recherche
-import { apiCall } from './api.js';
+import { apiCall, loadModuleTable } from './api.js';
 import { setState, getState } from './state.js';
 import { showToast, openModal, closeModal, escHtml, formatDate, debounce } from './ui.js';
 
+const ACTION_COLORS = {
+  'create': '#22C55E',
+  'update': '#3B82F6',
+  'delete': '#EF4444',
+  'export': '#F59E0B',
+};
+
 export async function loadAuditLogs(page = 1, filters = {}) {
-  try {
-    const dateFrom = document.getElementById('audit-date-from')?.value || '';
-    const dateTo = document.getElementById('audit-date-to')?.value || '';
-    const action = document.getElementById('audit-action')?.value || '';
-    const userId = document.getElementById('audit-user')?.value || '';
+  const result = await loadModuleTable({
+    endpoint: '/admin/audit/logs?page={page}&limit={limit}',
+    selector: {
+      tbody: 'audit-logs-tbody',
+      empty: 'audit-logs-empty',
+      pagination: 'audit-logs-pagination',
+    },
+    columns: [
+      {
+        key: 'user',
+        label: 'Utilisateur',
+        render: (val) => `<strong>${escHtml(val?.email || 'système')}</strong>`,
+      },
+      {
+        key: 'action',
+        label: 'Action',
+        render: (val) => {
+          const color = ACTION_COLORS[val] || '#666';
+          return `<span style="display:inline-block;background:${color};color:#fff;padding:2px 8px;border-radius:3px;font-size:9px;font-weight:600;text-transform:uppercase;">${val}</span>`;
+        },
+      },
+      { key: 'entity', label: 'Entité', render: (val) => escHtml(val || '—') },
+      { key: 'entityId', label: 'ID', render: (val) => escHtml(val || '—') },
+      { key: 'createdAt', label: 'Date', render: (val) => formatDate(val) },
+    ],
+    onRowClick: (row) => window.AuditAdvanced.openLogDetail(row.id),
+    filters: [
+      { key: 'dateFrom', input: 'audit-date-from' },
+      { key: 'dateTo', input: 'audit-date-to' },
+      { key: 'action', input: 'audit-action' },
+      { key: 'userId', input: 'audit-user' },
+    ],
+  }, page);
 
-    let url = '/admin/audit/logs?page=' + page;
-    if (dateFrom) url += '&dateFrom=' + dateFrom;
-    if (dateTo) url += '&dateTo=' + dateTo;
-    if (action) url += '&action=' + action;
-    if (userId) url += '&userId=' + userId;
-
-    const res = await apiCall(url);
-    const { logs = [], total = 0, pages = 0 } = res;
-
-    let html = logs.length === 0 ? '' : logs.map(log => {
-      const actionColor = {
-        'create': '#22C55E',
-        'update': '#3B82F6',
-        'delete': '#EF4444',
-        'export': '#F59E0B',
-      }[log.action] || '#666';
-
-      return `<tr onclick="window.AuditAdvanced.openLogDetail('${log.id}')" style="cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.08);" onmouseover="this.style.background='rgba(255,255,255,.04)'" onmouseout="this.style.background='transparent'">
-        <td style="padding:10px 12px;font-size:11px;"><strong>${escHtml(log.user?.email || 'système')}</strong></td>
-        <td style="padding:10px 12px;text-align:center;"><span style="display:inline-block;background:${actionColor};color:#fff;padding:2px 8px;border-radius:3px;font-size:9px;font-weight:600;text-transform:uppercase;">${log.action}</span></td>
-        <td style="padding:10px 12px;font-size:11px;">${escHtml(log.entity || '—')}</td>
-        <td style="padding:10px 12px;font-size:11px;">${escHtml(log.entityId || '—')}</td>
-        <td style="padding:10px 12px;font-size:11px;">${formatDate(log.createdAt)}</td>
-      </tr>`;
-    }).join('');
-
-    document.getElementById('audit-logs-tbody').innerHTML = html;
-    document.getElementById('audit-logs-empty').style.display = logs.length === 0 ? 'block' : 'none';
-    document.getElementById('audit-logs-total').textContent = total;
-
-    // Pagination
-    let pageHtml = '';
-    for (let i = 1; i <= pages; i++) {
-      pageHtml += `<button onclick="window.AuditAdvanced.loadAuditLogs(${i})" style="margin:0 2px;padding:6px 12px;background:${page === i ? '#3B82F6' : 'var(--dark4)'};color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;">${i}</button>`;
-    }
-    document.getElementById('audit-logs-pagination').innerHTML = pageHtml;
-
-    // ✅ MINOR FIX: Remove console.log from production
-    if (typeof DEBUG !== 'undefined' && DEBUG) {
-      console.log('✅ Audit logs loaded');
-    }
-  } catch (err) {
-    showToast('Erreur : ' + err.message, true);
+  // Update total display
+  if (document.getElementById('audit-logs-total')) {
+    document.getElementById('audit-logs-total').textContent = result.total;
   }
+
+  return result;
 }
 
 export async function openLogDetail(logId) {

@@ -6,7 +6,7 @@ import { getState } from './state.js';
 const API_BASE = window.location.origin + '/api';
 
 export async function apiCall(endpoint, options = {}) {
-  const authToken = getState('authToken');
+  // ✅ Auth token sent automatically in httpOnly cookie (via credentials: 'include')
   // ✅ CSRF token from httpOnly cookie only (not localStorage)
   const csrfToken = getState('csrfToken');
 
@@ -14,10 +14,6 @@ export async function apiCall(endpoint, options = {}) {
     'Content-Type': 'application/json',
     ...options.headers,
   };
-
-  if (authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
-  }
 
   // Add CSRF token for state-changing requests (from httpOnly cookie)
   const method = (options.method || 'GET').toUpperCase();

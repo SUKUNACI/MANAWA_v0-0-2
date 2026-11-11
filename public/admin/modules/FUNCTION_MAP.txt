@@ -1,0 +1,208 @@
+================================================================================
+MANAWA Admin Helpers - Function Map
+================================================================================
+
+COMPLETE LIST OF ALL 26+ FUNCTIONS ACROSS 5 FILES
+
+================================================================================
+helpers-ui.js (297 lines) - UI/Modal/Toast/Safe HTML
+================================================================================
+
+1. openModal(modalId, data = null)
+   Opens a modal dialog by ID with optional data storage
+   
+2. closeModal(modalId, result = null)
+   Closes a modal dialog with optional result data
+   
+3. setupModalBackdropClose(modalId)
+   Enables clicking outside modal to close it
+   
+4. initToastContainer()
+   Initializes the toast notification container (call once on page load)
+   
+5. showToast(message, isError = false, duration = 3000)
+   Displays a toast notification (success or error)
+   
+6. escapeHtml(text)
+   Sanitizes text to prevent XSS attacks
+   
+7. createSafeElement(tagName, textContent = '', attributes = {})
+   Creates a DOM element with auto-escaped content
+   
+8. initializeUiAnimations()
+   Registers CSS keyframe animations for UI components
+
+================================================================================
+helpers-table.js (196 lines) - Table Rendering
+================================================================================
+
+1. renderTable(data = [], columns = [], handlers = {})
+   Builds an HTML table from data array with sortable columns and actions
+   
+   Supports:
+   - Column definitions with custom renderers
+   - Edit/Delete/Custom action buttons
+   - Empty state
+   - Sortable column headers
+   
+2. initializeTableStyles()
+   Registers CSS styles for admin tables
+
+================================================================================
+helpers-form.js (117 lines) - Form Validation & Rate-Limiting
+================================================================================
+
+1. validateEmail(email)
+   Validates email format using regex
+   
+2. validatePhoneNumber(phone)
+   Validates phone format (international)
+   
+3. validateUrl(url)
+   Validates URL format using URL constructor
+   
+4. validateNumberRange(value, min, max)
+   Checks if number is within range (inclusive)
+   
+5. validateRequired(value)
+   Checks if value is not empty
+   
+6. debounce(fn, delay = 300)
+   Delays function execution until calls stop
+   Used for: search input, resize handlers, filter changes
+   
+7. throttle(fn, interval = 300)
+   Limits function execution frequency
+   Used for: scroll handlers, rapid click handlers
+
+================================================================================
+helpers-data.js (277 lines) - API/CSRF/Formatting
+================================================================================
+
+1. apiCall(endpoint, options = {})
+   Standardized fetch wrapper with:
+   - CSRF token injection
+   - Timeout handling (30s default)
+   - Retry logic for 5xx errors
+   - Multiple response format support
+   
+   Parameters:
+   - endpoint: string (e.g., '/api/users')
+   - options: { method, body, headers, timeout, retries }
+   
+2. getCsrfToken()
+   Extracts CSRF token from:
+   1. Meta tag (meta[name="csrf-token"])
+   2. Cookie (XSRF-TOKEN)
+   3. Hidden input (input[name="_csrf"])
+   
+3. verifyCsrfToken()
+   Checks if CSRF token exists and is non-empty
+   
+4. formatDate(date, format = 'short')
+   Formats date using Intl.toLocaleDateString
+   Formats: 'short', 'long', 'full', 'time', 'datetime'
+   
+5. formatRelativeTime(date)
+   Formats date relative to now
+   Examples: "5 seconds ago", "2 hours ago", "3 days ago"
+   
+6. formatCurrency(amount, currency = 'USD', decimals = 2)
+   Formats number as currency using Intl.NumberFormat
+   Examples: "$1,234.56", "€2 345,67"
+   
+7. formatNumber(num, decimals = 1)
+   Formats large numbers with K/M/B suffix
+   Examples: "1.5K", "3.2M", "1.8B"
+
+================================================================================
+helpers.js (269 lines) - Barrel Coordinator + DRY Utilities
+================================================================================
+
+1. loadModuleTable(config, page = 1)
+   Generic paginated table loader (ELIMINATES 20+ REPETITIONS)
+   
+   Config:
+   - endpoint: API URL (supports {page} and {limit} placeholders)
+   - selector: { tbody, empty, pagination } - DOM IDs
+   - columns: Array of column configs
+   - onRowClick: Optional row click handler
+   - searchInput: Optional search input ID
+   - filters: Optional additional filters
+   - limit: Optional page limit (default 50)
+   
+   Returns: { items, total, page, pages }
+   
+   Usage:
+   ```javascript
+   export async function loadUsers(page = 1) {
+     return loadModuleTable({
+       endpoint: '/api/users?page={page}&limit={limit}',
+       selector: { tbody: 'users-tbody', pagination: 'pag' },
+       columns: [{ key: 'name', label: 'Name' }],
+       searchInput: 'search'
+     }, page);
+   }
+   ```
+   
+2. debounceModuleTableSearch(config, debounceKey, delay = 300)
+   Debounce wrapper for module table search
+   
+   Usage:
+   ```html
+   <input oninput="debounceModuleTableSearch(config, 'users', 300)" />
+   ```
+
+================================================================================
+INITIALIZATION FUNCTIONS (called on DOMContentLoaded)
+================================================================================
+
+Called automatically when helpers.js loads:
+
+1. initToastContainer() - from helpers-ui.js
+2. initializeUiAnimations() - from helpers-ui.js
+3. initializeTableStyles() - from helpers-table.js
+
+No manual initialization required.
+
+================================================================================
+SUMMARY BY CATEGORY
+================================================================================
+
+UI & Modals (helpers-ui.js):
+  - openModal, closeModal, setupModalBackdropClose
+  - initToastContainer, showToast
+  - initializeUiAnimations
+
+Safe HTML (helpers-ui.js):
+  - escapeHtml, createSafeElement
+
+Table Rendering (helpers-table.js):
+  - renderTable, initializeTableStyles
+
+Form Validation (helpers-form.js):
+  - validateEmail, validatePhoneNumber, validateUrl
+  - validateNumberRange, validateRequired
+
+Rate-Limiting (helpers-form.js):
+  - debounce, throttle
+
+API & CSRF (helpers-data.js):
+  - apiCall, getCsrfToken, verifyCsrfToken
+
+Data Formatting (helpers-data.js):
+  - formatDate, formatRelativeTime
+  - formatCurrency, formatNumber
+
+DRY Utilities (helpers.js):
+  - loadModuleTable, debounceModuleTableSearch
+
+================================================================================
+TOTAL FUNCTIONS: 26+
+TOTAL LINES: 1156 (across 5 files)
+LARGEST FILE: 297 lines (helpers-ui.js)
+SMALLEST FILE: 117 lines (helpers-form.js)
+
+All files respecting 800L ECC ceiling with room for growth.
+
+================================================================================

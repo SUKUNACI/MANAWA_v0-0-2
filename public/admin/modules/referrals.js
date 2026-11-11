@@ -1,5 +1,5 @@
 // Referrals Module - Gestion du parrainage (Filleuls)
-import { apiCall } from './api.js';
+import { apiCall, loadModuleTable, debounceModuleTableSearch } from './api.js';
 import { setState, getState } from './state.js';
 import { showToast, openModal, closeModal, escHtml, formatDate, debounce } from './ui.js';
 
@@ -43,55 +43,52 @@ export async function loadReferralsStats() {
 }
 
 export async function loadReferralsList(page = 1) {
-  try {
-    const search = document.getElementById('referrals-search')?.value || '';
-    const status = document.getElementById('referrals-status')?.value || '';
-
-    let url = '/admin/referrals/list?page=' + page + '&limit=50';
-    if (search) url += '&search=' + encodeURIComponent(search);
-    if (status) url += '&status=' + status;
-
-    const res = await apiCall(url);
-    const { referrals = [], total = 0, page: currentPage = 1, totalPages = 1 } = res;
-
-    let html = referrals.length === 0 ? '' : referrals.map(r => {
-      const statusInfo = STATUS_LABELS[r.status] || { label: r.status, color: '#999' };
-      const referrerName = r.referrer ? `${r.referrer.firstName} ${r.referrer.lastName}` : '—';
-      const referredName = r.referred ? `${r.referred.firstName} ${r.referred.lastName}` : '—';
-
-      return `<tr onclick="window.Referrals.openReferralDetail('${r.id}')" style="cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.08);" onmouseover="this.style.background='rgba(255,255,255,.04)'" onmouseout="this.style.background='transparent'">
-        <td style="padding:10px 12px;font-size:12px;"><strong>${escHtml(r.code)}</strong></td>
-        <td style="padding:10px 12px;font-size:12px;">
-          <strong>${escHtml(referrerName)}</strong><br>
-          <span style="color:var(--muted);font-size:11px;">${escHtml(r.referrer?.email || '')}</span>
-        </td>
-        <td style="padding:10px 12px;font-size:12px;">
-          <strong>${escHtml(referredName)}</strong><br>
-          <span style="color:var(--muted);font-size:11px;">${escHtml(r.referred?.email || '')}</span>
-        </td>
-        <td style="padding:10px 12px;font-size:12px;text-align:center;">
-          <span style="display:inline-block;background:${statusInfo.color};color:#fff;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:600;">${statusInfo.label}</span>
-        </td>
-        <td style="padding:10px 12px;font-size:11px;">${formatDate(r.createdAt)}</td>
-        <td style="padding:10px 12px;font-size:12px;text-align:center;">
-          ${r.rewardValue ? `<strong>${r.rewardValue} XOF</strong>` : '—'}
-        </td>
-      </tr>`;
-    }).join('');
-
-    document.getElementById('referrals-list-tbody').innerHTML = html;
-    document.getElementById('referrals-list-empty').style.display = referrals.length === 0 ? 'block' : 'none';
-
-    let paginationHtml = '';
-    if (totalPages > 1) {
-      if (currentPage > 1) paginationHtml += `<button class="btn btn-secondary" onclick="window.Referrals.loadReferralsList(1)">⏮️ Première</button><button class="btn btn-secondary" onclick="window.Referrals.loadReferralsList(${currentPage - 1})">◀️ Précédente</button>`;
-      paginationHtml += `<span style="align-self:center;font-size:12px;color:var(--muted);">Page ${currentPage} / ${totalPages}</span>`;
-      if (currentPage < totalPages) paginationHtml += `<button class="btn btn-secondary" onclick="window.Referrals.loadReferralsList(${currentPage + 1})">Suivante ▶️</button><button class="btn btn-secondary" onclick="window.Referrals.loadReferralsList(${totalPages})">Dernière ⏭️</button>`;
-    }
-    document.getElementById('referrals-list-pagination').innerHTML = paginationHtml;
-  } catch (err) {
-    showToast('Erreur : ' + err.message, true);
-  }
+  return loadModuleTable({
+    endpoint: '/admin/referrals/list?page={page}&limit={limit}',
+    selector: {
+      tbody: 'referrals-list-tbody',
+      empty: 'referrals-list-empty',
+      pagination: 'referrals-list-pagination',
+    },
+    columns: [
+      { key: 'code', label: 'Code', render: (val) => `<strong>${escHtml(val)}</strong>` },
+      {
+        key: 'referrer',
+        label: 'Parrain',
+        render: (val) => {
+          const name = val ? `${val.firstName} ${val.lastName}` : '—';
+          const email = val?.email || '';
+          return `<strong>${escHtml(name)}</strong><br><span style="color:var(--muted);font-size:11px;">${escHtml(email)}</span>`;
+        },
+      },
+      {
+        key: 'referred',
+        label: 'Filleul',
+        render: (val) => {
+          const name = val ? `${val.firstName} ${val.lastName}` : '—';
+          const email = val?.email || '';
+          return `<strong>${escHtml(name)}</strong><br><span style="color:var(--muted);font-size:11px;">${escHtml(email)}</span>`;
+        },
+      },
+      {
+        key: 'status',
+        label: 'Statut',
+        render: (val) => {
+          const info = STATUS_LABELS[val] || { label: val, color: '#999' };
+          return `<span style="display:inline-block;background:${info.color};color:#fff;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:600;">${info.label}</span>`;
+        },
+      },
+      { key: 'createdAt', label: 'Date', render: (val) => formatDate(val) },
+      {
+        key: 'rewardValue',
+        label: 'Récompense',
+        render: (val) => (val ? `<strong>${val} XOF</strong>` : '—'),
+      },
+    ],
+    onRowClick: (row) => window.Referrals.openReferralDetail(row.id),
+    searchInput: 'referrals-search',
+    filters: [{ key: 'status', input: 'referrals-status' }],
+  }, page);
 }
 
 export async function openReferralDetail(referralId) {
