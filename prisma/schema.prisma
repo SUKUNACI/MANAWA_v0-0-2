@@ -1,0 +1,856 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    String                 @id @default(uuid())
+  email                 String                 @unique
+  passwordHash          String
+  firstName             String
+  lastName              String
+  phone                 String?
+  role                  UserRole
+  avatarUrl             String?
+  city                  String?
+  latitude              Float?
+  longitude             Float?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  emailVerified         Boolean                @default(false)
+  emailVerifyCode       String?
+  emailVerifyExpiry     DateTime?
+  passwordResetCode     String?
+  passwordResetExpiry   DateTime?
+  phoneOtpCode          String?
+  phoneOtpExpiry        DateTime?
+  phoneVerified         Boolean                @default(false)
+  suspended             Boolean                @default(false)
+  adminLevel            String?
+  adminPermissions      String? // JSON : tableau de sections autorisées, null = accès total
+  adminRoleTypeId       String? // Référence à AdminRoleType (null = ADMIN/SUPER_ADMIN)
+  adminRoleType         AdminRoleType? @relation("AdminRoleTypeUsers", fields: [adminRoleTypeId], references: [id])
+  adminTeamId           String?
+  lastLoginAt           DateTime?
+  securityQuestion      String?
+  securityAnswerHash    String?
+  expoPushToken         String?
+  deletedAt             DateTime?
+  follows               Follow[]
+  receivedMessages      Message[]              @relation("ReceivedMessages")
+  sentMessages          Message[]              @relation("SentMessages")
+  referralsMade         Referral[]             @relation("ReferralsMade")
+  referralsReceived     Referral[]             @relation("ReferralsReceived")
+  portfolioLikes        PortfolioLike[]
+  portfolioProjectLikes PortfolioProjectLike[]
+  portfolioComments     PortfolioComment[]
+  professional          Professional?
+  profileViews          ProfileView[]
+  projects              Project[]              @relation("ClientProjects")
+  reviewsWritten        Review[]               @relation("ReviewAuthor")
+  clientBookings        Booking[]              @relation("ClientBookings")
+  contentReports        ContentReport[]
+  supportTickets        SupportTicket[]
+  pushTokens            PushToken[]
+  notifications         Notification[]
+  disputes              Dispute[]
+  refreshTokens         RefreshToken[]
+  clientPackageOrders   PackageOrder[]         @relation("ClientPackageOrders")
+  initiatedCalls        VideoCall[]            @relation("InitiatedCalls")
+  receivedCalls         VideoCall[]            @relation("ReceivedCalls")
+  packageSuspensionLogs PackageSuspensionLog[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Professional {
+  id                      String             @id @default(uuid())
+  userId                  String             @unique
+  trade                   String
+  companyName             String?
+  siret                   String?
+  description             String?
+  yearsExperience         Int?
+  hourlyRate              Float?
+  decennaleVerified       Boolean            @default(false)
+  decennaleDocUrl         String?
+  rgeLabel                Boolean            @default(false)
+  qualibatNumber          String?
+  verifiedByAdmin         Boolean            @default(false)
+  interventionRadiusKm    Int                @default(30)
+  averageRating           Float              @default(0)
+  reviewCount             Int                @default(0)
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  idDocumentUrl           String?
+  identityStatus          String             @default("NOT_SUBMITTED")
+  selfieUrl               String?
+  accountType             AccountType        @default(INDEPENDENT)
+  cancelledMissionsCount  Int                @default(0)
+  completedMissionsCount  Int                @default(0)
+  complaintsCount         Int                @default(0)
+  employeeCount           Int?
+  lastExperienceUpdate    DateTime?
+  idDocumentVersoUrl      String?
+  trades                  String[]           @default([])
+  identityRejectionReason String?
+  trialEndsAt             DateTime?
+  companyCode             String?            @unique
+  companyMembers          CompanyMember[]    @relation("CompanyMembers")
+  memberOf                CompanyMember?     @relation("MemberOf")
+  promoUsages             PromoUsage[]
+  followers               Follow[]
+  portfolio               PortfolioItem[]
+  portfolioProjects       PortfolioProject[] @relation("PortfolioProjects")
+  user                    User               @relation(fields: [userId], references: [id])
+  profileViews            ProfileView[]
+  quotes                  Quote[]
+  reviews                 Review[]           @relation("ReviewedProfessional")
+  subscription            Subscription?
+  availabilitySlots       AvailabilitySlot[]
+  bookings                Booking[]
+  servicePackages         ServicePackage[]
+  packageOrders           PackageOrder[]
+  badges                  ProfessionalBadge[]
+}
+
+model PortfolioItem {
+  id             String          @id @default(uuid())
+  professionalId String
+  imageUrl       String
+  caption        String?
+  createdAt      DateTime        @default(now())
+  professional   Professional    @relation(fields: [professionalId], references: [id])
+  likes          PortfolioLike[]
+}
+
+model PortfolioProject {
+  id             String                  @id @default(uuid())
+  professionalId String
+  title          String
+  description    String
+  tradeCategory  String
+  images         PortfolioProjectImage[]
+  comments       PortfolioComment[]
+  likes          PortfolioProjectLike[]
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  professional   Professional            @relation("PortfolioProjects", fields: [professionalId], references: [id])
+
+  @@index([professionalId, createdAt])
+}
+
+model PortfolioProjectLike {
+  id                 String           @id @default(uuid())
+  userId             String
+  portfolioProjectId String
+  createdAt          DateTime         @default(now())
+  user               User             @relation(fields: [userId], references: [id])
+  portfolioProject   PortfolioProject @relation(fields: [portfolioProjectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, portfolioProjectId])
+}
+
+model PortfolioProjectImage {
+  id                 String           @id @default(uuid())
+  portfolioProjectId String
+  imageUrl           String
+  caption            String?
+  sortOrder          Int              @default(0)
+  createdAt          DateTime         @default(now())
+  portfolioProject   PortfolioProject @relation(fields: [portfolioProjectId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioProjectId])
+}
+
+model PortfolioComment {
+  id                 String             @id @default(uuid())
+  portfolioProjectId String
+  authorId           String
+  content            String
+  rating             Int?
+  parentId           String?
+  createdAt          DateTime           @default(now())
+  portfolioProject   PortfolioProject   @relation(fields: [portfolioProjectId], references: [id], onDelete: Cascade)
+  author             User               @relation(fields: [authorId], references: [id])
+  parent             PortfolioComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies            PortfolioComment[] @relation("CommentReplies")
+
+  @@index([portfolioProjectId, createdAt])
+  @@index([parentId])
+}
+
+model PortfolioLike {
+  id              String        @id @default(uuid())
+  userId          String
+  portfolioItemId String
+  createdAt       DateTime      @default(now())
+  portfolioItem   PortfolioItem @relation(fields: [portfolioItemId], references: [id])
+  user            User          @relation(fields: [userId], references: [id])
+
+  @@unique([userId, portfolioItemId])
+}
+
+model ProfileView {
+  id             String       @id @default(uuid())
+  viewerId       String
+  professionalId String
+  createdAt      DateTime     @default(now())
+  professional   Professional @relation(fields: [professionalId], references: [id])
+  viewer         User         @relation(fields: [viewerId], references: [id])
+}
+
+model Follow {
+  id             String       @id @default(uuid())
+  followerId     String
+  professionalId String
+  createdAt      DateTime     @default(now())
+  follower       User         @relation(fields: [followerId], references: [id])
+  professional   Professional @relation(fields: [professionalId], references: [id])
+
+  @@unique([followerId, professionalId])
+}
+
+model Project {
+  id                        String         @id @default(uuid())
+  clientId                  String
+  title                     String
+  description               String
+  tradeNeeded               String
+  budgetMin                 Float?
+  budgetMax                 Float?
+  city                      String
+  latitude                  Float?
+  longitude                 Float?
+  status                    ProjectStatus  @default(OPEN)
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
+  clientConfirmedCompletion Boolean        @default(false)
+  proConfirmedCompletion    Boolean        @default(false)
+  client                    User           @relation("ClientProjects", fields: [clientId], references: [id])
+  photos                    ProjectPhoto[]
+  quotes                    Quote[]
+  review                    Review?
+  bookings                  Booking[]
+  packageOrders             PackageOrder[]
+  videoCalls                VideoCall[]
+}
+
+model ProjectPhoto {
+  id        String  @id @default(uuid())
+  projectId String
+  imageUrl  String
+  project   Project @relation(fields: [projectId], references: [id])
+}
+
+model Quote {
+  id             String       @id @default(uuid())
+  projectId      String
+  professionalId String
+  amount         Float
+  description    String
+  status         QuoteStatus  @default(PENDING)
+  pdfUrl         String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  expiresAt      DateTime?
+  mode           QuoteMode    @default(SIMPLE)
+  parentQuoteId  String?
+  validityDays   Int          @default(15)
+  version        Int          @default(1)
+  payments       Payment[]
+  parentQuote    Quote?       @relation("QuoteRevisions", fields: [parentQuoteId], references: [id])
+  revisions      Quote[]      @relation("QuoteRevisions")
+  professional   Professional @relation(fields: [professionalId], references: [id])
+  project        Project      @relation(fields: [projectId], references: [id])
+  items          QuoteItem[]
+}
+
+model QuoteItem {
+  id        String            @id @default(uuid())
+  quoteId   String
+  category  QuoteItemCategory @default(OTHER)
+  label     String
+  quantity  Float             @default(1)
+  unit      String?
+  unitPrice Float
+  total     Float
+  sortOrder Int               @default(0)
+  createdAt DateTime          @default(now())
+  quote     Quote             @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+}
+
+model Subscription {
+  id             String       @id @default(uuid())
+  professionalId String       @unique
+  status         String       @default("INACTIVE")
+  tier           String       @default("ESSENTIEL")
+  transactionId  String?
+  startedAt      DateTime?
+  expiresAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  professional   Professional @relation(fields: [professionalId], references: [id])
+}
+
+model Payment {
+  id             String            @id @default(uuid())
+  quoteId        String
+  geniuspayRef   String?
+  idempotencyKey String?           @unique
+  amount         Float
+  status         String // pending | succeeded | failed
+  isDeposit      Boolean           @default(true)
+  fees           Float             @default(0)
+  netAmount      Float?
+  paymentMethod  String?
+  metadata       String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  completedAt    DateTime?
+  commissionPaid Boolean           @default(false)
+  bankRef        String?
+  reconciledAt   DateTime?
+  reconciledBy   String?
+  refundAmount   Float?
+  refundedAt     DateTime?
+  refundRef      String?
+  refundNote     String?
+  quote          Quote             @relation(fields: [quoteId], references: [id])
+  auditLogs      PaymentAuditLog[]
+  disputes       Dispute[]
+
+  @@unique([quoteId, isDeposit])
+}
+
+model PaymentAuditLog {
+  id          String   @id @default(uuid())
+  paymentId   String
+  fromStatus  String // statut avant le changement
+  toStatus    String // statut après le changement
+  reason      String? // webhook | recheck | cron | manual | amount_mismatch
+  triggeredBy String? // userId si action manuelle, "system" sinon
+  ipAddress   String?
+  metadata    String? // JSON — données brutes GeniusPay ou info supplémentaire
+  createdAt   DateTime @default(now())
+  payment     Payment  @relation(fields: [paymentId], references: [id])
+
+  @@index([paymentId])
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  senderId   String
+  receiverId String
+  content    String
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id])
+}
+
+model Review {
+  id             String       @id @default(uuid())
+  authorId       String
+  professionalId String
+  rating         Int
+  comment        String?
+  createdAt      DateTime     @default(now())
+  projectId      String?      @unique
+  author         User         @relation("ReviewAuthor", fields: [authorId], references: [id])
+  professional   Professional @relation("ReviewedProfessional", fields: [professionalId], references: [id])
+  project        Project?     @relation(fields: [projectId], references: [id])
+  flags          ReviewFlag[]
+}
+
+model SupportTicket {
+  id              String           @id @default(uuid())
+  userId          String
+  category        String
+  subject         String
+  status          String           @default("OPEN")
+  priority        String           @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
+  assignedTo      String?
+  firstResponseAt DateTime?
+  resolvedAt      DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  messages        SupportMessage[]
+  user            User             @relation(fields: [userId], references: [id])
+}
+
+model SupportMessage {
+  id        String        @id @default(uuid())
+  ticketId  String
+  senderId  String
+  isAdmin   Boolean       @default(false)
+  content   String
+  createdAt DateTime      @default(now())
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id])
+}
+
+model CompanyMember {
+  id        String       @id @default(uuid())
+  companyId String
+  memberId  String       @unique
+  joinedAt  DateTime     @default(now())
+  status    String       @default("ACTIVE")
+  company   Professional @relation("CompanyMembers", fields: [companyId], references: [id])
+  member    Professional @relation("MemberOf", fields: [memberId], references: [id])
+
+  @@unique([companyId, memberId])
+}
+
+model AdminRoleType {
+  id          String   @id @default(uuid())
+  name        String   @unique // "Modérateur", "Agent de terrain", etc.
+  slug        String   @unique // "moderator", "agent-terrain" (URL-safe)
+  description String?
+  isBuiltIn   Boolean  @default(false) // true = MODERATOR, ANALYST, AUDITOR, SUPPORT
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]   @relation("AdminRoleTypeUsers")
+  permissions RolePermission[] @relation("RolePermissions")
+}
+
+model AdminTeam {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  color       String?
+  permissions String? // JSON : tableau de sections autorisées, null = accès total
+  preset      String? // slug prédéfini : verification | support | finance | moderation | commercial | custom
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AdminLog {
+  id         String   @id @default(uuid())
+  adminId    String
+  action     String
+  targetType String?
+  targetId   String?
+  metadata   String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([adminId])
+  @@index([createdAt])
+}
+
+enum UserRole {
+  CLIENT
+  PROFESSIONAL
+  ADMIN
+}
+
+enum ProjectStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum QuoteStatus {
+  PENDING
+  ACCEPTED
+  REFUSED
+  EXPIRED
+  REVISED
+}
+
+enum QuoteMode {
+  SIMPLE
+  DETAILED
+}
+
+enum QuoteItemCategory {
+  LABOUR
+  MATERIALS
+  OTHER
+}
+
+enum AccountType {
+  INDEPENDENT
+  ENTREPRISE
+}
+
+model ContentReport {
+  id          String    @id @default(uuid())
+  reporterId  String
+  contentType String // REVIEW | COMMENT | PORTFOLIO
+  contentId   String
+  reason      String
+  details     String?
+  status      String    @default("PENDING") // PENDING | DISMISSED | REMOVED
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  reporter User @relation(fields: [reporterId], references: [id])
+
+  @@index([status])
+  @@index([contentType, contentId])
+  @@index([reporterId])
+}
+
+model ReviewFlag {
+  id        String   @id @default(uuid())
+  reviewId  String
+  flaggedBy String   @default("system")
+  reason    String?
+  createdAt DateTime @default(now())
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId])
+}
+
+model PushToken {
+  id        String    @id @default(uuid())
+  userId    String
+  token     String    @unique
+  platform  String // 'ANDROID' | 'iOS'
+  type      String // 'FCM' | 'APNs' | 'EXPO'
+  deviceId  String?
+  isActive  Boolean   @default(true)
+  lastUsed  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, token])
+  @@index([userId])
+  @@index([platform])
+  @@index([isActive])
+}
+
+model PushTokenMigrationLog {
+  id          String    @id @default(uuid())
+  userId      String
+  fromToken   String?
+  toToken     String?
+  platform    String
+  status      String // 'PENDING' | 'SUCCESS' | 'FAILED'
+  reason      String?
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String?
+  title     String
+  body      String?
+  message   String?
+  data      Json?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model BroadcastLog {
+  id           String   @id @default(uuid())
+  adminId      String
+  title        String
+  body         String
+  target       String // 'ALL' | 'CLIENTS' | 'PROFESSIONALS' | 'USER'
+  targetUserId String?
+  sent         Int      @default(0)
+  total        Int      @default(0)
+  createdAt    DateTime @default(now())
+}
+
+model AppConfig {
+  key         String   @id
+  value       String
+  description String?
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+}
+
+model PromoCode {
+  id              String       @id @default(uuid())
+  code            String       @unique
+  description     String?
+  discountType    String // 'PERCENT' | 'FIXED'
+  discountValue   Float
+  maxUses         Int?
+  usedCount       Int          @default(0)
+  validFrom       DateTime     @default(now())
+  validUntil      DateTime?
+  applicableTiers String[]     @default([])
+  active          Boolean      @default(true)
+  createdBy       String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  usages          PromoUsage[]
+}
+
+model PromoUsage {
+  id             String       @id @default(uuid())
+  promoCodeId    String
+  professionalId String
+  tier           String
+  originalAmount Float
+  discountAmount Float
+  finalAmount    Float
+  usedAt         DateTime     @default(now())
+  promoCode      PromoCode    @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  professional   Professional @relation(fields: [professionalId], references: [id])
+
+  @@unique([promoCodeId, professionalId])
+}
+
+model Dispute {
+  id           String    @id @default(uuid())
+  paymentId    String
+  clientId     String
+  reason       String
+  description  String?
+  status       String    @default("OPEN") // OPEN | UNDER_REVIEW | RESOLVED_REFUND | RESOLVED_PARTIAL | RESOLVED_REJECTED
+  refundAmount Float?
+  adminNote    String?
+  resolvedBy   String?
+  resolvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+  client  User    @relation(fields: [clientId], references: [id])
+}
+
+model AvailabilitySlot {
+  id             String       @id @default(uuid())
+  professionalId String
+  type           String       // 'RECURRING' | 'EXCEPTION'
+  // Recurring fields
+  dayOfWeek      Int?         // 0=Dimanche … 6=Samedi
+  startTime      String?      // "08:00"
+  endTime        String?      // "17:00"
+  // Exception fields (indisponibilité ou plage spéciale)
+  date           DateTime?
+  available      Boolean      @default(true) // false = indispo ce jour
+  note           String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@index([professionalId])
+  @@index([date])
+}
+
+model Booking {
+  id             String       @id @default(uuid())
+  professionalId String
+  clientId       String
+  date           DateTime     // Jour de la réservation (à minuit UTC)
+  startTime      String       // "09:00"
+  endTime        String       // "11:00"
+  status         String       @default("PENDING") // PENDING | CONFIRMED | CANCELLED | COMPLETED
+  note           String?
+  projectId      String?
+  cancelReason   String?
+  cancelledBy    String?      // userId qui a annulé
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  professional Professional @relation(fields: [professionalId], references: [id])
+  client       User         @relation("ClientBookings", fields: [clientId], references: [id])
+  project      Project?     @relation(fields: [projectId], references: [id])
+
+  @@index([professionalId])
+  @@index([clientId])
+  @@index([date])
+}
+
+model ServicePackage {
+  id             String   @id @default(uuid())
+  professionalId String
+  title          String
+  description    String?
+  price          Float
+  duration       String?  // "1 jour", "2-3 jours"
+  category       String?  // même liste que les trades
+  included       String[] @default([]) // liste de ce qui est inclus
+  images         String[] @default([]) // URLs Cloudinary
+  active         Boolean  @default(true)
+  ordersCount    Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  professional Professional  @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  orders       PackageOrder[]
+  suspensionLogs PackageSuspensionLog[]
+
+  @@index([professionalId])
+  @@index([active])
+}
+
+model ProfessionalBadge {
+  id             String   @id @default(uuid())
+  professionalId String
+  badgeKey       String
+  earnedAt       DateTime @default(now())
+
+  professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@unique([professionalId, badgeKey])
+  @@index([professionalId])
+}
+
+model PackageOrder {
+  id               String   @id @default(uuid())
+  packageId        String
+  clientId         String
+  professionalId   String
+  amount           Float
+  status           String   @default("PENDING_PAYMENT") // PENDING_PAYMENT | PAID | IN_PROGRESS | COMPLETED | CANCELLED | REFUNDED
+  transactionId    String?
+  paymentUrl       String?
+  projectId        String?
+  note             String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  package      ServicePackage @relation(fields: [packageId], references: [id])
+  client       User           @relation("ClientPackageOrders", fields: [clientId], references: [id])
+  professional Professional   @relation(fields: [professionalId], references: [id])
+  project      Project?       @relation(fields: [projectId], references: [id])
+
+  @@index([packageId])
+  @@index([clientId])
+  @@index([professionalId])
+}
+
+model PackageSuspensionLog {
+  id          String    @id @default(uuid())
+  packageId   String
+  adminId     String
+  action      String    // SUSPEND | REACTIVATE
+  reason      String?   // Raison de suspension
+  createdAt   DateTime  @default(now())
+
+  package ServicePackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  admin   User           @relation(fields: [adminId], references: [id])
+
+  @@index([packageId])
+  @@index([adminId])
+  @@index([createdAt])
+}
+
+model PackageSuspensionThreshold {
+  id                    String   @id @default(uuid())
+  category              String   @unique  // électricité, plomberie, etc. ou "*" pour défaut global
+  maxDisputeRatePercent Float    @default(20)      // Taux de litiges max (%)
+  maxPrice              Float    @default(5000000) // Prix max (FCFA)
+  minPrice              Float    @default(1000)    // Prix min (FCFA)
+  inactiveDaysThreshold Int      @default(180)     // Jours avant flag inactif
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([category])
+}
+
+model Referral {
+  id           String    @id @default(uuid())
+  referrerId   String    // pro qui parraine (userId)
+  referredId   String    // pro parrainé (userId)
+  code         String    // code utilisé
+  status       String    @default("PENDING") // PENDING | QUALIFIED | REWARDED
+  rewardType   String?   // 'SUBSCRIPTION_MONTH' | 'PROMO_CREDIT'
+  rewardValue  Float?
+  qualifiedAt  DateTime? // date où le filleul a complété sa 1ère mission
+  rewardedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  referrer User @relation("ReferralsMade", fields: [referrerId], references: [id])
+  referred User @relation("ReferralsReceived", fields: [referredId], references: [id])
+
+  @@unique([referredId]) // un user ne peut être parrainé qu'une fois
+  @@index([referrerId])
+  @@index([code])
+}
+
+model VideoCall {
+  id            String    @id @default(uuid())
+  roomName      String    @unique
+  roomUrl       String
+  initiatorId   String
+  participantId String
+  status        String    @default("PENDING") // PENDING | ACTIVE | ENDED | MISSED
+  projectId     String?
+  startedAt     DateTime?
+  endedAt       DateTime?
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+
+  initiator   User     @relation("InitiatedCalls", fields: [initiatorId], references: [id])
+  participant User     @relation("ReceivedCalls", fields: [participantId], references: [id])
+  project     Project? @relation(fields: [projectId], references: [id])
+
+  @@index([initiatorId])
+  @@index([participantId])
+}
+
+model RolePermission {
+  id              String   @id @default(uuid())
+  adminRoleTypeId String
+  adminRoleType   AdminRoleType @relation("RolePermissions", fields: [adminRoleTypeId], references: [id], onDelete: Cascade)
+
+  section         String   // "reviews", "disputes", "payments", etc.
+  canCreate       Boolean  @default(false)
+  canRead         Boolean  @default(false)
+  canUpdate       Boolean  @default(false)
+  canDelete       Boolean  @default(false)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([adminRoleTypeId, section])
+  @@index([adminRoleTypeId])
+}
+
+model RolePermissionHistory {
+  id                  String   @id @default(uuid())
+  adminRoleTypeId     String
+  changedByAdminId    String
+
+  section             String
+  previousPermissions String   // JSON: {"canCreate": false, "canRead": true, ...}
+  newPermissions      String   // JSON: {"canCreate": true, "canRead": true, ...}
+
+  action              String   // "GRANT" | "REVOKE" | "ROLLBACK"
+  reason              String?  // optional notes
+
+  createdAt           DateTime @default(now())
+
+  @@index([adminRoleTypeId])
+  @@index([changedByAdminId])
+  @@index([createdAt])
+}

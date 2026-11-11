@@ -1,0 +1,39 @@
+node_modules/
+
+# Variables d'environnement
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Clés et credentials
+*firebase-adminsdk*.json
+*.key
+*.pem
+*-credentials.json
+*-serviceAccount.json
+
+# Scripts sensibles (ne pas exposer en prod)
+reset-admin-password.js
+scripts/create-admin.js
+
+# Uploads et fichiers générés
+uploads/
+dist/
+build/
+
+# Backups DB locaux
+backups/
+backup_*.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
