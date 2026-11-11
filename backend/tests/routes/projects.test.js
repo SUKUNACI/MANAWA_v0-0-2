@@ -90,7 +90,7 @@ const app = express();
 app.use(express.json());
 app.use('/api/projects', projectsRouter);
 app.use((err, req, res, next) => {
-  console.error('[TEST ERROR]', err.message, err.stack);
+  // ERROR: '[TEST ERROR]', err.message, err.stack);
   res.status(500).json({ error: err.message });
 });
 
