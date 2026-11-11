@@ -1,72 +1,81 @@
 // Moderation Module
 // Handle content reporting, sanctions, and moderation actions
 
-import { apiCall } from './api.js';
+import { apiCall, loadModuleTable, debounceModuleTableSearch } from './api.js';
 import { setState, getState } from './state.js';
 import { showToast, openModal, closeModal, escHtml } from './ui.js';
 
+const CONTENT_TYPES = {
+  REVIEW: '⭐ Avis',
+  COMMENT: '💬 Commentaire',
+  PORTFOLIO: '🖼️ Portfolio',
+};
+
+const STATUS_BADGES = {
+  PENDING: { bg: 'var(--red-dim)', color: 'var(--red)', label: '⏳ En attente' },
+  DISMISSED: { bg: 'var(--green-dim)', color: 'var(--green)', label: '✅ Ignoré' },
+  REMOVED: { bg: 'rgba(107,114,128,0.15)', color: 'var(--muted)', label: '🗑️ Supprimé' },
+};
+
 export async function loadModeration(page = 1) {
-  try {
-    const search = document.getElementById('moderation-search')?.value || '';
-    const status = document.getElementById('mod-status-filter')?.value || '';
-    const dateFrom = document.getElementById('mod-date-from')?.value || '';
-    const dateTo = document.getElementById('mod-date-to')?.value || '';
+  const result = await loadModuleTable({
+    endpoint: '/admin/moderation/reports?page={page}&limit={limit}',
+    selector: {
+      tbody: 'mod-tbody',
+      empty: 'mod-empty',
+      pagination: 'mod-pagination',
+    },
+    columns: [
+      {
+        key: 'contentType',
+        label: 'Type',
+        render: (val) => CONTENT_TYPES[val] || val,
+      },
+      {
+        key: 'content',
+        label: 'Contenu',
+        render: (val) => escHtml(val?.text?.substring(0, 50) || ''),
+      },
+      {
+        key: 'content',
+        label: 'Auteur',
+        render: (val) => escHtml(val?.authorName || ''),
+      },
+      {
+        key: 'reason',
+        label: 'Raison',
+        render: (val) => escHtml(val),
+      },
+      {
+        key: 'reporter',
+        label: 'Signaleur',
+        render: (val) => escHtml(val?.email || ''),
+      },
+      {
+        key: 'createdAt',
+        label: 'Date',
+        render: (val) => new Date(val).toLocaleDateString('fr-FR'),
+      },
+      {
+        key: 'status',
+        label: 'Statut',
+        render: (val) => {
+          const badge = STATUS_BADGES[val] || { bg: '#999', color: '#fff', label: val };
+          return `<span style="background:${badge.bg};color:${badge.color};padding:3px 8px;border-radius:4px;font-size:10px;">${badge.label}</span>`;
+        },
+      },
+    ],
+    onRowClick: (row) => window.Moderation.openModerationModal(row.id),
+    searchInput: 'moderation-search',
+    filters: [
+      { key: 'status', input: 'mod-status-filter' },
+      { key: 'dateFrom', input: 'mod-date-from' },
+      { key: 'dateTo', input: 'mod-date-to' },
+    ],
+  }, page);
 
-    let url = '/admin/moderation/reports?page=' + page + '&limit=50';
-    if (status) url += '&status=' + status;
-    if (search) url += '&search=' + encodeURIComponent(search);
-    if (dateFrom) url += '&dateFrom=' + dateFrom;
-    if (dateTo) url += '&dateTo=' + dateTo;
-
-    const res = await apiCall(url);
-    const { reports = [], total = 0, totalPages = 1 } = res;
-
-    setState('modCurrentPage', page);
-
-    let html = '';
-    if (reports.length === 0) {
-      document.getElementById('mod-empty').style.display = 'block';
-      document.getElementById('mod-tbody').innerHTML = '';
-    } else {
-      document.getElementById('mod-empty').style.display = 'none';
-      html = reports.map(r => {
-        const typeLabel = { REVIEW: '⭐ Avis', COMMENT: '💬 Commentaire', PORTFOLIO: '🖼️ Portfolio' }[r.contentType] || r.contentType;
-        const statusBadge = {
-          PENDING: '<span class="badge" style="background:var(--red-dim);color:var(--red);">⏳ En attente</span>',
-          DISMISSED: '<span class="badge" style="background:var(--green-dim);color:var(--green);">✅ Ignoré</span>',
-          REMOVED: '<span class="badge" style="background:rgba(107,114,128,0.15);color:var(--muted);">🗑️ Supprimé</span>',
-        }[r.status] || r.status;
-
-        return `<tr onclick="window.Moderation.openModerationModal('${r.id}')" style="cursor:pointer;">
-          <td>${typeLabel}</td>
-          <td>${escHtml(r.content?.text?.substring(0, 50) || '')}</td>
-          <td>${escHtml(r.content?.authorName || '')}</td>
-          <td>${escHtml(r.reason)}</td>
-          <td>${escHtml(r.reporter?.email || '')}</td>
-          <td>${new Date(r.createdAt).toLocaleDateString('fr-FR')}</td>
-          <td>${statusBadge}</td>
-        </tr>`;
-      }).join('');
-      document.getElementById('mod-tbody').innerHTML = html;
-    }
-
-    // Pagination
-    let paginationHtml = '';
-    if (totalPages > 1) {
-      if (page > 1) {
-        paginationHtml += `<button class="btn btn-secondary" onclick="window.Moderation.loadModeration(1)">⏮️ Première</button>`;
-        paginationHtml += `<button class="btn btn-secondary" onclick="window.Moderation.loadModeration(${page - 1})">◀️ Précédente</button>`;
-      }
-      paginationHtml += `<span style="align-self:center;font-size:12px;color:var(--muted);">Page ${page} / ${totalPages}</span>`;
-      if (page < totalPages) {
-        paginationHtml += `<button class="btn btn-secondary" onclick="window.Moderation.loadModeration(${page + 1})">Suivante ▶️</button>`;
-        paginationHtml += `<button class="btn btn-secondary" onclick="window.Moderation.loadModeration(${totalPages})">Dernière ⏭️</button>`;
-      }
-    }
-    document.getElementById('mod-pagination').innerHTML = paginationHtml;
-  } catch (err) {
-    showToast('Erreur : ' + err.message, true);
-  }
+  setState('modCurrentPage', page);
+  return result;
 }
 
 export async function openModerationModal(reportId) {

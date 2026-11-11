@@ -1,42 +1,50 @@
 // Disputes Module - Litiges avec timeline et notifications
-import { apiCall } from './api.js';
+import { apiCall, loadModuleTable, debounceModuleTableSearch } from './api.js';
 import { setState } from './state.js';
 import { showToast, openModal, closeModal, escHtml, formatDate } from './ui.js';
 
+const STATUS_BADGES = {
+  PENDING: '⏳ En attente',
+  UNDER_REVIEW: '🔍 En examen',
+  RESOLVED_REFUND: '✅ Remboursé',
+  RESOLVED_PARTIAL: '⚠️ Partiel',
+  RESOLVED_REJECTED: '❌ Rejeté',
+};
+
 export async function loadDisputes(page = 1) {
-  try {
-    const status = document.getElementById('disputes-status')?.value || '';
-    let url = '/admin/disputes?page=' + page + '&limit=50';
-    if (status) url += '&status=' + status;
-
-    const res = await apiCall(url);
-    const disputes = res.disputes || [];
-    const total = res.total || 0;
-    const totalPages = res.totalPages || 1;
-
-    let html = disputes.map(d => {
-      const statusBadge = {
-        PENDING: '⏳ En attente',
-        UNDER_REVIEW: '🔍 En examen',
-        RESOLVED_REFUND: '✅ Remboursé',
-        RESOLVED_PARTIAL: '⚠️ Partiel',
-        RESOLVED_REJECTED: '❌ Rejeté',
-      }[d.status] || d.status;
-
-      return `<tr onclick="window.Disputes.openDisputeModal('${d.id}')" style="cursor:pointer;">
-        <td>${escHtml(d.client.firstName + ' ' + d.client.lastName)}</td>
-        <td>${escHtml(d.professional.firstName + ' ' + d.professional.lastName)}</td>
-        <td>${d.amount.toLocaleString('fr-FR')} XOF</td>
-        <td>${escHtml(d.reason)}</td>
-        <td>${statusBadge}</td>
-        <td>${formatDate(d.createdAt)}</td>
-      </tr>`;
-    }).join('');
-
-    document.getElementById('disputes-tbody').innerHTML = html;
-  } catch (err) {
-    showToast('Erreur : ' + err.message, true);
-  }
+  return loadModuleTable({
+    endpoint: '/admin/disputes?page={page}&limit={limit}',
+    selector: {
+      tbody: 'disputes-tbody',
+      pagination: 'disputes-pagination',
+    },
+    columns: [
+      {
+        key: 'client',
+        label: 'Client',
+        render: (val) => escHtml(val.firstName + ' ' + val.lastName),
+      },
+      {
+        key: 'professional',
+        label: 'Professionnel',
+        render: (val) => escHtml(val.firstName + ' ' + val.lastName),
+      },
+      {
+        key: 'amount',
+        label: 'Montant',
+        render: (val) => val.toLocaleString('fr-FR') + ' XOF',
+      },
+      { key: 'reason', label: 'Raison', render: (val) => escHtml(val) },
+      {
+        key: 'status',
+        label: 'Statut',
+        render: (val) => STATUS_BADGES[val] || val,
+      },
+      { key: 'createdAt', label: 'Date', render: (val) => formatDate(val) },
+    ],
+    onRowClick: (row) => window.Disputes.openDisputeModal(row.id),
+    filters: [{ key: 'status', input: 'disputes-status' }],
+  }, page);
 }
 
 export async function openDisputeModal(disputeId) {

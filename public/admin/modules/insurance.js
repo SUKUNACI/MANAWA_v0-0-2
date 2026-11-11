@@ -1,30 +1,59 @@
 // Insurance Module - Gestion assurance artisans
-import { apiCall } from './api.js';
+import { apiCall, loadModuleTable } from './api.js';
 import { showToast, openModal, escHtml, formatDate } from './ui.js';
 
+const STATUS_DISPLAY = {
+  active: { label: '✅ Actif', color: '#22C55E' },
+  expired: { label: '❌ Expiré', color: '#EF4444' },
+  pending: { label: '⏳ En attente', color: '#F59E0B' },
+};
+
 export async function loadInsuranceData(page = 1) {
-  try {
-    const res = await apiCall('/admin/insurance?page=' + page);
-    const { records = [], total = 0, pages = 0 } = res;
+  const result = await loadModuleTable({
+    endpoint: '/admin/insurance?page={page}&limit={limit}',
+    selector: {
+      tbody: 'insurance-tbody',
+      pagination: 'insurance-pagination',
+    },
+    columns: [
+      {
+        key: 'professional',
+        label: 'Professionnel',
+        render: (val) => `<strong>${escHtml(val?.firstName || '')}</strong>`,
+      },
+      {
+        key: 'policyNumber',
+        label: 'N° Police',
+        render: (val) => escHtml(val || '—'),
+      },
+      {
+        key: 'coverage',
+        label: 'Couverture',
+        render: (val) => `<strong>${(val || 0).toLocaleString('fr-FR')} XOF</strong>`,
+      },
+      {
+        key: 'status',
+        label: 'Statut',
+        render: (val) => {
+          const display = STATUS_DISPLAY[val] || { label: val, color: '#999' };
+          return `<span style="display:inline-block;background:${display.color};color:#fff;padding:3px 8px;border-radius:4px;font-size:10px;">${display.label}</span>`;
+        },
+      },
+      {
+        key: 'expiryDate',
+        label: 'Expiration',
+        render: (val) => formatDate(val),
+      },
+    ],
+    onRowClick: (row) => window.Insurance.openInsuranceDetail(row.id),
+  }, page);
 
-    let html = records.length === 0 ? '' : records.map(r => {
-      const statusColor = r.status === 'active' ? '#22C55E' : r.status === 'expired' ? '#EF4444' : '#F59E0B';
-      const status = r.status === 'active' ? '✅ Actif' : r.status === 'expired' ? '❌ Expiré' : '⏳ En attente';
-
-      return `<tr onclick="window.Insurance.openInsuranceDetail('${r.id}')" style="cursor:pointer;">
-        <td style="padding:10px 12px;font-size:12px;"><strong>${escHtml(r.professional?.firstName || '')}</strong></td>
-        <td style="padding:10px 12px;font-size:12px;">${escHtml(r.policyNumber || '—')}</td>
-        <td style="padding:10px 12px;text-align:right;"><strong>${(r.coverage || 0).toLocaleString('fr-FR')} XOF</strong></td>
-        <td style="padding:10px 12px;text-align:center;"><span style="display:inline-block;background:${statusColor};color:#fff;padding:3px 8px;border-radius:4px;font-size:10px;">${status}</span></td>
-        <td style="padding:10px 12px;font-size:11px;">${formatDate(r.expiryDate)}</td>
-      </tr>`;
-    }).join('');
-
-    document.getElementById('insurance-tbody').innerHTML = html;
-    document.getElementById('insurance-total').textContent = total;
-  } catch (err) {
-    showToast('Erreur : ' + err.message, true);
+  // Update total display
+  if (document.getElementById('insurance-total')) {
+    document.getElementById('insurance-total').textContent = result.total;
   }
+
+  return result;
 }
 
 export async function openInsuranceDetail(recordId) {

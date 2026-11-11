@@ -142,12 +142,15 @@ export async function initDashboard() {
 // AUTH MANAGEMENT
 // ════════════════════════════════════════════════════════════════
 
+// Import auth config from constants
+import { AUTH_CONFIG } from './config/constants.js';
+
 // Track token renewal to prevent race conditions
 let renewalInProgress = false;
 let renewalRetries = 0;
 const MAX_RENEWAL_RETRIES = 3;
-const TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes
-const RENEWAL_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes (5 min before TTL)
+const TOKEN_TTL_MS = AUTH_CONFIG.TOKEN_TTL_MS;
+const RENEWAL_INTERVAL_MS = AUTH_CONFIG.TOKEN_RENEWAL_INTERVAL_MS;
 
 export async function checkAuth() {
   try {
@@ -171,7 +174,7 @@ export async function checkAuth() {
     }
 
     setState('currentUser', data.user);
-    setState('authToken', data.token);
+    // Auth token is now in httpOnly cookie (cannot be accessed from JS)
 
     // Restore CSRF token from localStorage if available
     const csrfToken = localStorage.getItem('csrfToken');
@@ -205,13 +208,9 @@ export async function renewToken() {
     return;
   }
 
-  // Check TTL before attempting renewal
-  const authToken = getState('authToken');
-  if (!authToken) {
-    console.warn('No auth token found, cannot renew');
-    window.location.href = '/admin/login.html';
-    return;
-  }
+  // Auth token is in httpOnly cookie (browser sends automatically with credentials: 'include')
+  // Check if session is still valid by attempting a request
+  const isSessionValid = getState('currentUser') !== null;
 
   renewalInProgress = true;
 

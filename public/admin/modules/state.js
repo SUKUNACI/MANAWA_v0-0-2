@@ -27,14 +27,6 @@ export const state = {
 
 // Getters
 export function getState(key) {
-  // If not in memory, try sessionStorage (for auth token persistence across page loads)
-  if (!state[key] && key === 'authToken') {
-    const token = sessionStorage.getItem('authToken');
-    if (token) {
-      state.authToken = token;
-      return token;
-    }
-  }
   // For admin user info
   if (!state[key] && key === 'currentUser') {
     const user = sessionStorage.getItem('adminUser');

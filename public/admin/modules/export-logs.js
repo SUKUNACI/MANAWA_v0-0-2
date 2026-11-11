@@ -1,7 +1,7 @@
 // Export Logs Module - Structured export of all audit/activity logs
 import { apiCall } from './api.js';
 import { showToast } from './ui.js';
-import { getCsrfToken } from './helpers.js';
+import { getState } from './state.js';
 
 export async function exportAuditLogs() {
   const dateFrom = document.getElementById('export-logs-from')?.value || '';
@@ -14,7 +14,7 @@ export async function exportAuditLogs() {
   }
 
   try {
-    const csrfToken = getCsrfToken();
+    const csrfToken = getState('csrfToken');
     const res = await fetch(`/admin/export/logs?format=${format}&dateFrom=${dateFrom}&dateTo=${dateTo}`, {
       credentials: 'include',
       headers: {

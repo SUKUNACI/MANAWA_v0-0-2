@@ -1,5 +1,5 @@
 // Badges Module - Gestion des badges artisans
-import { apiCall } from './api.js';
+import { apiCall, loadModuleTable, debounceModuleTableSearch } from './api.js';
 import { setState, getState } from './state.js';
 import { showToast, openModal, closeModal, escHtml, formatDate } from './ui.js';
 
@@ -68,46 +68,45 @@ export async function loadBadgesByType() {
 }
 
 export async function loadProfessionalsWithBadges(page = 1) {
-  try {
-    const search = document.getElementById('badges-search')?.value || '';
-    const badgeFilter = document.getElementById('badges-filter')?.value || '';
-
-    let url = '/admin/badges/professionals?page=' + page + '&limit=50';
-    if (search) url += '&search=' + encodeURIComponent(search);
-    if (badgeFilter) url += '&badge=' + badgeFilter;
-
-    const res = await apiCall(url);
-    const { professionals = [], total = 0, page: currentPage = 1, totalPages = 1 } = res;
-
-    let html = professionals.length === 0 ? '' : professionals.map(p => {
-      const badgeElements = (p.badges || []).map(b => {
-        const badge = BADGE_TYPES[b.badgeKey];
-        return `<span style="display:inline-block;background:${badge?.color || '#999'};color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;margin:2px;font-weight:600;">${badge?.label || b.badgeKey}</span>`;
-      }).join('');
-
-      return `<tr onclick="window.Badges.openProfessionalBadges('${p.id}')" style="cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.08);" onmouseover="this.style.background='rgba(255,255,255,.04)'" onmouseout="this.style.background='transparent'">
-        <td style="padding:10px 12px;font-size:12px;"><strong>${escHtml(p.firstName + ' ' + p.lastName)}</strong><br><span style="color:var(--muted);font-size:11px;">${escHtml(p.email)}</span></td>
-        <td style="padding:10px 12px;font-size:11px;text-align:center;">${p.badges?.length || 0}</td>
-        <td style="padding:10px 12px;font-size:11px;">${badgeElements || '—'}</td>
-        <td style="padding:10px 12px;font-size:12px;text-align:center;">
-          <button class="btn btn-view" onclick="event.stopPropagation(); window.Badges.forceRecalculateBadges('${p.id}')" style="padding:4px 8px;font-size:10px;">🔄 Recalculer</button>
-        </td>
-      </tr>`;
-    }).join('');
-
-    document.getElementById('badges-pros-tbody').innerHTML = html;
-    document.getElementById('badges-pros-empty').style.display = professionals.length === 0 ? 'block' : 'none';
-
-    let paginationHtml = '';
-    if (totalPages > 1) {
-      if (currentPage > 1) paginationHtml += `<button class="btn btn-secondary" onclick="window.Badges.loadProfessionalsWithBadges(1)">⏮️ Première</button><button class="btn btn-secondary" onclick="window.Badges.loadProfessionalsWithBadges(${currentPage - 1})">◀️ Précédente</button>`;
-      paginationHtml += `<span style="align-self:center;font-size:12px;color:var(--muted);">Page ${currentPage} / ${totalPages}</span>`;
-      if (currentPage < totalPages) paginationHtml += `<button class="btn btn-secondary" onclick="window.Badges.loadProfessionalsWithBadges(${currentPage + 1})">Suivante ▶️</button><button class="btn btn-secondary" onclick="window.Badges.loadProfessionalsWithBadges(${totalPages})">Dernière ⏭️</button>`;
-    }
-    document.getElementById('badges-pros-pagination').innerHTML = paginationHtml;
-  } catch (err) {
-    showToast('Erreur : ' + err.message, true);
-  }
+  return loadModuleTable({
+    endpoint: '/admin/badges/professionals?page={page}&limit={limit}',
+    selector: {
+      tbody: 'badges-pros-tbody',
+      empty: 'badges-pros-empty',
+      pagination: 'badges-pros-pagination',
+    },
+    columns: [
+      {
+        key: 'name',
+        label: 'Professionnel',
+        render: (val, row) => {
+          const name = row.firstName + ' ' + row.lastName;
+          return `<strong>${escHtml(name)}</strong><br><span style="color:var(--muted);font-size:11px;">${escHtml(row.email)}</span>`;
+        },
+      },
+      {
+        key: 'badges',
+        label: 'Nombre',
+        render: (val) => val?.length || 0,
+      },
+      {
+        key: 'badges',
+        label: 'Badges',
+        render: (val) => {
+          const badgeElements = (val || [])
+            .map((b) => {
+              const badge = BADGE_TYPES[b.badgeKey];
+              return `<span style="display:inline-block;background:${badge?.color || '#999'};color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;margin:2px;font-weight:600;">${badge?.label || b.badgeKey}</span>`;
+            })
+            .join('');
+          return badgeElements || '—';
+        },
+      },
+    ],
+    onRowClick: (row) => window.Badges.openProfessionalBadges(row.id),
+    searchInput: 'badges-search',
+    filters: [{ key: 'badge', input: 'badges-filter' }],
+  }, page);
 }
 
 export async function openProfessionalBadges(professionalId) {
@@ -197,8 +196,49 @@ export async function bulkRecalculateAllBadges() {
 }
 
 export async function debounceLoadProfessionals() {
-  clearTimeout(window._badgesSearchTimer);
-  window._badgesSearchTimer = setTimeout(() => loadProfessionalsWithBadges(1), 300);
+  debounceModuleTableSearch(
+    {
+      endpoint: '/admin/badges/professionals?page={page}&limit={limit}',
+      selector: {
+        tbody: 'badges-pros-tbody',
+        empty: 'badges-pros-empty',
+        pagination: 'badges-pros-pagination',
+      },
+      columns: [
+        {
+          key: 'name',
+          label: 'Professionnel',
+          render: (val, row) => {
+            const name = row.firstName + ' ' + row.lastName;
+            return `<strong>${escHtml(name)}</strong><br><span style="color:var(--muted);font-size:11px;">${escHtml(row.email)}</span>`;
+          },
+        },
+        {
+          key: 'badges',
+          label: 'Nombre',
+          render: (val) => val?.length || 0,
+        },
+        {
+          key: 'badges',
+          label: 'Badges',
+          render: (val) => {
+            const badgeElements = (val || [])
+              .map((b) => {
+                const badge = BADGE_TYPES[b.badgeKey];
+                return `<span style="display:inline-block;background:${badge?.color || '#999'};color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;margin:2px;font-weight:600;">${badge?.label || b.badgeKey}</span>`;
+              })
+              .join('');
+            return badgeElements || '—';
+          },
+        },
+      ],
+      onRowClick: (row) => window.Badges.openProfessionalBadges(row.id),
+      searchInput: 'badges-search',
+      filters: [{ key: 'badge', input: 'badges-filter' }],
+    },
+    'badges',
+    300
+  );
 }
 
 export const Badges = {

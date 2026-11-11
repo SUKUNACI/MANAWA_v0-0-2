@@ -1,30 +1,42 @@
 // API Keys Module - Génération, révocation, gestion tokens API
-import { apiCall } from './api.js';
+import { apiCall, loadModuleTable, debounceModuleTableSearch } from './api.js';
 import { showToast, openModal, closeModal, escHtml, formatDate } from './ui.js';
 
-export async function loadAPIKeys() {
-  try {
-    const res = await apiCall('/admin/api/keys');
-    const { keys = [] } = res;
-
-    let html = keys.length === 0 ? '' : keys.map(k => {
-      const maskedKey = k.key.substring(0, 10) + '...' + k.key.substring(k.key.length - 5);
-      const activeColor = k.active ? '#22C55E' : '#EF4444';
-      const status = k.active ? '✅' : '❌';
-
-      return `<tr onclick="window.APIKeys.openKeyDetail('${k.id}')" style="cursor:pointer;">
-        <td style="padding:10px 12px;font-size:11px;font-family:monospace;">${maskedKey}</td>
-        <td style="padding:10px 12px;font-size:11px;">${escHtml(k.name || 'Sans nom')}</td>
-        <td style="padding:10px 12px;font-size:11px;"><strong>${k.usageCount || 0}</strong> appels</td>
-        <td style="padding:10px 12px;text-align:center;"><span style="color:${activeColor};font-weight:600;">${status}</span></td>
-        <td style="padding:10px 12px;font-size:10px;">${formatDate(k.createdAt)}</td>
-      </tr>`;
-    }).join('');
-
-    document.getElementById('api-keys-tbody').innerHTML = html;
-  } catch (err) {
-    showToast('Erreur : ' + err.message, true);
-  }
+export async function loadAPIKeys(page = 1) {
+  return loadModuleTable({
+    endpoint: '/admin/api/keys?page={page}&limit={limit}',
+    selector: {
+      tbody: 'api-keys-tbody',
+      pagination: 'api-keys-pagination',
+    },
+    columns: [
+      {
+        key: 'key',
+        label: 'Clé',
+        render: (val) => {
+          const masked = val.substring(0, 10) + '...' + val.substring(val.length - 5);
+          return `<span style="font-family:monospace;">${escHtml(masked)}</span>`;
+        },
+      },
+      { key: 'name', label: 'Nom', render: (val) => escHtml(val || 'Sans nom') },
+      {
+        key: 'usageCount',
+        label: 'Utilisation',
+        render: (val) => `<strong>${val || 0}</strong> appels`,
+      },
+      {
+        key: 'active',
+        label: 'Statut',
+        render: (val) => {
+          const color = val ? '#22C55E' : '#EF4444';
+          const status = val ? '✅' : '❌';
+          return `<span style="color:${color};font-weight:600;">${status}</span>`;
+        },
+      },
+      { key: 'createdAt', label: 'Créée', render: (val) => formatDate(val) },
+    ],
+    onRowClick: (row) => window.APIKeys.openKeyDetail(row.id),
+  }, page);
 }
 
 export async function openKeyDetail(keyId) {

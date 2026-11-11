@@ -1,45 +1,53 @@
 // Portfolio Module - Réalisations & Portfolio Management
-import { apiCall } from './api.js';
+import { apiCall, loadModuleTable } from './api.js';
 import { setState, getState } from './state.js';
 import { showToast, openModal, closeModal, escHtml, formatDate } from './ui.js';
 
+const STATUS_DISPLAY = {
+  APPROVED: { label: '✅ Approuvé', color: '#22C55E' },
+  PENDING: { label: '⏳ En attente', color: '#F59E0B' },
+  REJECTED: { label: '❌ Rejeté', color: '#EF4444' },
+};
+
 export async function loadPortfolio(page = 1) {
-  try {
-    const status = document.getElementById('portfolio-status')?.value || '';
-    let url = '/api/portfolio-projects?page=' + page + '&limit=50';
-    if (status) url += '&status=' + status;
+  const result = await loadModuleTable({
+    endpoint: '/api/portfolio-projects?page={page}&limit={limit}',
+    selector: {
+      tbody: 'portfolio-tbody',
+      empty: 'portfolio-empty',
+      pagination: 'portfolio-pagination',
+    },
+    columns: [
+      {
+        key: 'title',
+        label: 'Réalisation',
+        render: (val, row) => {
+          const proName = row.professional
+            ? `${row.professional.firstName} ${row.professional.lastName}`
+            : '—';
+          return `<strong>${escHtml(val)}</strong><br><span style="color:var(--muted);font-size:11px;">${escHtml(proName)}</span>`;
+        },
+      },
+      {
+        key: 'description',
+        label: 'Description',
+        render: (val) => escHtml((val || '').substring(0, 50)),
+      },
+      {
+        key: 'status',
+        label: 'Statut',
+        render: (val) => {
+          const display = STATUS_DISPLAY[val] || { label: val, color: '#999' };
+          return `<span style="display:inline-block;background:${display.color};color:#fff;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:600;">${display.label}</span>`;
+        },
+      },
+      { key: 'createdAt', label: 'Date', render: (val) => formatDate(val) },
+    ],
+    filters: [{ key: 'status', input: 'portfolio-status' }],
+  }, page);
 
-    const res = await apiCall(url);
-    const { projects = [], total = 0, page: currentPage = 1, totalPages = 1 } = res;
-
-    let html = projects.length === 0 ? '' : projects.map(p => {
-      const proName = p.professional ? `${p.professional.firstName} ${p.professional.lastName}` : '—';
-      const statusBadge = p.status === 'APPROVED' ? '✅ Approuvé' : p.status === 'PENDING' ? '⏳ En attente' : '❌ Rejeté';
-
-      return `<tr style="border-bottom:1px solid rgba(255,255,255,0.08);">
-        <td style="padding:10px 12px;"><input type="checkbox" class="portfolio-checkbox" value="${p.id}" style="cursor:pointer;"></td>
-        <td style="padding:10px 12px;font-size:12px;"><strong>${escHtml(p.title)}</strong><br><span style="color:var(--muted);font-size:11px;">${escHtml(proName)}</span></td>
-        <td style="padding:10px 12px;font-size:11px;max-width:200px;">${escHtml((p.description || '').substring(0, 50))}</td>
-        <td style="padding:10px 12px;text-align:center;"><span style="display:inline-block;background:${p.status === 'APPROVED' ? '#22C55E' : p.status === 'PENDING' ? '#F59E0B' : '#EF4444'};color:#fff;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:600;">${statusBadge}</span></td>
-        <td style="padding:10px 12px;font-size:11px;">${formatDate(p.createdAt)}</td>
-      </tr>`;
-    }).join('');
-
-    document.getElementById('portfolio-tbody').innerHTML = html;
-    document.getElementById('portfolio-empty').style.display = projects.length === 0 ? 'block' : 'none';
-
-    let paginationHtml = '';
-    if (totalPages > 1) {
-      if (currentPage > 1) paginationHtml += `<button class="btn btn-secondary" onclick="window.Portfolio.loadPortfolio(1)">⏮️ Première</button><button class="btn btn-secondary" onclick="window.Portfolio.loadPortfolio(${currentPage - 1})">◀️ Précédente</button>`;
-      paginationHtml += `<span style="align-self:center;font-size:12px;color:var(--muted);">Page ${currentPage} / ${totalPages}</span>`;
-      if (currentPage < totalPages) paginationHtml += `<button class="btn btn-secondary" onclick="window.Portfolio.loadPortfolio(${currentPage + 1})">Suivante ▶️</button><button class="btn btn-secondary" onclick="window.Portfolio.loadPortfolio(${totalPages})">Dernière ⏭️</button>`;
-    }
-    document.getElementById('portfolio-pagination').innerHTML = paginationHtml;
-
-    updateBulkActions();
-  } catch (err) {
-    showToast('Erreur : ' + err.message, true);
-  }
+  updateBulkActions();
+  return result;
 }
 
 export function updateBulkActions() {

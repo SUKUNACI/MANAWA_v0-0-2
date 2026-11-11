@@ -57,11 +57,7 @@ async function doLogin() {
 
     const sessionData = await sessionRes.json();
 
-    // ✅ CSRF token is now httpOnly cookie only (set by server)
-    // Store admin session token in sessionStorage (cleared on tab close)
-    if (sessionData.token) {
-      sessionStorage.setItem('authToken', sessionData.token);
-    }
+    // ✅ Auth token now in httpOnly cookie (set by server, sent automatically by browser)
     // Store admin info for use in dashboard (use either admin or user key)
     const adminData = sessionData.admin || sessionData.user;
     if (adminData) {
