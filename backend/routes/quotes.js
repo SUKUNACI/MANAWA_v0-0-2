@@ -1,7 +1,9 @@
 const express = require('express');
+const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const prisma = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { handleValidationErrors } = require('../middleware/validateInput');
 const { sendPushNotification } = require('../config/pushNotifications');
 const generateQuotePdf = require('../utils/generateQuotePdf');
 const { generateQuotePdfBuffer } = require('../utils/generateQuotePdf');
@@ -18,7 +20,16 @@ const createQuoteLimiter = rateLimit({
 });
 
 // POST /api/quotes — Créer un devis (simple ou détaillé)
-router.post('/', requireAuth, requireRole('PROFESSIONAL'), createQuoteLimiter, async (req, res, next) => {
+router.post('/',
+  requireAuth,
+  requireRole('PROFESSIONAL'),
+  createQuoteLimiter,
+  body('projectId').notEmpty().trim(),
+  body('description').notEmpty().trim().isLength({ max: 5000 }),
+  body('amount').optional().isNumeric(),
+  body('mode').optional().isIn(['SIMPLE', 'DETAILED']),
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
     const { projectId, amount, description, mode, items, validityDays } = req.body;
 

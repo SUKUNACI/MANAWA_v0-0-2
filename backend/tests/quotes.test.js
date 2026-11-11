@@ -31,7 +31,7 @@ const app = express();
 app.use(express.json());
 app.use('/api/quotes', quoteRoutes);
 app.use((err, req, res, next) => {
-  console.error('[QUOTE TEST ERROR]', err.message);
+  // ERROR: '[QUOTE TEST ERROR]', err.message);
   res.status(500).json({ error: err.message });
 });
 
