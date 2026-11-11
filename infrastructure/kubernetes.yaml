@@ -1,0 +1,510 @@
+---
+# Kubernetes Deployment Configuration for MANAWA Backend
+# Includes: Deployment, Service, Ingress, HPA (Horizontal Pod Autoscaler)
+# Resource Limits, Health Probes, and Network Policies
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: manawa
+  labels:
+    name: manawa
+
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: manawa-config
+  namespace: manawa
+data:
+  NODE_ENV: "production"
+  WORKERS: "2"
+  ADMIN_LOG_RETENTION_DAYS: "90"
+
+---
+# Secret for sensitive data (should be created separately via kubectl)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: manawa-secrets
+  namespace: manawa
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql://user:password@postgres:5432/manawa"
+  JWT_SECRET: "your-super-secret-key-min-32-chars"
+  REDIS_URL: "redis://redis:6379/0"
+  SENTRY_DSN: "https://key@sentry.io/project-id"
+  MAILJET_API_KEY: "your-api-key"
+  MAILJET_SECRET_KEY: "your-secret-key"
+
+---
+# Service Account for RBAC
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: manawa-sa
+  namespace: manawa
+
+---
+# ClusterRole for pod monitoring
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manawa-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list"]
+
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: manawa-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: manawa-role
+subjects:
+  - kind: ServiceAccount
+    name: manawa-sa
+    namespace: manawa
+
+---
+# Persistent Volume Claim for logs
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: manawa-logs-pvc
+  namespace: manawa
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# Persistent Volume Claim for uploads
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: manawa-uploads-pvc
+  namespace: manawa
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+# Deployment with multiple replicas and auto-scaling
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: manawa-backend
+  namespace: manawa
+  labels:
+    app: manawa
+    component: backend
+spec:
+  replicas: 3  # Initial replicas, managed by HPA
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: manawa
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: manawa
+        component: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: manawa-sa
+      affinity:
+        podAntiAffinity:
+          # Spread pods across different nodes for better availability
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - manawa
+                topologyKey: kubernetes.io/hostname
+
+      containers:
+        - name: backend
+          image: manawa/backend:latest  # Replace with your registry
+          imagePullPolicy: IfNotPresent
+
+          # Port configuration
+          ports:
+            - name: http
+              containerPort: 4000
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+
+          # Environment variables from ConfigMap and Secret
+          envFrom:
+            - configMapRef:
+                name: manawa-config
+            - secretRef:
+                name: manawa-secrets
+
+          # Additional environment variables
+          env:
+            - name: INSTANCE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+
+          # Resource limits and requests
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+          # Volume mounts
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+            - name: uploads
+              mountPath: /app/uploads
+
+          # Liveness probe: restart container if it becomes unresponsive
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+
+          # Readiness probe: mark container as ready/not ready
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+
+          # Startup probe: give container time to start up
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30  # 30 * 5 = 150 seconds max startup time
+
+          # Graceful shutdown
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 15"]
+
+      # Init containers for setup tasks
+      initContainers:
+        - name: migrate-db
+          image: manawa/backend:latest
+          command: ["npm", "run", "migrate"]
+          envFrom:
+            - configMapRef:
+                name: manawa-config
+            - secretRef:
+                name: manawa-secrets
+
+      # Volumes
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: manawa-logs-pvc
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: manawa-uploads-pvc
+
+      # Restart policy
+      restartPolicy: Always
+
+      # DNS policy
+      dnsPolicy: ClusterFirst
+
+      # Termination grace period for graceful shutdown
+      terminationGracePeriodSeconds: 30
+
+---
+# Service for load balancing
+apiVersion: v1
+kind: Service
+metadata:
+  name: manawa-backend
+  namespace: manawa
+  labels:
+    app: manawa
+    component: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: manawa
+    component: backend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP
+  sessionAffinity: ClientIP  # Sticky sessions based on client IP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800  # 3 hours
+
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: manawa-backend-hpa
+  namespace: manawa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: manawa-backend
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    # CPU utilization based scaling
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    # Memory utilization based scaling
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 30
+        - type: Pods
+          value: 2
+          periodSeconds: 30
+      selectPolicy: Max
+
+---
+# Ingress for external access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: manawa-ingress
+  namespace: manawa
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+    # WebSocket support
+    nginx.ingress.kubernetes.io/websocket-services: "manawa-backend"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  tls:
+    - hosts:
+        - api.manawa.app
+      secretName: manawa-tls
+  rules:
+    - host: api.manawa.app
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: manawa-backend
+                port:
+                  number: 80
+
+---
+# Network Policy for security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: manawa-backend-policy
+  namespace: manawa
+spec:
+  podSelector:
+    matchLabels:
+      app: manawa
+      component: backend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow traffic from Ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 4000
+    # Allow traffic from other pods in same namespace
+    - from:
+        - podSelector:
+            matchLabels:
+              app: manawa
+      ports:
+        - protocol: TCP
+          port: 4000
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow to database
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow to Redis
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow external HTTPS (for APIs, webhooks)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+
+---
+# Pod Disruption Budget (ensure availability during maintenance)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: manawa-backend-pdb
+  namespace: manawa
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: manawa
+      component: backend
+
+---
+# ServiceMonitor for Prometheus (if using Prometheus operator)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: manawa-backend
+  namespace: manawa
+spec:
+  selector:
+    matchLabels:
+      app: manawa
+      component: backend
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+
+---
+# Vertical Pod Autoscaler (optional - for resource optimization)
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: manawa-backend-vpa
+  namespace: manawa
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: manawa-backend
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: "*"
+        minAllowed:
+          cpu: 100m
+          memory: 128Mi
+        maxAllowed:
+          cpu: 1000m
+          memory: 1Gi
