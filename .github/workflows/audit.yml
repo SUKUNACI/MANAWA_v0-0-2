@@ -44,12 +44,14 @@ jobs:
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
 
-      - name: Run npm audit
+      - name: Run npm audit (production only)
         id: audit
         working-directory: backend
         run: |
-          # Run audit and capture output
-          npm audit --json > audit-report.json 2>&1 || true
+          # Audit production dependencies only (--omit=dev)
+          # Exception documentee: deepmerge >=4.2.0 (GHSA-gcqx-w48m-w2h4)
+          # projet abandonne, pas de version corrigee, uniquement dans jest (devDependency)
+          npm audit --omit=dev --json > audit-report.json 2>&1 || true
           cat audit-report.json
         continue-on-error: true
 
@@ -72,22 +74,24 @@ jobs:
 
           # Create summary for GitHub
           {
-            echo "## npm Audit Results"
+            echo "## npm Audit Results (dependances production)"
             echo ""
-            echo "| Severity | Count |"
-            echo "|----------|-------|"
-            echo "| 🔴 Critical | $CRITICAL |"
-            echo "| 🟠 High | $HIGH |"
-            echo "| 🟡 Moderate | $MODERATE |"
-            echo "| 🔵 Low | $LOW |"
+            echo "| Severite | Nombre |"
+            echo "|----------|--------|"
+            echo "| Critical | $CRITICAL |"
+            echo "| High | $HIGH |"
+            echo "| Moderate | $MODERATE |"
+            echo "| Low | $LOW |"
             echo "| **Total** | **$TOTAL** |"
             echo ""
+            echo "> devDependencies exclues. Exception: deepmerge (GHSA-gcqx-w48m-w2h4) sans fix upstream, uniquement dans jest."
+            echo ""
             if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
-              echo "### ⚠️ Action Required"
-              echo "Critical or High severity vulnerabilities detected."
+              echo "### Action Requise"
+              echo "Vulnerabilites critiques ou hautes detectees."
             else
-              echo "### ✅ Status: Safe"
-              echo "No critical or high severity vulnerabilities found."
+              echo "### Statut: Securise"
+              echo "Aucune vulnerabilite critique ou haute trouvee."
             fi
           } >> $GITHUB_STEP_SUMMARY
 
