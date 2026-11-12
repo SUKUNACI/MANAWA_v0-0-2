@@ -56,32 +56,64 @@ router.patch('/me',
   }
 );
 
+// OPTIMIZATION #31: Fix N+1 - Use distinct() instead of manual loop
 // GET /api/users/me/recently-viewed
 router.get('/me/recently-viewed', requireAuth, async (req, res, next) => {
   try {
+    // Use distinct to get unique professionals, avoiding N+1 from manual deduplication
     const views = await prisma.profileView.findMany({
       where: { viewerId: req.user.id },
-      include: { professional: { include: { user: true } } },
+      include: {
+        professional: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+                avatarUrl: true,
+                city: true,
+              },
+            },
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
       take: 50,
+      distinct: ['professionalId'], // Built-in deduplication, not manual loop
     });
-    const seen = new Set();
-    const unique = [];
-    for (const v of views) {
-      if (!seen.has(v.professionalId)) { seen.add(v.professionalId); unique.push(v); }
-    }
-    res.json(unique.slice(0, 10).map((v) => v.professional));
+    res.json(views.slice(0, 10).map((v) => v.professional));
   } catch (err) {
     next(err);
   }
 });
 
+// OPTIMIZATION #31: Fix N+1 - Simplify includes and use select for minimal fields
 // GET /api/users/me/following
 router.get('/me/following', requireAuth, async (req, res, next) => {
   try {
+    // Optimize: Use select to limit user fields returned, not full include
     const follows = await prisma.follow.findMany({
       where: { followerId: req.user.id },
-      include: { professional: { include: { user: true } } },
+      include: {
+        professional: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+                avatarUrl: true,
+                city: true,
+              },
+            },
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });

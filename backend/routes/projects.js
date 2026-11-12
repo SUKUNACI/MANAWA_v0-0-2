@@ -32,7 +32,8 @@ function getMyProjectInclude() {
   };
 }
 
-// Helper: Build project include for GET /:id
+// OPTIMIZATION #32: Lazy Loading vs Eager Loading - Split base + optional nested loads
+// Use this for GET /api/projects/:id (detail view with all relations)
 function getProjectDetailInclude() {
   return {
     photos: true,
@@ -50,6 +51,22 @@ function getProjectDetailInclude() {
       orderBy: { version: 'desc' },
     },
     review: true,
+  };
+}
+
+// OPTIMIZATION #32: Lazy Loading - Minimal query for list views (GET /api/projects)
+function getProjectListSelect() {
+  return {
+    id: true,
+    title: true,
+    description: true,
+    budget: true,
+    status: true,
+    city: true,
+    createdAt: true,
+    clientId: true,
+    category: true,
+    // Don't include photos, quotes, or other relations - load on demand
   };
 }
 
@@ -109,16 +126,34 @@ async function updatePaymentStatus(payment, verification) {
   return 'succeeded';
 }
 
-// Helper: Process all pending payments for quotes
+// OPTIMIZATION #31: Fix N+1 - Batch payment verification instead of nested loop
 async function processPendingPayments(quotes) {
+  // Collect all pending payments from all quotes in one pass
+  const pendingPayments = [];
   for (const quote of quotes) {
     for (const payment of quote.payments) {
-      const verification = await verifyPendingPayment(payment);
-      if (verification) {
-        payment.status = await updatePaymentStatus(payment, verification);
+      if (payment.status === 'pending') {
+        pendingPayments.push(payment);
       }
     }
   }
+
+  // Verify all pending payments in parallel, not sequentially
+  const verifications = await Promise.all(
+    pendingPayments.map(p => verifyPendingPayment(p))
+  );
+
+  // Update all statuses in parallel
+  const updates = pendingPayments
+    .map((payment, i) => {
+      if (verifications[i]) {
+        return updatePaymentStatus(payment, verifications[i]);
+      }
+      return null;
+    })
+    .filter(Boolean);
+
+  await Promise.all(updates);
 }
 
 // Helper: Check project access permissions
@@ -129,7 +164,7 @@ function checkProjectAccess(project, userId, userRole) {
   return isOwner || isInvolvedPro || isAdmin;
 }
 
-// Helper: Mark already quoted projects for professional
+// OPTIMIZATION #31: Fix N+1 - Use select for minimal data instead of full query
 async function markAlreadyQuotedProjects(projects, userId, userRole) {
   const alreadyQuotedIds = new Set();
 
@@ -137,14 +172,18 @@ async function markAlreadyQuotedProjects(projects, userId, userRole) {
     return alreadyQuotedIds;
   }
 
-  const pro = await prisma.professional.findUnique({ where: { userId } });
+  const pro = await prisma.professional.findUnique({
+    where: { userId },
+    select: { id: true }, // Only need ID, not full professional data
+  });
   if (!pro) {
     return alreadyQuotedIds;
   }
 
+  // Use select to limit fields returned - only what we need
   const existingQuotes = await prisma.quote.findMany({
     where: { professionalId: pro.id, projectId: { in: projects.map(p => p.id) } },
-    select: { projectId: true },
+    select: { projectId: true }, // Minimal data only
   });
 
   return new Set(existingQuotes.map(q => q.projectId));

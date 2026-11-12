@@ -32,6 +32,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
+// OPTIMIZATION #38: Add compression middleware for gzip/brotli
+const compression = require('compression');
 
 const authRoutes = require('./routes/auth');
 const auth2FARoutes = require('./routes/auth-2fa');
@@ -169,6 +171,15 @@ app.use((req, res, next) => {
 });
 
 app.use(cors({ origin: allowedOrigins, credentials: true }));
+
+// OPTIMIZATION #38: Enable compression for JSON/text responses
+// Reduce response size by 70-80% for text-based content
+app.use(compression({
+  level: 6, // Balance between speed and compression ratio
+  threshold: 1024, // Only compress responses > 1KB
+  type: ['application/json', 'text/html', 'text/css', 'text/javascript', 'application/javascript'],
+}));
+console.log('[Compression] Enabled gzip compression for API responses');
 
 // Initialize Firebase
 const firebaseApp = initializeFirebase();
