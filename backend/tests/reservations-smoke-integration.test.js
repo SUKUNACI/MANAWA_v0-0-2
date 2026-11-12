@@ -470,7 +470,7 @@ describe('🔥 SMOKE TEST: Reservations Module', () => {
 
       if (issues.length > 0) {
         // DEBUG: `   ⚠️  Issues found:`);
-        issues.forEach(issue => // DEBUG: `      - ${issue}`));
+        issues.forEach(() => {});
       } else {
         // DEBUG: '   ✅ PASS: All required fields present');
       }
