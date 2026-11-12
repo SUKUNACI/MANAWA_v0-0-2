@@ -4,6 +4,8 @@
  * Q64 Implementation
  */
 
+const paginationConfig = require('../config/pagination');
+
 /**
  * Validate and parse sort parameters
  * @param {string} sortParam - Comma-separated column names (e.g., "name,createdAt")
