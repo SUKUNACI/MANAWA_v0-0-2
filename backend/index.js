@@ -92,6 +92,7 @@ const adminDataRetentionRoutes = require('./routes/admin-data-retention');
 const adminGdprRoutes = require('./routes/admin-gdpr');
 const adminAnonymizationRoutes = require('./routes/admin-anonymization');
 const adminDataInventoryRoutes = require('./routes/admin-data-inventory');
+const i18nMiddleware = require('./middleware/i18n');
 
 // Firebase initialization
 const { initializeFirebase, getMessaging } = require('./config/firebase-admin');
@@ -282,6 +283,9 @@ app.use('/docs', docsRoutes);
 // IMPORTANT: API Versioning Support
 // Apply versioning middleware to all responses
 app.use(versioningHeadersMiddleware);
+
+// Q101/Q102: i18n — injecte req.locale et req.t() sur chaque requête
+app.use(i18nMiddleware);
 
 // Redirect middleware: /api/* → /api/v1/* (for backwards compatibility)
 // This must come before individual route handlers but after /api is established
