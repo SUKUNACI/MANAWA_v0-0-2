@@ -68,6 +68,12 @@ jobs:
           DATABASE_URL: postgresql://manawa:manawa_test@localhost:5432/manawa_test
         run: npx prisma generate
 
+      - name: Push database schema (CI ephemeral DB)
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          DATABASE_URL: postgresql://manawa:manawa_test@localhost:5432/manawa_test
+        run: npx prisma db push --accept-data-loss
+
       - name: Run tests with coverage
         working-directory: ${{ env.WORKING_DIR }}
         env:
@@ -136,7 +142,7 @@ jobs:
             --rule '{"no-eval":"error","no-implied-eval":"error","no-new-func":"error"}' \
             --ignore-pattern 'node_modules/**' \
             --ignore-pattern 'coverage/**' \
-            --max-warnings 0 || true
+            --max-warnings 0
 
   # ─── Q114: Performance regression testing ────────────────────────────────────
   performance:
@@ -190,6 +196,12 @@ jobs:
         env:
           DATABASE_URL: postgresql://manawa:manawa_test@localhost:5432/manawa_test
         run: npx prisma generate
+
+      - name: Push database schema (CI ephemeral DB)
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          DATABASE_URL: postgresql://manawa:manawa_test@localhost:5432/manawa_test
+        run: npx prisma db push --accept-data-loss
 
       - name: Start server
         working-directory: ${{ env.WORKING_DIR }}
