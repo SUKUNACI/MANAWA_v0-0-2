@@ -16,15 +16,9 @@ const persistConfig = {
   timeout: 12000,
 };
 
-const persistedAuthReducer = persistReducer(
-  { ...persistConfig, key: 'auth' },
-  authReducer
-);
+const persistedAuthReducer = persistReducer({ ...persistConfig, key: 'auth' }, authReducer);
 
-const persistedUserReducer = persistReducer(
-  { ...persistConfig, key: 'user' },
-  userReducer
-);
+const persistedUserReducer = persistReducer({ ...persistConfig, key: 'user' }, userReducer);
 
 export const store = configureStore({
   reducer: {

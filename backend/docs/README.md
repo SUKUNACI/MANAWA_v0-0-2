@@ -4,13 +4,21 @@ Complete API documentation for MANAWA - Platform de mise en relation particulier
 
 ## Quick Start
 
+### API Versioning
+
+Starting with this release, all endpoints are versioned. The current version is **v1**.
+
+- **Current API Version**: `v1` (stable)
+- **API Base URL**: `http://localhost:4000/api/v1/v1`
+- **Old Base URL**: `http://localhost:4000/api` (deprecated - redirects to v1)
+
 ### Accessing Documentation
 
-- **Interactive Swagger UI**: http://localhost:3000/docs
-- **OpenAPI JSON**: http://localhost:3000/docs/swagger.json
-- **OpenAPI YAML**: http://localhost:3000/docs/openapi.yaml
-- **Documentation Health**: http://localhost:3000/docs/health
-- **API Statistics**: http://localhost:3000/docs/stats
+- **Interactive Swagger UI**: http://localhost:4000/docs
+- **OpenAPI JSON**: http://localhost:4000/docs/swagger.json
+- **OpenAPI YAML**: http://localhost:4000/docs/openapi.yaml
+- **Documentation Health**: http://localhost:4000/docs/health
+- **API Statistics**: http://localhost:4000/docs/stats
 
 ### Installation
 
@@ -90,7 +98,7 @@ Authorization: Bearer <jwt_token>
 
 Example:
 ```bash
-curl -X POST http://localhost:3000/api/auth/login \
+curl -X POST http://localhost:4000/api/v1/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"Password123!"}'
 ```
@@ -118,7 +126,7 @@ All errors follow a consistent format:
   "error": "Error message",
   "status": 400,
   "timestamp": "2024-01-15T10:30:00Z",
-  "path": "/api/projects"
+  "path": "/api/v1/v1/projects"
 }
 ```
 
@@ -281,7 +289,7 @@ docs/
 
 ```bash
 # Register
-POST /api/auth/register
+POST /api/v1/v1/auth/register
 {
   "email": "user@example.com",
   "password": "SecurePass123!",
@@ -298,7 +306,7 @@ POST /api/auth/register
 }
 
 # Login
-POST /api/auth/login
+POST /api/v1/v1/auth/login
 {
   "email": "user@example.com",
   "password": "SecurePass123!"
@@ -309,7 +317,7 @@ POST /api/auth/login
 
 ```bash
 # Create project
-POST /api/projects
+POST /api/v1/v1/projects
 Authorization: Bearer <token>
 {
   "title": "Rénovation salle de bain",
@@ -320,11 +328,11 @@ Authorization: Bearer <token>
 }
 
 # Get project quotes
-GET /api/projects/{projectId}
+GET /api/v1/v1/projects/{projectId}
 Authorization: Bearer <token>
 
 # Accept quote
-POST /api/quotes/{quoteId}/accept
+POST /api/v1/quotes/{quoteId}/accept
 Authorization: Bearer <token>
 {
   "scheduledDate": "2024-02-01T14:00:00Z"
@@ -335,7 +343,7 @@ Authorization: Bearer <token>
 
 ```bash
 # Create payment
-POST /api/payments
+POST /api/v1/payments
 Authorization: Bearer <token>
 {
   "quoteId": "uuid",
@@ -356,7 +364,7 @@ Authorization: Bearer <token>
 
 ```bash
 # Create review
-POST /api/reviews
+POST /api/v1/reviews
 Authorization: Bearer <token>
 {
   "projectId": "uuid",
@@ -386,7 +394,7 @@ Authorization: Bearer <token>
 const token = 'eyJhbGciOi...';
 
 // Get projects
-const response = await fetch('http://localhost:3000/api/projects/mine', {
+const response = await fetch('http://localhost:4000/api/v1/v1/projects/mine', {
   headers: {
     'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json'
@@ -407,7 +415,7 @@ headers = {
 }
 
 response = requests.get(
-    'http://localhost:3000/api/projects/mine',
+    'http://localhost:4000/api/v1/v1/projects/mine',
     headers=headers
 )
 
@@ -417,7 +425,7 @@ projects = response.json()
 ### cURL
 
 ```bash
-curl -X GET http://localhost:3000/api/projects/mine \
+curl -X GET http://localhost:4000/api/v1/v1/projects/mine \
   -H "Authorization: Bearer eyJhbGciOi..." \
   -H "Content-Type: application/json"
 ```
@@ -426,7 +434,7 @@ curl -X GET http://localhost:3000/api/projects/mine \
 
 Use Swagger UI to test endpoints directly:
 
-1. Open http://localhost:3000/docs
+1. Open http://localhost:4000/docs
 2. Click "Authorize" button
 3. Enter your Bearer token
 4. Click on endpoint to expand
@@ -437,8 +445,8 @@ Use Swagger UI to test endpoints directly:
 
 For API support and documentation:
 - Email: support@manawa.app
-- Documentation: http://localhost:3000/docs
-- Specification: http://localhost:3000/docs/openapi.yaml
+- Documentation: http://localhost:4000/docs
+- Specification: http://localhost:4000/docs/openapi.yaml
 
 ## Versioning
 

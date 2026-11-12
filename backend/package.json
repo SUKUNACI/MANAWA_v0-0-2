@@ -1,6 +1,6 @@
 {
   "name": "manawa-backend",
-  "version": "1.0.1",
+  "version": "1.0.2-v1",
   "description": "API backend pour MANAWA - mise en relation particuliers/professionnels du bâtiment",
   "main": "index.js",
   "scripts": {

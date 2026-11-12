@@ -4,11 +4,7 @@ import { View, Text, StyleSheet, Image, ActivityIndicator } from 'react-native';
 export default function SplashScreen() {
   return (
     <View style={styles.container}>
-      <Image
-        source={require('@assets/icon.png')}
-        style={styles.logo}
-        resizeMode="contain"
-      />
+      <Image source={require('@assets/icon.png')} style={styles.logo} resizeMode="contain" />
       <Text style={styles.title}>MANAWA</Text>
       <Text style={styles.subtitle}>Rental Marketplace</Text>
       <ActivityIndicator size="large" color="#0066cc" style={styles.loader} />
