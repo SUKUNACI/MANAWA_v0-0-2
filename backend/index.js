@@ -88,6 +88,10 @@ const adminCostsRoutes = require('./routes/admin-costs');
 const adminSlaRoutes = require('./routes/admin-sla');
 const adminAlertsRoutes = require('./routes/admin-alerts');
 const adminOncallRoutes = require('./routes/admin-oncall');
+const adminDataRetentionRoutes = require('./routes/admin-data-retention');
+const adminGdprRoutes = require('./routes/admin-gdpr');
+const adminAnonymizationRoutes = require('./routes/admin-anonymization');
+const adminDataInventoryRoutes = require('./routes/admin-data-inventory');
 
 // Firebase initialization
 const { initializeFirebase, getMessaging } = require('./config/firebase-admin');
@@ -348,6 +352,14 @@ apiV1Router.use('/admin/sla', injectAdminCookie, adminSlaRoutes);
 apiV1Router.use('/admin/alerts', injectAdminCookie, adminAlertsRoutes);
 // Q90: On-call rotation
 apiV1Router.use('/admin/oncall', injectAdminCookie, adminOncallRoutes);
+// Q91/Q92: Data retention & archival
+apiV1Router.use('/admin/data-retention', injectAdminCookie, adminDataRetentionRoutes);
+// Q93/Q94: GDPR deletion & soft delete management
+apiV1Router.use('/admin/gdpr', injectAdminCookie, adminGdprRoutes);
+// Q95/Q96: Anonymization & privacy aggregation
+apiV1Router.use('/admin/anonymization', injectAdminCookie, adminAnonymizationRoutes);
+// Q97/Q98: Personal data inventory & classification
+apiV1Router.use('/admin/data-inventory', injectAdminCookie, adminDataInventoryRoutes);
 apiV1Router.use('/role-permissions', injectAdminCookie, rolePermissionsRoutes);
 apiV1Router.use('/support', supportRoutes);
 apiV1Router.use('/portfolio-projects', portfolioProjectsRoutes);

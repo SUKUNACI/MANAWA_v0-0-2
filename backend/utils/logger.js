@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
+// Q99/Q100: mask PII before writing to log files
+const { maskObject, maskString } = require('../config/pii-detector');
+
 const logsDir = path.join(__dirname, '../../logs');
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
@@ -13,8 +16,8 @@ function formatLog(level, message, data = {}) {
   return JSON.stringify({
     timestamp: new Date().toISOString(),
     level,
-    message,
-    ...data,
+    message: maskString(message),
+    ...maskObject(data),
   });
 }
 
