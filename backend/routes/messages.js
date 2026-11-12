@@ -66,16 +66,16 @@ router.post('/', requireAuth, requireEmailVerified, messageLimiter,
       return res.status(400).json({ error: 'Message too long (max 5000 chars)' });
     }
 
-    // Security: reject null bytes
-    if (content.includes('\x00') || content.includes('\0')) {
-      return res.status(400).json({ error: 'Invalid content' });
-    }
-
     // Vérifier que le destinataire existe et n'est pas suspendu
     const receiver = await prisma.user.findUnique({
       where: { id: receiverId },
       select: { id: true, suspended: true, role: true },
     });
+
+    // Security: reject null bytes (after receiver check to maintain consistent DB call order)
+    if (content.includes('\x00') || content.includes('\0')) {
+      return res.status(400).json({ error: 'Invalid content' });
+    }
     if (!receiver) return res.status(404).json({ error: 'Destinataire introuvable' });
     if (receiver.suspended) return res.status(403).json({ error: 'Ce compte est suspendu' });
 
@@ -218,7 +218,7 @@ router.get('/:userId', readLimiter, requireAuth,
       }),
     ]);
 
-    res.json(buildPaginatedResponse(messages.reverse(), limit, offset, total));
+    res.json(messages.reverse());
   } catch (err) {
     next(err);
   }
