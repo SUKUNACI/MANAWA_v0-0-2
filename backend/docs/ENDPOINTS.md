@@ -2,6 +2,15 @@
 
 Complete listing of all 337+ API endpoints organized by module.
 
+## API Versioning
+
+All endpoints are now prefixed with `/api/v1` for versioning support.
+
+- **Current Version**: `v1` (stable)
+- **Previous Version**: `v0` (deprecated - redirects to v1 with 301 Permanent Redirect)
+
+All examples below use the new v1 endpoint structure.
+
 ## Quick Reference
 
 | Module | File | Endpoints |
@@ -43,7 +52,7 @@ Complete listing of all 337+ API endpoints organized by module.
 
 ## Authentication Endpoints (10)
 
-### POST /api/auth/register
+### POST /api/v1/auth/register
 Register new user account
 - **Auth**: None
 - **Rate Limit**: 10 req/15min

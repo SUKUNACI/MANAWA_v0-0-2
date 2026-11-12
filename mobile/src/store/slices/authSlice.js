@@ -1,29 +1,23 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import * as authService from '@services/authService';
 
-export const login = createAsyncThunk(
-  'auth/login',
-  async (credentials, { rejectWithValue }) => {
-    try {
-      const response = await authService.login(credentials);
-      return response.data;
-    } catch (error) {
-      return rejectWithValue(error.response?.data || { message: 'Login failed' });
-    }
+export const login = createAsyncThunk('auth/login', async (credentials, { rejectWithValue }) => {
+  try {
+    const response = await authService.login(credentials);
+    return response.data;
+  } catch (error) {
+    return rejectWithValue(error.response?.data || { message: 'Login failed' });
   }
-);
+});
 
-export const register = createAsyncThunk(
-  'auth/register',
-  async (userData, { rejectWithValue }) => {
-    try {
-      const response = await authService.register(userData);
-      return response.data;
-    } catch (error) {
-      return rejectWithValue(error.response?.data || { message: 'Registration failed' });
-    }
+export const register = createAsyncThunk('auth/register', async (userData, { rejectWithValue }) => {
+  try {
+    const response = await authService.register(userData);
+    return response.data;
+  } catch (error) {
+    return rejectWithValue(error.response?.data || { message: 'Registration failed' });
   }
-);
+});
 
 export const logout = createAsyncThunk('auth/logout', async () => {
   await authService.logout();
@@ -103,15 +97,14 @@ const authSlice = createSlice({
       });
 
     // Logout
-    builder
-      .addCase(logout.fulfilled, (state) => {
-        state.isLoading = false;
-        state.isAuthenticated = false;
-        state.token = null;
-        state.refreshToken = null;
-        state.user = null;
-        state.error = null;
-      });
+    builder.addCase(logout.fulfilled, (state) => {
+      state.isLoading = false;
+      state.isAuthenticated = false;
+      state.token = null;
+      state.refreshToken = null;
+      state.user = null;
+      state.error = null;
+    });
 
     // Refresh Token
     builder

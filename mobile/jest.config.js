@@ -1,11 +1,7 @@
 module.exports = {
   preset: 'jest-expo',
   testEnvironment: 'node',
-  collectCoverageFrom: [
-    'src/**/*.{js,jsx,ts,tsx}',
-    '!src/**/*.d.ts',
-    '!src/**/index.{js,ts}',
-  ],
+  collectCoverageFrom: ['src/**/*.{js,jsx,ts,tsx}', '!src/**/*.d.ts', '!src/**/index.{js,ts}'],
   coverageThreshold: {
     global: {
       statements: 80,
@@ -25,8 +21,5 @@ module.exports = {
     '^@navigation/(.*)$': '<rootDir>/src/navigation/$1',
     '^@hooks/(.*)$': '<rootDir>/src/hooks/$1',
   },
-  testMatch: [
-    '**/__tests__/**/*.test.{js,jsx,ts,tsx}',
-    '**/?(*.)+(spec|test).{js,jsx,ts,tsx}',
-  ],
+  testMatch: ['**/__tests__/**/*.test.{js,jsx,ts,tsx}', '**/?(*.)+(spec|test).{js,jsx,ts,tsx}'],
 };

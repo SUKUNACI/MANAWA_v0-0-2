@@ -157,8 +157,8 @@ app.use((req, res, next) => {
 });
 
 // Cache-Control: no-store sur les routes API sensibles (corrige ZAP alert)
-// req.originalUrl contient le chemin complet (/api/auth/login), pas req.path (/login)
-const SENSITIVE_API_PATHS = ['/api/auth', '/api/payments', '/api/users', '/api/admin', '/api/verification', '/api/subscriptions'];
+// req.originalUrl contient le chemin complet (/api/v1/auth/login), pas req.path (/login)
+const SENSITIVE_API_PATHS = ['/api/v1/auth', '/api/v1/payments', '/api/v1/users', '/api/v1/admin', '/api/v1/verification', '/api/v1/subscriptions'];
 app.use((req, res, next) => {
   if (SENSITIVE_API_PATHS.some(p => req.originalUrl.startsWith(p))) {
     res.setHeader('Cache-Control', 'no-store');
@@ -204,13 +204,22 @@ const uploadLimiter = rateLimit({
   message: { error: 'Trop de requêtes de téléchargement, réessayez dans une heure' },
 });
 
+// API Versioning middleware
+const { versioningHeadersMiddleware, apiRedirectMiddleware, versionValidationMiddleware } = require('./middleware/versioningMiddleware');
+
 // Serve favicon
 app.use('/favicon.png', express.static(require('path').join(__dirname, '../public/favicon.png')));
 app.use('/uploads', uploadLimiter, express.static(require('path').join(__dirname, '../uploads')));
 app.use('/admin', express.static(require('path').join(__dirname, '../public/admin')));
 
 app.use((req, res, next) => {
-  if (req.originalUrl === '/api/payments/webhooks/geniuspay' || req.originalUrl === '/api/payments/notify' || req.originalUrl === '/api/subscriptions/notify') {
+  // Skip JSON parsing for webhook endpoints (both old and new paths)
+  if (req.originalUrl === '/api/payments/webhooks/geniuspay' ||
+      req.originalUrl === '/api/payments/notify' ||
+      req.originalUrl === '/api/subscriptions/notify' ||
+      req.originalUrl === '/api/v1/payments/webhooks/geniuspay' ||
+      req.originalUrl === '/api/v1/payments/notify' ||
+      req.originalUrl === '/api/v1/subscriptions/notify') {
     return next();
   }
   express.json({ limit: '1mb' })(req, res, next);
@@ -219,16 +228,24 @@ app.use((req, res, next) => {
 // Documentation routes (must be before /api routes)
 app.use('/docs', docsRoutes);
 
-// Routes REST
-app.use('/api/health', healthRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/verification', verificationRoutes);
-app.use('/api/subscriptions', subscriptionRoutes);
-app.use('/api/projects', projectRoutes);
-app.use('/api/professionals', professionalRoutes);
+// IMPORTANT: API Versioning Support
+// Apply versioning middleware to all responses
+app.use(versioningHeadersMiddleware);
+
+// Redirect middleware: /api/* → /api/v1/* (for backwards compatibility)
+// This must come before individual route handlers but after /api is established
+const apiV0Redirect = (req, res, next) => {
+  // Only redirect if the request path starts with /api/ but NOT /api/v1/
+  if (req.path.match(/^\/api\/(?!v[0-9])/) && req.method !== 'OPTIONS') {
+    const targetPath = `/api/v1${req.path.substring(4)}`;
+    const fullUrl = targetPath + (req.url.includes('?') ? '?' + req.url.split('?')[1] : '');
+    return res.redirect(301, fullUrl);
+  }
+  next();
+};
+
 // Injecte le cookie httpOnly adminToken comme Bearer header
-// Appliqué sur /api/quotes ET /api/admin pour permettre l'accès depuis le back-office
+// Appliqué sur /api/v1/quotes ET /api/v1/admin pour permettre l'accès depuis le back-office
 const injectAdminCookie = (req, res, next) => {
   const cookieToken = req.cookies?.adminToken;
   if (cookieToken && !req.headers.authorization) {
@@ -236,36 +253,55 @@ const injectAdminCookie = (req, res, next) => {
   }
   next();
 };
-app.use('/api/quotes', injectAdminCookie, quoteRoutes);
-app.use('/api/messages', messageRoutes);
-app.use('/api/messaging', messageRoutes);
-app.use('/api/companies', companiesRoutes);
-app.use('/api/finances', financesRoutes);
-app.use('/api/bookings', bookingsRoutes);
-app.use('/api/reviews', reviewRoutes);
-app.use('/api/payments', paymentRoutes);
-app.use('/api/payment-stats', paymentRoutes);
-app.use('/api/admin', injectAdminCookie, adminRoutes);
-app.use('/api/admin/badges', injectAdminCookie, badgeAdminRoutes);
-app.use('/api/admin/referrals', injectAdminCookie, referralAdminRoutes);
-app.use('/api/admin/kpis', injectAdminCookie, kpisAdminRoutes);
-app.use('/api/admin/webhooks', injectAdminCookie, webhooksAdminRoutes);
-app.use('/api/admin/queues', injectAdminCookie, queuesAdminRoutes);
-app.use('/api/admin/backups', injectAdminCookie, backupsAdminRoutes);
-app.use('/api/role-permissions', injectAdminCookie, rolePermissionsRoutes);
-app.use('/api/support', supportRoutes);
-app.use('/api/portfolio-projects', portfolioProjectsRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/reports', reportsRoutes);
-app.use('/api/moderation', reportsRoutes);
-app.use('/api/disputes', disputeRoutes);
-app.use('/api/availability', availabilityRoutes);
-app.use('/api/packages', packageRoutes);
-app.use('/api/search', searchRoutes);
-app.use('/api/badges', badgeRoutes);
-app.use('/api/referrals', referralRoutes);
-app.use('/api/analytics', analyticsRoutes);
-app.use('/api/video-calls', videoCallRoutes);
+
+// ============================================================
+// API v1 Routes (New versioned structure)
+// ============================================================
+const apiV1Router = express.Router();
+
+apiV1Router.use('/health', healthRoutes);
+apiV1Router.use('/auth', authRoutes);
+apiV1Router.use('/users', userRoutes);
+apiV1Router.use('/verification', verificationRoutes);
+apiV1Router.use('/subscriptions', subscriptionRoutes);
+apiV1Router.use('/projects', projectRoutes);
+apiV1Router.use('/professionals', professionalRoutes);
+apiV1Router.use('/quotes', injectAdminCookie, quoteRoutes);
+apiV1Router.use('/messages', messageRoutes);
+apiV1Router.use('/messaging', messageRoutes);
+apiV1Router.use('/companies', companiesRoutes);
+apiV1Router.use('/finances', financesRoutes);
+apiV1Router.use('/bookings', bookingsRoutes);
+apiV1Router.use('/reviews', reviewRoutes);
+apiV1Router.use('/payments', paymentRoutes);
+apiV1Router.use('/payment-stats', paymentRoutes);
+apiV1Router.use('/admin', injectAdminCookie, adminRoutes);
+apiV1Router.use('/admin/badges', injectAdminCookie, badgeAdminRoutes);
+apiV1Router.use('/admin/referrals', injectAdminCookie, referralAdminRoutes);
+apiV1Router.use('/admin/kpis', injectAdminCookie, kpisAdminRoutes);
+apiV1Router.use('/admin/webhooks', injectAdminCookie, webhooksAdminRoutes);
+apiV1Router.use('/admin/queues', injectAdminCookie, queuesAdminRoutes);
+apiV1Router.use('/admin/backups', injectAdminCookie, backupsAdminRoutes);
+apiV1Router.use('/role-permissions', injectAdminCookie, rolePermissionsRoutes);
+apiV1Router.use('/support', supportRoutes);
+apiV1Router.use('/portfolio-projects', portfolioProjectsRoutes);
+apiV1Router.use('/notifications', notificationRoutes);
+apiV1Router.use('/reports', reportsRoutes);
+apiV1Router.use('/moderation', reportsRoutes);
+apiV1Router.use('/disputes', disputeRoutes);
+apiV1Router.use('/availability', availabilityRoutes);
+apiV1Router.use('/packages', packageRoutes);
+apiV1Router.use('/search', searchRoutes);
+apiV1Router.use('/badges', badgeRoutes);
+apiV1Router.use('/referrals', referralRoutes);
+apiV1Router.use('/analytics', analyticsRoutes);
+apiV1Router.use('/video-calls', videoCallRoutes);
+
+// Mount versioned API routes
+app.use('/api/v1', apiV1Router);
+
+// Apply redirect middleware AFTER v1 routes to catch old /api/* paths
+app.use(apiV0Redirect);
 
 // Panel d'administration
 const prismaForIPGuard = require('./config/db');
@@ -324,7 +360,13 @@ app.use('/admin', adminIPGuard, adminPanelAuth, express.static(adminPanelDir, {
   }
 }));
 
+// Health check endpoints (available in both old and new paths for backwards compatibility)
 app.get('/api/health', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.redirect(301, '/api/v1/health');
+});
+
+app.get('/api/v1/health', (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json({ status: 'ok' });
 });

@@ -27,20 +27,47 @@ const options = {
         name: 'Proprietary',
         url: 'https://manawa.app/license',
       },
+      'x-api-version': 'v1',
+      'x-api-versions': {
+        current: 'v1',
+        deprecated: ['v0'],
+        deprecation: {
+          v0: {
+            deprecated: true,
+            sunsetDate: '2027-05-10',
+            message: 'v0 is deprecated. Please use v1 instead.',
+          },
+        },
+      },
     },
     servers: [
       {
-        url: 'http://localhost:3000/api',
-        description: 'Development Server',
+        url: 'http://localhost:4000/api/v1',
+        description: 'Development Server (v1)',
         variables: {
           port: {
-            default: '3000',
+            default: '4000',
           },
         },
       },
       {
-        url: 'https://api.manawa.app',
-        description: 'Production Server',
+        url: 'https://api.manawa.app/api/v1',
+        description: 'Production Server (v1)',
+      },
+      {
+        url: 'http://localhost:4000/api',
+        description: 'Development Server (v0 - Deprecated, redirects to v1)',
+        variables: {
+          port: {
+            default: '4000',
+          },
+        },
+        deprecationInfo: 'This endpoint is deprecated. Use /api/v1 instead.',
+      },
+      {
+        url: 'https://api.manawa.app/api',
+        description: 'Production Server (v0 - Deprecated, redirects to v1)',
+        deprecationInfo: 'This endpoint is deprecated. Use /api/v1 instead.',
       },
     ],
     components: {
