@@ -32,8 +32,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
-// OPTIMIZATION #38: Add compression middleware for gzip/brotli
-const compression = require('compression');
+// Q125: Compression brotli + gzip pour mobile (shrink-ray-current remplace compression)
+const shrinkRay = require('shrink-ray-current');
 
 const authRoutes = require('./routes/auth');
 const auth2FARoutes = require('./routes/auth-2fa');
@@ -92,7 +92,9 @@ const adminDataRetentionRoutes = require('./routes/admin-data-retention');
 const adminGdprRoutes = require('./routes/admin-gdpr');
 const adminAnonymizationRoutes = require('./routes/admin-anonymization');
 const adminDataInventoryRoutes = require('./routes/admin-data-inventory');
+const mobileRoutes = require('./routes/mobile');
 const i18nMiddleware = require('./middleware/i18n');
+const { mobileContextMiddleware } = require('./middleware/mobile-context');
 
 // Firebase initialization
 const { initializeFirebase, getMessaging } = require('./config/firebase-admin');
@@ -197,14 +199,10 @@ app.use((req, res, next) => {
 
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 
-// OPTIMIZATION #38: Enable compression for JSON/text responses
-// Reduce response size by 70-80% for text-based content
-app.use(compression({
-  level: 6, // Balance between speed and compression ratio
-  threshold: 1024, // Only compress responses > 1KB
-  type: ['application/json', 'text/html', 'text/css', 'text/javascript', 'application/javascript'],
-}));
-console.log('[Compression] Enabled gzip compression for API responses');
+// Q125: Brotli (prioritaire) + gzip fallback — 70-90% réduction taille réponse
+// shrink-ray-current choisit automatiquement brotli si Accept-Encoding: br est présent
+app.use(shrinkRay({ threshold: 1024, brotli: { quality: 4 } }));
+console.log('[Compression] Brotli + gzip activés (Q125)');
 
 // Q69: Response size limit middleware - check Content-Length < 5MB
 app.use(setResponseLimitHeaders);
@@ -286,6 +284,9 @@ app.use(versioningHeadersMiddleware);
 
 // Q101/Q102: i18n — injecte req.locale et req.t() sur chaque requête
 app.use(i18nMiddleware);
+
+// Q127/Q128: Mobile context — détecte X-Battery-Saver et X-Network-Quality
+app.use(mobileContextMiddleware);
 
 // Redirect middleware: /api/* → /api/v1/* (for backwards compatibility)
 // This must come before individual route handlers but after /api is established
@@ -390,6 +391,8 @@ apiV1Router.use('/analytics', analyticsFunnelsRoutes);
 apiV1Router.use('/analytics', analyticsRetentionRoutes);
 apiV1Router.use('/video-calls', videoCallRoutes);
 apiV1Router.use('/webhooks/geniuspay', webhooksGeniuspayRoutes);
+// Q120-Q124: Mobile-specific endpoints, offline support, sync, conflict resolution, delta sync
+apiV1Router.use('/mobile', mobileRoutes);
 
 // Mount versioned API routes
 app.use('/api/v1', apiV1Router);
