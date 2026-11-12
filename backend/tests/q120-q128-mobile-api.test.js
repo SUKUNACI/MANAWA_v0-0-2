@@ -285,16 +285,25 @@ describe('Q124: Delta sync dans routes/mobile.js', () => {
 describe('Q125: Brotli compression dans index.js', () => {
   const content = fs.readFileSync(path.join(__dirname, '../index.js'), 'utf8');
 
-  it('utilise shrink-ray-current pour brotli + gzip', () => {
-    expect(content).toContain('shrink-ray-current');
+  it('utilise zlib natif Node.js pour brotli (pas de dépendance native)', () => {
+    expect(content).toContain("require('zlib')");
+  });
+
+  it('utilise compression pour gzip', () => {
+    expect(content).toContain("require('compression')");
   });
 
   it('configure un threshold de compression', () => {
     expect(content).toContain('threshold:');
   });
 
-  it('active brotli explicitement', () => {
-    expect(content).toContain('brotli');
+  it('active brotli via zlib.createBrotliCompress', () => {
+    expect(content).toContain('createBrotliCompress');
+  });
+
+  it('active brotli uniquement si Accept-Encoding contient br', () => {
+    expect(content).toContain('accept-encoding');
+    expect(content).toContain("'br'");
   });
 });
 
