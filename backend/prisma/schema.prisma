@@ -69,6 +69,7 @@ model User {
   packageSuspensionLogs PackageSuspensionLog[]
   notificationPreference NotificationPreference?
   locale                String                 @default("fr") // fr, en, es, de
+  onCallSchedules       OnCallSchedule[]
 }
 
 model RefreshToken {
@@ -1153,4 +1154,91 @@ model RetentionSnapshot {
 
   @@unique([date])
   @@index([date])
+}
+
+// Q87: Cost Tracking
+model InfraCost {
+  id          String   @id @default(uuid())
+  service     String   // "render" | "supabase" | "redis" | "cloudinary" | "mailjet" | "twilio" | "meilisearch" | "other"
+  month       String   // "2026-11" — billing month
+  amountEur   Float    // actual billed amount in EUR
+  budgetEur   Float?   // planned budget for comparison
+  unit        String?  // "GB", "emails", "SMS", "req" — for unit cost calc
+  quantity    Float?   // actual usage quantity
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([service, month])
+  @@index([month])
+  @@index([service])
+}
+
+// Q88: SLA Targets
+model SlaTarget {
+  id              String   @id @default(uuid())
+  name            String   @unique  // "api_p95_latency" | "uptime" | "error_rate"
+  category        String   // "latency" | "availability" | "error_rate" | "throughput"
+  targetValue     Float    // e.g. 500 (ms), 99.9 (%), 0.1 (%)
+  unit            String   // "ms" | "%" | "req/s"
+  windowHours     Int      @default(24) // evaluation window
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  breaches        SlaBreach[]
+
+  @@index([category])
+  @@index([enabled])
+}
+
+model SlaBreach {
+  id           String    @id @default(uuid())
+  slaTargetId  String
+  measuredValue Float    // actual value that breached
+  breachedAt   DateTime @default(now())
+  resolvedAt   DateTime?
+  durationMs   Int?      // how long the breach lasted
+  slaTarget    SlaTarget @relation(fields: [slaTargetId], references: [id], onDelete: Cascade)
+
+  @@index([slaTargetId])
+  @@index([breachedAt])
+}
+
+// Q89: Alert Events (history of fired alerts)
+model AlertEvent {
+  id           String    @id @default(uuid())
+  type         String    // "error_rate" | "latency" | "memory" | "cpu" | "payment_failure" | "queue_depth"
+  severity     String    // "INFO" | "WARN" | "CRITICAL"
+  message      String
+  value        Float?    // triggering metric value
+  threshold    Float?    // threshold that was breached
+  status       String    @default("OPEN")   // "OPEN" | "ACKNOWLEDGED" | "RESOLVED" | "SILENCED"
+  acknowledgedBy String?
+  acknowledgedAt DateTime?
+  resolvedAt   DateTime?
+  silencedUntil DateTime?
+  channel      String?   // "slack" | "email" | "pagerduty"
+  notifiedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([type])
+  @@index([severity])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Q90: On-Call Rotation
+model OnCallSchedule {
+  id         String   @id @default(uuid())
+  userId     String
+  startAt    DateTime
+  endAt      DateTime
+  timezone   String   @default("Europe/Paris")
+  level      Int      @default(1)  // 1 = primary, 2 = secondary/escalation
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([startAt])
+  @@index([endAt])
+  @@index([userId])
 }
