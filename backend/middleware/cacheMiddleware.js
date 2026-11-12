@@ -1,40 +1,41 @@
 const redis = require('../config/redis');
 const logger = require('../utils/logger');
+const { CACHE_TTL } = require('../config/performance-optimization');
 
 // Cache configuration by pattern with TTLs
 const CACHE_CONFIG = {
   // User profiles and sessions
-  'user:*': { ttl: 3600, description: 'User profile cache (1h)' },
-  'user:*:settings': { ttl: 3600, description: 'User settings cache (1h)' },
+  'user:*': { ttl: CACHE_TTL.USER_PROFILE, description: 'User profile cache' },
+  'user:*:settings': { ttl: CACHE_TTL.USER_PROFILE, description: 'User settings cache' },
   'session:*': { ttl: 86400, description: 'Session cache (24h)' },
 
   // Professional profiles and portfolios
-  'professional:*': { ttl: 3600, description: 'Professional profile cache (1h)' },
-  'professional:*:portfolio': { ttl: 3600, description: 'Professional portfolio cache (1h)' },
-  'professional:*:reviews': { ttl: 1800, description: 'Professional reviews cache (30min)' },
+  'professional:*': { ttl: CACHE_TTL.PROFESSIONAL_DETAIL, description: 'Professional profile cache' },
+  'professional:*:portfolio': { ttl: CACHE_TTL.PORTFOLIO_PROJECTS, description: 'Professional portfolio cache' },
+  'professional:*:reviews': { ttl: CACHE_TTL.PROFESSIONAL_DETAIL, description: 'Professional reviews cache' },
 
   // Projects and search
-  'projects:search:*': { ttl: 1800, description: 'Project search results cache (30min)' },
-  'projects:city:*': { ttl: 1800, description: 'Projects by city cache (30min)' },
-  'projects:*': { ttl: 1800, description: 'Project details cache (30min)' },
+  'projects:search:*': { ttl: CACHE_TTL.SEARCH_RESULTS, description: 'Project search results cache' },
+  'projects:city:*': { ttl: CACHE_TTL.PROJECTS_LIST, description: 'Projects by city cache' },
+  'projects:*': { ttl: CACHE_TTL.PROJECT_DETAIL, description: 'Project details cache' },
 
   // Admin analytics and KPIs
-  'analytics:*': { ttl: 300, description: 'Analytics cache (5min)' },
-  'kpis:*': { ttl: 300, description: 'KPIs cache (5min)' },
-  'admin:dashboard:*': { ttl: 300, description: 'Admin dashboard cache (5min)' },
-  'admin:stats:*': { ttl: 300, description: 'Admin stats cache (5min)' },
+  'analytics:*': { ttl: CACHE_TTL.ANALYTICS, description: 'Analytics cache' },
+  'kpis:*': { ttl: CACHE_TTL.DASHBOARD_KPI, description: 'KPIs cache' },
+  'admin:dashboard:*': { ttl: CACHE_TTL.DASHBOARD_KPI, description: 'Admin dashboard cache' },
+  'admin:stats:*': { ttl: CACHE_TTL.ADMIN_STATS, description: 'Admin stats cache' },
 
   // Quotes and finances
-  'quotes:*': { ttl: 1800, description: 'Quotes cache (30min)' },
-  'finances:*': { ttl: 600, description: 'Finances cache (10min)' },
+  'quotes:*': { ttl: CACHE_TTL.PROFESSIONAL_DETAIL, description: 'Quotes cache' },
+  'finances:*': { ttl: CACHE_TTL.ANALYTICS, description: 'Finances cache' },
 
   // Packages and availability
-  'packages:*': { ttl: 3600, description: 'Packages cache (1h)' },
-  'availability:*': { ttl: 3600, description: 'Availability cache (1h)' },
+  'packages:*': { ttl: CACHE_TTL.PACKAGES, description: 'Packages cache' },
+  'availability:*': { ttl: CACHE_TTL.AVAILABILITY, description: 'Availability cache' },
 
   // Badges and referrals
-  'badges:*': { ttl: 3600, description: 'Badges cache (1h)' },
-  'referrals:*': { ttl: 1800, description: 'Referrals cache (30min)' },
+  'badges:*': { ttl: CACHE_TTL.USER_PROFILE, description: 'Badges cache' },
+  'referrals:*': { ttl: CACHE_TTL.PROFESSIONAL_DETAIL, description: 'Referrals cache' },
 };
 
 // Generate cache key from request
@@ -75,7 +76,7 @@ function getTTLForPath(path) {
   return 1800; // Default 30 minutes
 }
 
-// Middleware: Cache GET responses
+// Middleware: Cache GET responses (Actively enabled)
 function cacheGet(options = {}) {
   return async (req, res, next) => {
     // Only cache GET requests
@@ -85,11 +86,19 @@ function cacheGet(options = {}) {
 
     // Skip cache for specific query params
     if (req.query.skipCache === 'true' || req.query.noCache === 'true') {
+      logger.debug('[Cache] Skipping cache per query param', { path: req.path });
       return next();
     }
 
     // Skip cache if admin explicitly disabled it
     if (options.skipCache === true) {
+      logger.debug('[Cache] Skipping cache per middleware option', { path: req.path });
+      return next();
+    }
+
+    // Don't cache authenticated user-specific endpoints by default
+    // (can be overridden with options.cachePerUser = true)
+    if (req.user && !options.cachePerUser) {
       return next();
     }
 
@@ -100,22 +109,23 @@ function cacheGet(options = {}) {
       // Check cache
       const cached = await redis.get(cacheKey);
       if (cached) {
-        logger.debug('[Cache] Cache HIT', { path: req.path, key: cacheKey });
+        logger.info('[Cache] HIT', { path: req.path, ttl });
         res.set('X-Cache', 'HIT');
-        return res.json(cached);
+        res.set('X-Cache-Key', cacheKey);
+        return res.json(JSON.parse(cached));
       }
 
-      logger.debug('[Cache] Cache MISS', { path: req.path, key: cacheKey, ttl });
-
-      // Intercept response
+      // Intercept response to cache it
       const originalJson = res.json.bind(res);
       res.json = function (data) {
         // Cache successful responses only (2xx status)
         if (res.statusCode >= 200 && res.statusCode < 300 && data && typeof data === 'object') {
-          redis.set(cacheKey, data, ttl).catch(err => {
+          redis.set(cacheKey, JSON.stringify(data), 'EX', ttl).catch(err => {
             logger.warn('[Cache] Failed to set cache', { key: cacheKey, error: err.message });
           });
           res.set('X-Cache', 'MISS');
+          res.set('X-Cache-Key', cacheKey);
+          logger.info('[Cache] SET', { path: req.path, ttl });
         }
 
         return originalJson(data);
@@ -123,13 +133,13 @@ function cacheGet(options = {}) {
 
       next();
     } catch (err) {
-      logger.warn('[Cache] Cache middleware error', { error: err.message, path: req.path });
+      logger.warn('[Cache] Middleware error', { error: err.message, path: req.path });
       next(); // Continue without caching on error
     }
   };
 }
 
-// Middleware: Invalidate cache on mutations (POST, PATCH, DELETE)
+// Middleware: Invalidate cache on mutations (POST, PATCH, DELETE) - ACTIVELY ENABLED
 function cacheInvalidate(patterns = []) {
   return async (req, res, next) => {
     // Only invalidate on mutation methods
@@ -147,11 +157,17 @@ function cacheInvalidate(patterns = []) {
           // Invalidate specific patterns for this resource
           const resourcePatterns = generateInvalidationPatterns(req.path, patterns);
 
+          let totalInvalidated = 0;
           for (const pattern of resourcePatterns) {
             const count = await redis.deletePattern(pattern);
             if (count > 0) {
-              logger.debug('[Cache] Invalidated pattern', { method: req.method, pattern, count });
+              totalInvalidated += count;
+              logger.info('[Cache] Invalidated', { method: req.method, pattern, count });
             }
+          }
+
+          if (totalInvalidated > 0) {
+            logger.info('[Cache] Total invalidations', { method: req.method, total: totalInvalidated });
           }
         } catch (err) {
           logger.warn('[Cache] Error during invalidation', { error: err.message });

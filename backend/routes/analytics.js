@@ -75,23 +75,22 @@ router.get(
       if (!pro) return res.status(404).json({ error: 'Profil pro introuvable' });
 
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const prev30Start = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
 
-      // Vues profil
-      const [totalViews, last30Views] = await Promise.all([
+      // OPTIMIZATION #35: Batch count queries in parallel with Promise.all
+      // Instead of 3 separate count queries, run in parallel
+      const [totalViews, last30Views, prev30Views] = await Promise.all([
         prisma.profileView.count({ where: { professionalId: pro.id } }),
         prisma.profileView.count({
           where: { professionalId: pro.id, createdAt: { gte: thirtyDaysAgo } },
         }),
+        prisma.profileView.count({
+          where: {
+            professionalId: pro.id,
+            createdAt: { gte: prev30Start, lt: thirtyDaysAgo },
+          },
+        }),
       ]);
-
-      // Trend vues : compare les 30j précédents (30–60j) vs les 30j courants
-      const prev30Start = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
-      const prev30Views = await prisma.profileView.count({
-        where: {
-          professionalId: pro.id,
-          createdAt: { gte: prev30Start, lt: thirtyDaysAgo },
-        },
-      });
       let trendStr = '+0%';
       if (prev30Views === 0 && last30Views > 0) {
         trendStr = '+100%';

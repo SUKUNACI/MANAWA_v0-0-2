@@ -19,7 +19,9 @@
     "audit": "scripts/audit.sh",
     "audit:fix": "scripts/audit.sh --fix",
     "audit:html": "scripts/audit.sh --html",
-    "audit:critical": "scripts/audit.sh --level=critical"
+    "audit:critical": "scripts/audit.sh --level=critical",
+    "minify": "node scripts/minify.js",
+    "minify:watch": "watch 'npm run minify' public/admin"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
@@ -28,6 +30,7 @@
     "bcryptjs": "^2.4.3",
     "bull": "^4.16.5",
     "cloudinary": "^2.10.0",
+    "compression": "^1.7.4",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
