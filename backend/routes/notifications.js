@@ -157,21 +157,41 @@ router.get('/history', readLimiter, requireAuth,
   [
     query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
     query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1-100'),
+    query('archived').optional().isIn(['true', 'false']).withMessage('archived must be true/false'),
   ],
   handleValidationErrors,
   async (req, res, next) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(50, parseInt(req.query.limit) || 30);
+    const archived = req.query.archived === 'true' ? true : false;
 
     const notifications = await prisma.notification.findMany({
-      where: { userId: req.user.id },
+      where: {
+        userId: req.user.id,
+        isArchived: archived,
+      },
       orderBy: { createdAt: 'desc' },
       take: limit,
       skip: (page - 1) * limit,
     });
 
-    res.json(notifications);
+    const total = await prisma.notification.count({
+      where: {
+        userId: req.user.id,
+        isArchived: archived,
+      },
+    });
+
+    res.json({
+      notifications,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -208,6 +228,75 @@ router.patch('/:id/read', writeLimiter, requireAuth,
       data: { read: true },
     });
     res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/notifications/:id/archive — Archive single notification
+router.post('/:id/archive', writeLimiter, requireAuth,
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
+  try {
+    const notification = await prisma.notification.findUnique({
+      where: { id: req.params.id },
+      select: { userId: true },
+    });
+    if (!notification || notification.userId !== req.user.id) {
+      return res.status(404).json({ error: 'Notification introuvable' });
+    }
+    await prisma.notification.update({
+      where: { id: req.params.id },
+      data: { isArchived: true },
+    });
+    res.json({ archived: true, message: 'Notification archivée' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/notifications/archive-all — Archive all notifications for user
+router.post('/archive-all', writeLimiter, requireAuth, handleValidationErrors, async (req, res, next) => {
+  try {
+    const result = await prisma.notification.updateMany({
+      where: {
+        userId: req.user.id,
+        isArchived: false,
+      },
+      data: { isArchived: true },
+    });
+    res.json({
+      archived: result.count,
+      message: `${result.count} notifications archivées`,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/notifications/unarchive/:id — Restore archived notification
+router.post('/:id/unarchive', writeLimiter, requireAuth,
+  [
+    param('id').trim().notEmpty().withMessage('id requis'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
+  try {
+    const notification = await prisma.notification.findUnique({
+      where: { id: req.params.id },
+      select: { userId: true },
+    });
+    if (!notification || notification.userId !== req.user.id) {
+      return res.status(404).json({ error: 'Notification introuvable' });
+    }
+    await prisma.notification.update({
+      where: { id: req.params.id },
+      data: { isArchived: false },
+    });
+    res.json({ archived: false, message: 'Notification restaurée' });
   } catch (err) {
     next(err);
   }
