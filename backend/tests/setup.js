@@ -1,6 +1,6 @@
 process.env.NODE_ENV = 'test';
-process.env.JWT_SECRET = 'test-secret-key-manawa';
-process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-key-manawa-min-32-chars-xx';
+process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://manawa:manawa_test@localhost:5432/manawa_test';
 process.env.PORT = '4001';
 
 // Désactiver Sentry en test
