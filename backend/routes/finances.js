@@ -23,7 +23,6 @@ const adminLimiter = rateLimit({
 // GET /api/finances - Financial summary and transactions
 router.get('/', adminLimiter, requireAuth, requirePermission('finances'),
   [
-    ...validatePageBasedPaginationQuery(),
     query('startDate').optional().isISO8601().withMessage('invalid startDate format'),
     query('endDate').optional().isISO8601().withMessage('invalid endDate format'),
     query('status').optional().isIn(['PENDING', 'COMPLETED', 'FAILED']).withMessage('invalid status'),
@@ -32,7 +31,10 @@ router.get('/', adminLimiter, requireAuth, requirePermission('finances'),
   async (req, res, next) => {
   try {
     const { startDate, endDate, status } = req.query;
-    const { limit, skip, offset } = applyPageBasedPagination(req.query, 'finances');
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = req.query.limit !== undefined ? parseInt(req.query.limit) : 50;
+    const skip = (page - 1) * limit;
+    const offset = skip;
 
     let where = {};
     if (startDate || endDate) {
@@ -75,11 +77,14 @@ router.get('/', adminLimiter, requireAuth, requirePermission('finances'),
       }),
     ]);
 
-    const paginatedResponse = buildPaginatedResponse(payments, limit, offset, total);
     res.json({
-      ...paginatedResponse,
-      transactions: paginatedResponse.data,
-      data: undefined,
+      transactions: payments,
+      pagination: {
+        page: Math.floor(offset / limit) + 1,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
       summary: {
         totalAmount: summary._sum.amount || 0,
         transactionCount: summary._count,
@@ -107,15 +112,15 @@ router.get('/summary', requireAuth, requirePermission('finances'), handleValidat
           createdAt: { gte: thirtyDaysAgo },
         },
       }),
-      prisma.payment.count({ where: { status: 'PENDING' } }),
-      prisma.payment.count({ where: { status: 'COMPLETED' } }),
+      prisma.payment.aggregate({ _count: true, where: { status: 'PENDING' } }),
+      prisma.payment.aggregate({ _count: true, where: { status: 'COMPLETED' } }),
     ]);
 
     res.json({
       totalRevenue: totalRevenue._sum.amount || 0,
       monthlyRevenue: monthlyRevenue._sum.amount || 0,
-      pendingPayments,
-      completedPayments,
+      pendingPayments: pendingPayments._count,
+      completedPayments: completedPayments._count,
     });
   } catch (err) {
     next(err);

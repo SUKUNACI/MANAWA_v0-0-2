@@ -46,19 +46,19 @@ module.exports = {
     // User dashboard: moderate amounts
     'projects': 20,
     'quotes': 20,
-    'bookings': 20,
+    'bookings': 50,
     'messages': 20,
     'notifications': 30,
 
     // User lists: smaller by default (privacy/performance)
     'users': 20,
-    'companies': 20,
+    'companies': 50,
 
     // Review/ratings: typically small
     'reviews': 20,
 
     // Finance/payments: smaller for security
-    'finances': 20,
+    'finances': 50,
     'payments': 20,
 
     // Portfolio: moderate

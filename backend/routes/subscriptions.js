@@ -245,7 +245,7 @@ async function validatePromoForCheckout(code, tier, proId) {
 router.post('/validate-promo', paymentLimiter, requireAuth, requireRole('PROFESSIONAL'),
   [
     body('code').trim().notEmpty().isLength({ min: 3, max: 50 }).withMessage('code required, 3-50 chars'),
-    body('tier').optional().isIn(['GRATUIT', 'ESSENTIEL', 'PREMIUM', 'ELITE']).withMessage('invalid tier'),
+    body('tier').optional().isIn(['GRATUIT', 'ESSENTIEL', 'PRO', 'ELITE']).withMessage('invalid tier'),
   ],
   handleValidationErrors,
   async (req, res, next) => {
@@ -278,7 +278,7 @@ router.post('/validate-promo', paymentLimiter, requireAuth, requireRole('PROFESS
 // POST /api/subscriptions/checkout
 router.post('/checkout', paymentLimiter, requireAuth, requireRole('PROFESSIONAL'),
   [
-    body('tier').isIn(['GRATUIT', 'ESSENTIEL', 'PREMIUM', 'ELITE']).withMessage('invalid tier'),
+    body('tier').isIn(['GRATUIT', 'ESSENTIEL', 'PRO', 'ELITE']).withMessage('invalid tier'),
     body('promoCode').optional().trim().isLength({ min: 3, max: 50 }).withMessage('promoCode too long'),
   ],
   handleValidationErrors,
