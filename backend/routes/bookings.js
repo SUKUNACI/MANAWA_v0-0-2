@@ -4,6 +4,7 @@ const { param, query, body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
+const { applyPageBasedPagination, validatePageBasedPaginationQuery, buildPaginatedResponse } = require('../utils/pagination-helper');
 
 const router = express.Router();
 
@@ -29,8 +30,7 @@ const writeLimiter = rateLimit({
 // GET /api/bookings - List all bookings
 router.get('/', readLimiter, requireAuth,
   [
-    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
-    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1-100'),
+    ...validatePageBasedPaginationQuery(),
     query('status').optional().isIn(['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED']).withMessage('invalid status'),
     query('professionalId').optional().trim().notEmpty(),
     query('dateFrom').optional().isISO8601().withMessage('invalid dateFrom format'),
@@ -40,8 +40,8 @@ router.get('/', readLimiter, requireAuth,
   handleValidationErrors,
   async (req, res, next) => {
   try {
-    const { page = 1, limit = 50, status, professionalId, dateFrom, dateTo, search } = req.query;
-    const skip = (page - 1) * limit;
+    const { status, professionalId, dateFrom, dateTo, search } = req.query;
+    const { limit, skip, offset } = applyPageBasedPagination(req.query, 'bookings');
 
     let where = {};
 
@@ -61,47 +61,40 @@ router.get('/', readLimiter, requireAuth,
       ];
     }
 
-    const bookings = await prisma.booking.findMany({
-      where,
-      include: {
-        client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
+    const [bookings, total] = await Promise.all([
+      prisma.booking.findMany({
+        where,
+        include: {
+          client: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
           },
-        },
-        professional: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
+          professional: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                },
               },
             },
           },
+          project: true,
         },
-        project: true,
-      },
-      skip,
-      take: parseInt(limit),
-      orderBy: { date: 'desc' },
-    });
+        skip,
+        take: limit,
+        orderBy: { date: 'desc' },
+      }),
+      prisma.booking.count({ where }),
+    ]);
 
-    const total = await prisma.booking.count({ where });
-
-    res.json({
-      bookings,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    });
+    res.json(buildPaginatedResponse(bookings, limit, offset, total));
   } catch (err) {
     next(err);
   }

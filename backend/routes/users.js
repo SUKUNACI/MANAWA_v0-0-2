@@ -1,12 +1,15 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const { body, validationResult } = require('express-validator');
+const { body, query, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
 const prisma = require('../config/db');
 const upload = require('../config/upload');
 const { verifyMagicBytes } = require('../config/upload');
 const { uploadBuffer } = require('../config/cloudinary');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireRole } = require('../middleware/auth');
+const { buildPaginationQuery } = require('../utils/sorting-helper');
+const { getSortableFields } = require('../config/sortable-fields');
+const logger = require('../utils/logger');
 
 const router = express.Router();
 

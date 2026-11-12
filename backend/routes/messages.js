@@ -7,6 +7,7 @@ const { sendPushNotification } = require('../config/pushNotifications');
 const upload = require('../config/upload');
 const { uploadBuffer } = require('../config/cloudinary');
 const { handleValidationErrors } = require('../middleware/validateInput');
+const { applyPageBasedPagination, validatePageBasedPaginationQuery, buildPaginatedResponse } = require('../utils/pagination-helper');
 
 const router = express.Router();
 
@@ -182,33 +183,40 @@ router.get('/unread-count', readLimiter, requireAuth, handleValidationErrors, as
 router.get('/:userId', readLimiter, requireAuth,
   [
     param('userId').trim().notEmpty().withMessage('userId requis'),
-    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
-    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1-100'),
+    ...validatePageBasedPaginationQuery(),
   ],
   handleValidationErrors,
   async (req, res, next) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, parseInt(req.query.limit) || 50);
+    const { limit, skip, offset } = applyPageBasedPagination(req.query, 'messages');
 
-    const messages = await prisma.message.findMany({
-      where: {
-        OR: [
-          { senderId: req.user.id, receiverId: req.params.userId },
-          { senderId: req.params.userId, receiverId: req.user.id },
-        ],
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: (page - 1) * limit,
-    });
+    const [messages, total] = await Promise.all([
+      prisma.message.findMany({
+        where: {
+          OR: [
+            { senderId: req.user.id, receiverId: req.params.userId },
+            { senderId: req.params.userId, receiverId: req.user.id },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip,
+      }),
+      prisma.message.count({
+        where: {
+          OR: [
+            { senderId: req.user.id, receiverId: req.params.userId },
+            { senderId: req.params.userId, receiverId: req.user.id },
+          ],
+        },
+      }),
+      prisma.message.updateMany({
+        where: { senderId: req.params.userId, receiverId: req.user.id, read: false },
+        data: { read: true },
+      }),
+    ]);
 
-    await prisma.message.updateMany({
-      where: { senderId: req.params.userId, receiverId: req.user.id, read: false },
-      data: { read: true },
-    });
-
-    res.json(messages.reverse());
+    res.json(buildPaginatedResponse(messages.reverse(), limit, offset, total));
   } catch (err) {
     next(err);
   }

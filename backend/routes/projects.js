@@ -11,6 +11,8 @@ const { verifyMagicBytes } = require('../config/upload');
 const { uploadBuffer } = require('../config/cloudinary');
 const { handleValidationErrors } = require('../middleware/validateInput');
 const logger = require('../utils/logger');
+const { buildPaginationQuery } = require('../utils/sorting-helper');
+const { getSortableFields } = require('../config/sortable-fields');
 
 const router = express.Router();
 
@@ -300,13 +302,28 @@ router.get('/', readLimiter, requireAuth,
     query('status').optional().isIn(['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']),
     query('page').optional().isInt({ min: 1 }),
     query('limit').optional().isInt({ min: 1, max: 100 }),
+    query('sort').optional().isLength({ max: 200 }),
+    query('order').optional().isLength({ max: 200 }),
   ],
   handleValidationErrors,
   async (req, res, next) => {
   try {
-    const { trade, trades, city, status } = req.query;
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(50, parseInt(req.query.limit) || 20);
+    const { trade, trades, city, status, sort, order } = req.query;
+    const allowedSortFields = getSortableFields('GET /projects');
+
+    // Q63 + Q64: Build pagination and sorting query
+    // Q61: Use centralized pagination config (max 20 items for projects list)
+    const paginationQuery = buildPaginationQuery({
+      page: req.query.page,
+      limit: req.query.limit,
+      isAdmin: false,
+      sortParam: sort,
+      orderParam: order,
+      allowedFields: allowedSortFields,
+      defaultOrder: { createdAt: 'desc' },
+      endpoint: 'projects',
+    });
+
     const tradesArray = trades ? trades.split(',') : undefined;
 
     const where = {
@@ -332,9 +349,7 @@ router.get('/', readLimiter, requireAuth,
         client: { select: { firstName: true, lastName: true, city: true } },
         _count: { select: { quotes: true } },
       },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: (page - 1) * limit,
+      ...paginationQuery,
     });
 
     const alreadyQuotedIds = await markAlreadyQuotedProjects(projects, req.user.id, req.user.role);

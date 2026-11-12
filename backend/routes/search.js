@@ -4,6 +4,7 @@ const { query, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth, optionalAuth } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
+const { validateFilters, applyFilters } = require('../utils/filter-helper');
 
 const router = express.Router();
 
@@ -37,20 +38,25 @@ function clampPage(raw) {
 // Recherche pros
 // ---------------------------------------------------------------------------
 
-async function searchProfessionals(q, { skip = 0, take = DEFAULT_LIMIT } = {}) {
+async function searchProfessionals(q, { skip = 0, take = DEFAULT_LIMIT, filters = {} } = {}) {
+  let where = {
+    user: { deletedAt: null },
+    OR: [
+      { user: { firstName: { contains: q, mode: 'insensitive' } } },
+      { user: { lastName: { contains: q, mode: 'insensitive' } } },
+      { trade: { contains: q, mode: 'insensitive' } },
+      { trades: { has: q } },
+      { description: { contains: q, mode: 'insensitive' } },
+      { companyName: { contains: q, mode: 'insensitive' } },
+      { user: { city: { contains: q, mode: 'insensitive' } } },
+    ],
+  };
+
+  // Q65: Apply filters
+  where = applyFilters('professionals', where, filters);
+
   return prisma.professional.findMany({
-    where: {
-      user: { deletedAt: null },
-      OR: [
-        { user: { firstName: { contains: q, mode: 'insensitive' } } },
-        { user: { lastName: { contains: q, mode: 'insensitive' } } },
-        { trade: { contains: q, mode: 'insensitive' } },
-        { trades: { has: q } },
-        { description: { contains: q, mode: 'insensitive' } },
-        { companyName: { contains: q, mode: 'insensitive' } },
-        { user: { city: { contains: q, mode: 'insensitive' } } },
-      ],
-    },
+    where,
     select: {
       id: true,
       userId: true,
@@ -77,21 +83,24 @@ async function searchProfessionals(q, { skip = 0, take = DEFAULT_LIMIT } = {}) {
   });
 }
 
-async function countProfessionals(q) {
-  return prisma.professional.count({
-    where: {
-      user: { deletedAt: null },
-      OR: [
-        { user: { firstName: { contains: q, mode: 'insensitive' } } },
-        { user: { lastName: { contains: q, mode: 'insensitive' } } },
-        { trade: { contains: q, mode: 'insensitive' } },
-        { trades: { has: q } },
-        { description: { contains: q, mode: 'insensitive' } },
-        { companyName: { contains: q, mode: 'insensitive' } },
-        { user: { city: { contains: q, mode: 'insensitive' } } },
-      ],
-    },
-  });
+async function countProfessionals(q, filters = {}) {
+  let where = {
+    user: { deletedAt: null },
+    OR: [
+      { user: { firstName: { contains: q, mode: 'insensitive' } } },
+      { user: { lastName: { contains: q, mode: 'insensitive' } } },
+      { trade: { contains: q, mode: 'insensitive' } },
+      { trades: { has: q } },
+      { description: { contains: q, mode: 'insensitive' } },
+      { companyName: { contains: q, mode: 'insensitive' } },
+      { user: { city: { contains: q, mode: 'insensitive' } } },
+    ],
+  };
+
+  // Q65: Apply filters
+  where = applyFilters('professionals', where, filters);
+
+  return prisma.professional.count({ where });
 }
 
 // ---------------------------------------------------------------------------
@@ -153,17 +162,22 @@ async function countPortfolio(q) {
 // Recherche forfaits
 // ---------------------------------------------------------------------------
 
-async function searchPackages(q, { skip = 0, take = DEFAULT_LIMIT } = {}) {
+async function searchPackages(q, { skip = 0, take = DEFAULT_LIMIT, filters = {} } = {}) {
+  let where = {
+    active: true,
+    professional: { user: { deletedAt: null } },
+    OR: [
+      { title: { contains: q, mode: 'insensitive' } },
+      { description: { contains: q, mode: 'insensitive' } },
+      { category: { contains: q, mode: 'insensitive' } },
+    ],
+  };
+
+  // Q65: Apply filters
+  where = applyFilters('packages', where, filters);
+
   return prisma.servicePackage.findMany({
-    where: {
-      active: true,
-      professional: { user: { deletedAt: null } },
-      OR: [
-        { title: { contains: q, mode: 'insensitive' } },
-        { description: { contains: q, mode: 'insensitive' } },
-        { category: { contains: q, mode: 'insensitive' } },
-      ],
-    },
+    where,
     select: {
       id: true,
       title: true,
@@ -191,18 +205,21 @@ async function searchPackages(q, { skip = 0, take = DEFAULT_LIMIT } = {}) {
   });
 }
 
-async function countPackages(q) {
-  return prisma.servicePackage.count({
-    where: {
-      active: true,
-      professional: { user: { deletedAt: null } },
-      OR: [
-        { title: { contains: q, mode: 'insensitive' } },
-        { description: { contains: q, mode: 'insensitive' } },
-        { category: { contains: q, mode: 'insensitive' } },
-      ],
-    },
-  });
+async function countPackages(q, filters = {}) {
+  let where = {
+    active: true,
+    professional: { user: { deletedAt: null } },
+    OR: [
+      { title: { contains: q, mode: 'insensitive' } },
+      { description: { contains: q, mode: 'insensitive' } },
+      { category: { contains: q, mode: 'insensitive' } },
+    ],
+  };
+
+  // Q65: Apply filters
+  where = applyFilters('packages', where, filters);
+
+  return prisma.servicePackage.count({ where });
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +262,31 @@ async function clearHistory(userId) {
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/search?q=&type=&page=&limit=
+// Helper: Parse filters from query params
+// Support: ?filters[minPrice]=100&filters[maxPrice]=500 or ?minPrice=100&maxPrice=500
+// ---------------------------------------------------------------------------
+function parseFiltersFromQuery(req) {
+  const filters = {};
+
+  // Support format filters[key]=value
+  if (req.query.filters && typeof req.query.filters === 'object') {
+    Object.assign(filters, req.query.filters);
+  }
+
+  // Support format direct: key=value
+  const filterKeys = ['minRating', 'maxRating', 'minPrice', 'maxPrice', 'city', 'verifiedOnly'];
+  for (const key of filterKeys) {
+    if (req.query[key] !== undefined) {
+      filters[key] = req.query[key];
+    }
+  }
+
+  return filters;
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/search?q=&type=&page=&limit=&filters[]=
+// Q65: Support filtering options
 // ---------------------------------------------------------------------------
 router.get('/', searchLimiter, optionalAuth,
   [
@@ -274,16 +315,27 @@ router.get('/', searchLimiter, optionalAuth,
     const pageNum = clampPage(page);
     const skip = (pageNum - 1) * take;
 
+    // Q65: Parse and validate filters
+    const rawFilters = parseFiltersFromQuery(req);
+    const professionalFilters = validateFilters('professionals', rawFilters);
+    const packageFilters = validateFilters('packages', rawFilters);
+
+    if (professionalFilters.errors.length > 0 || packageFilters.errors.length > 0) {
+      const allErrors = [...professionalFilters.errors, ...packageFilters.errors];
+      return res.status(400).json({ error: 'Filtres invalides', details: allErrors });
+    }
+
     if (type === 'all') {
       // Recherche parallèle dans les 3 entités — pas de pagination, juste les N premiers
       const [professionals, portfolio, packages] = await Promise.all([
-        searchProfessionals(term, { skip: 0, take }),
+        searchProfessionals(term, { skip: 0, take, filters: professionalFilters.validated }),
         searchPortfolio(term, { skip: 0, take }),
-        searchPackages(term, { skip: 0, take }),
+        searchPackages(term, { skip: 0, take, filters: packageFilters.validated }),
       ]);
 
       return res.json({
         query: term,
+        filters: rawFilters,
         professionals,
         portfolio,
         packages,
@@ -293,11 +345,12 @@ router.get('/', searchLimiter, optionalAuth,
 
     if (type === 'professionals') {
       const [results, total] = await Promise.all([
-        searchProfessionals(term, { skip, take }),
-        countProfessionals(term),
+        searchProfessionals(term, { skip, take, filters: professionalFilters.validated }),
+        countProfessionals(term, professionalFilters.validated),
       ]);
       return res.json({
         query: term,
+        filters: rawFilters,
         professionals: results,
         pagination: {
           page: pageNum,
@@ -315,6 +368,7 @@ router.get('/', searchLimiter, optionalAuth,
       ]);
       return res.json({
         query: term,
+        filters: rawFilters,
         portfolio: results,
         pagination: {
           page: pageNum,
@@ -327,11 +381,12 @@ router.get('/', searchLimiter, optionalAuth,
 
     if (type === 'packages') {
       const [results, total] = await Promise.all([
-        searchPackages(term, { skip, take }),
-        countPackages(term),
+        searchPackages(term, { skip, take, filters: packageFilters.validated }),
+        countPackages(term, packageFilters.validated),
       ]);
       return res.json({
         query: term,
+        filters: rawFilters,
         packages: results,
         pagination: {
           page: pageNum,

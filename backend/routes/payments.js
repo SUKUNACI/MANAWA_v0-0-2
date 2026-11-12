@@ -1,12 +1,14 @@
 const express = require('express');
 const { body, param, validationResult, query } = require('express-validator');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireRole } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
 const prisma = require('../config/db');
 const logger = require('../utils/logger');
 const { createPayment } = require('../utils/geniuspay');
 const { logPaymentStatus } = require('../utils/paymentAudit');
 const crypto = require('crypto');
+const { buildPaginationQuery } = require('../utils/sorting-helper');
+const { getSortableFields } = require('../config/sortable-fields');
 
 const router = express.Router();
 
