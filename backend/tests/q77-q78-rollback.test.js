@@ -107,7 +107,7 @@ describe('Q77: Configuration Versioning', () => {
 
       await expect(
         rollbackManager.saveConfigVersion(version, mockAdminId, 'Duplicate')
-      ).rejects.toBeDefined();
+      ).rejects.toMatchObject({ code: 'P2002' });
     });
 
     it('should create git tag for version', async () => {
@@ -141,7 +141,7 @@ describe('Q77: Configuration Versioning', () => {
 
       await expect(
         rollbackManager.markVersionAsStable('99.99.99')
-      ).rejects.toBeDefined();
+      ).rejects.toThrow('99.99.99');
     });
   });
 });
