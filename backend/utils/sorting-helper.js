@@ -90,6 +90,7 @@ function isValidSortField(field, allowedFields = []) {
     'amount',
     'version',
     'sortOrder',
+    '_count',
   ];
 
   return defaultAllowed.includes(field);
@@ -102,16 +103,20 @@ function isValidSortField(field, allowedFields = []) {
  * @param {string} endpoint - Endpoint name for limit lookup (optional)
  * @returns {number} Validated limit
  */
+const ADMIN_MAX_LIMIT = 500;
+
 function validatePageSize(limit, isAdmin = false, endpoint = null) {
-  const parsed = parseInt(limit) || paginationConfig.DEFAULT_LIMIT;
+  const parsed = parseInt(limit);
+  const effective = Number.isNaN(parsed) ? paginationConfig.DEFAULT_LIMIT : parsed;
 
   // Get endpoint-specific max or use global max
+  const baseMax = isAdmin ? ADMIN_MAX_LIMIT : paginationConfig.MAX_LIMIT;
   const maxLimit = endpoint
-    ? Math.min(paginationConfig.getLimitForEndpoint(endpoint), paginationConfig.MAX_LIMIT)
-    : paginationConfig.MAX_LIMIT;
+    ? Math.min(paginationConfig.getLimitForEndpoint(endpoint), baseMax)
+    : baseMax;
 
   // Enforce min/max bounds
-  return Math.min(Math.max(paginationConfig.MIN_LIMIT, parsed), maxLimit);
+  return Math.min(Math.max(paginationConfig.MIN_LIMIT, effective), maxLimit);
 }
 
 /**
