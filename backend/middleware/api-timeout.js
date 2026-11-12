@@ -16,14 +16,11 @@ const logger = require('../utils/logger');
 function createTimeoutMiddleware(timeoutMs, serviceType) {
   return (req, res, next) => {
     // Set timeout on the request socket
-    const timeoutHandle = setTimeout(() => {
-      const timeoutError = new Error(`${serviceType} request timeout after ${timeoutMs}ms`);
-      timeoutError.code = timeoutConfig.ERROR_CODES.TIMEOUT_ERR;
-      timeoutError.timeout = true;
-      timeoutError.service = serviceType;
-      timeoutError.timeoutMs = timeoutMs;
+    let timedOut = false;
 
-      // Log timeout separately (Q59)
+    const timeoutHandle = setTimeout(() => {
+      timedOut = true;
+
       logger.warn(`[TIMEOUT] ${serviceType} endpoint timeout`, {
         path: req.path,
         method: req.method,
@@ -32,20 +29,28 @@ function createTimeoutMiddleware(timeoutMs, serviceType) {
         timestamp: new Date().toISOString(),
       });
 
-      // If response not already sent, send timeout error
       if (!res.headersSent) {
-        return res.status(504).json({
+        res.status(504).json({
           error: `Délai d'attente dépassé. ${serviceType} a pris trop de temps.`,
           code: timeoutConfig.ERROR_CODES.TIMEOUT_ERR,
           retryable: true,
         });
-      }
-
-      // If response started, just end it
-      if (!res.finished) {
+      } else if (!res.finished) {
         res.end();
       }
     }, timeoutMs);
+
+    // Guard post-timeout writes to prevent "Cannot set headers after they are sent"
+    const originalJson = res.json.bind(res);
+    const originalSend = res.send.bind(res);
+    res.json = function(...args) {
+      if (timedOut && res.headersSent) return res;
+      return originalJson(...args);
+    };
+    res.send = function(...args) {
+      if (timedOut && res.headersSent) return res;
+      return originalSend(...args);
+    };
 
     // Clean up timeout if response finishes before timeout
     res.on('finish', () => {
