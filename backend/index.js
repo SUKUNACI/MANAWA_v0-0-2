@@ -84,6 +84,10 @@ const adminExperimentsRoutes = require('./routes/admin-experiments');
 const analyticsEventsRoutes = require('./routes/analytics-events');
 const analyticsFunnelsRoutes = require('./routes/analytics-funnels');
 const analyticsRetentionRoutes = require('./routes/analytics-retention');
+const adminCostsRoutes = require('./routes/admin-costs');
+const adminSlaRoutes = require('./routes/admin-sla');
+const adminAlertsRoutes = require('./routes/admin-alerts');
+const adminOncallRoutes = require('./routes/admin-oncall');
 
 // Firebase initialization
 const { initializeFirebase, getMessaging } = require('./config/firebase-admin');
@@ -336,6 +340,14 @@ apiV1Router.use('/admin/config/versions', injectAdminCookie, configVersionsRoute
 apiV1Router.use('/admin/feature-flags', injectAdminCookie, adminFeatureFlagsRoutes);
 // Q72: A/B testing experiments
 apiV1Router.use('/admin/experiments', injectAdminCookie, adminExperimentsRoutes);
+// Q87: Cost tracking
+apiV1Router.use('/admin/costs', injectAdminCookie, adminCostsRoutes);
+// Q88: SLA targets
+apiV1Router.use('/admin/sla', injectAdminCookie, adminSlaRoutes);
+// Q89: Alert events (history, acknowledge, silence)
+apiV1Router.use('/admin/alerts', injectAdminCookie, adminAlertsRoutes);
+// Q90: On-call rotation
+apiV1Router.use('/admin/oncall', injectAdminCookie, adminOncallRoutes);
 apiV1Router.use('/role-permissions', injectAdminCookie, rolePermissionsRoutes);
 apiV1Router.use('/support', supportRoutes);
 apiV1Router.use('/portfolio-projects', portfolioProjectsRoutes);
