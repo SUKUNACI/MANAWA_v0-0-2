@@ -40,9 +40,11 @@ function createTimeoutMiddleware(timeoutMs, serviceType) {
       }
     }, timeoutMs);
 
-    // Guard post-timeout writes to prevent "Cannot set headers after they are sent"
+    // Guard all post-timeout response writes
     const originalJson = res.json.bind(res);
     const originalSend = res.send.bind(res);
+    const originalWrite = res.write.bind(res);
+    const originalEnd = res.end.bind(res);
     res.json = function(...args) {
       if (timedOut && res.headersSent) return res;
       return originalJson(...args);
@@ -50,6 +52,14 @@ function createTimeoutMiddleware(timeoutMs, serviceType) {
     res.send = function(...args) {
       if (timedOut && res.headersSent) return res;
       return originalSend(...args);
+    };
+    res.write = function(...args) {
+      if (timedOut && res.headersSent) return false;
+      return originalWrite(...args);
+    };
+    res.end = function(...args) {
+      if (timedOut && res.headersSent) return res;
+      return originalEnd(...args);
     };
 
     // Clean up timeout if response finishes before timeout
