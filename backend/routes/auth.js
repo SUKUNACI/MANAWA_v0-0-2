@@ -158,10 +158,15 @@ router.post(
       const ipAddress = req.ip || req.connection.remoteAddress;
       const userAgent = req.get('user-agent');
 
-      // Use findFirst WITHOUT select to get all columns that exist
-      const user = await prisma.user.findFirst({
+      const user = await prisma.user.findUnique({
         where: { email: emailLower },
       });
+      if (user && user.deletedAt) {
+        return res.status(403).json({ error: 'Compte supprimé' });
+      }
+      if (user && user.suspended) {
+        return res.status(403).json({ error: 'Compte suspendu' });
+      }
       if (!user) {
         // Failed attempt - track it
         const attemptCount = await bruteForceMiddleware.trackFailedLogin(emailLower);
@@ -339,11 +344,18 @@ router.post('/admin-session', async (req, res) => {
     }
 
     // Fetch user data - verify account is still valid and not suspended
-    const user = await prisma.user.findFirst({
+    const user = await prisma.user.findUnique({
       where: { id: decoded.id },
     });
     if (!user) return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    if (user.deletedAt) return res.status(403).json({ error: 'Compte supprimé' });
     if (user.suspended) return res.status(403).json({ error: 'Compte suspendu' });
+    // Always verify role and adminLevel from DB, not from token claims
+    if (user.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé — rôle insuffisant' });
+    // Prevent privilege escalation: token cannot claim a higher adminLevel than DB
+    if (decoded.adminLevel === 'SUPER' && user.adminLevel !== 'SUPER') {
+      return res.status(403).json({ error: 'Accès refusé — niveau administrateur insuffisant' });
+    }
 
     // Try to update lastLoginAt but ignore errors
     try {
@@ -386,9 +398,10 @@ router.get('/admin-session', async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: { id: true, email: true, role: true, adminLevel: true, adminPermissions: true },
+      select: { id: true, email: true, role: true, adminLevel: true, adminPermissions: true, suspended: true, deletedAt: true },
     });
-    if (!user) return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    if (!user || user.deletedAt) return res.status(401).json({ error: 'Utilisateur introuvable' });
+    if (user.suspended) return res.status(403).json({ error: 'Compte suspendu' });
 
     res.json({ user, token });
   } catch (err) {
