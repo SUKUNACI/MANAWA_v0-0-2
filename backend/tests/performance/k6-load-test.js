@@ -1,5 +1,6 @@
+/* eslint-disable */
 /**
- * K6 Load Testing Script for MANAWA Backend
+ * K6 Load Testing Script for MANAWA Backend — syntaxe ES modules k6, non-Node.js.
  *
  * Three test scenarios:
  * 1. Baseline: 100 concurrent users over 5 minutes
