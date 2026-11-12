@@ -1089,3 +1089,68 @@ model ExperimentMetric {
   @@index([metricName])
   @@index([createdAt])
 }
+
+// Q79: Custom Metrics
+model CustomMetric {
+  id          String   @id @default(uuid())
+  name        String
+  category    String   // "professional" | "platform" | "payment" | "search"
+  value       Float
+  unit        String?  // "ms" | "%" | "count" | "EUR"
+  dimensions  Json?    // {professionalId, city, tier, ...}
+  recordedAt  DateTime @default(now())
+
+  @@index([name])
+  @@index([category])
+  @@index([recordedAt])
+}
+
+// Q80: Event Tracking
+model UserEvent {
+  id         String   @id @default(uuid())
+  userId     String?
+  sessionId  String?
+  type       String   // "search" | "profile_view" | "quote_sent" | "booking_created" | "payment" | "login" | ...
+  page       String?
+  metadata   Json?    // {query, professionalId, amount, ...}
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([sessionId])
+}
+
+// Q83: Cohort Analysis snapshots
+model CohortSnapshot {
+  id           String   @id @default(uuid())
+  cohortMonth  String   // "2026-10" — month of user registration
+  periodMonth  String   // "2026-11" — month being measured
+  periodOffset Int      // 0=registration month, 1=month+1, etc.
+  userCount    Int
+  activeCount  Int
+  retainedRate Float    // activeCount / userCount
+  revenue      Float    @default(0)
+  createdAt    DateTime @default(now())
+
+  @@unique([cohortMonth, periodMonth])
+  @@index([cohortMonth])
+}
+
+// Q84/Q85: Retention & Churn daily snapshots
+model RetentionSnapshot {
+  id           String   @id @default(uuid())
+  date         String   // "2026-11-12"
+  dau          Int      @default(0)  // Daily Active Users
+  wau          Int      @default(0)  // Weekly Active Users
+  mau          Int      @default(0)  // Monthly Active Users
+  newUsers     Int      @default(0)
+  churned      Int      @default(0)  // users inactive > 30 days
+  reactivated  Int      @default(0)  // churned users who returned
+  createdAt    DateTime @default(now())
+
+  @@unique([date])
+  @@index([date])
+}
