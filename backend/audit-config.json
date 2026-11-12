@@ -1,0 +1,38 @@
+{
+  "auditLevel": "high",
+  "failOnCritical": true,
+  "failOnHigh": true,
+  "ignoreVulnerabilities": [],
+  "ignoredPackages": [],
+  "exceptions": [
+    {
+      "id": "1234567",
+      "package": "example-package",
+      "severity": "high",
+      "reason": "Acceptable risk - dependency will be removed in v2.0",
+      "expiresAt": "2025-12-31T23:59:59Z",
+      "approvedBy": "security-team"
+    }
+  ],
+  "reportSettings": {
+    "generateHtml": true,
+    "generateJson": true,
+    "generateSarif": true,
+    "uploadToGitHub": true,
+    "notifyOnFindings": true
+  },
+  "schedule": {
+    "dailyAt": "02:00 UTC",
+    "weeklyOn": "Monday",
+    "weeklyAt": "03:00 UTC"
+  },
+  "escalation": {
+    "critical": [
+      "security-team@company.com",
+      "devops@company.com"
+    ],
+    "high": [
+      "security-team@company.com"
+    ]
+  }
+}

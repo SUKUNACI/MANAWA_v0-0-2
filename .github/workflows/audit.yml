@@ -1,0 +1,177 @@
+name: npm Audit - Dependency Vulnerability Scanning
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'backend/package.json'
+      - 'backend/package-lock.json'
+      - '.github/workflows/audit.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'backend/package.json'
+      - 'backend/package-lock.json'
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+    # Run weekly on Monday at 3 AM UTC
+    - cron: '0 3 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+  checks: write
+  pull-requests: write
+
+jobs:
+  audit:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Run npm audit
+        id: audit
+        working-directory: backend
+        run: |
+          # Run audit and capture output
+          npm audit --json > audit-report.json 2>&1 || true
+          cat audit-report.json
+        continue-on-error: true
+
+      - name: Parse audit results
+        id: parse
+        working-directory: backend
+        run: |
+          # Parse JSON and extract vulnerability counts
+          CRITICAL=$(jq '.metadata.vulnerabilities.critical // 0' audit-report.json)
+          HIGH=$(jq '.metadata.vulnerabilities.high // 0' audit-report.json)
+          MODERATE=$(jq '.metadata.vulnerabilities.moderate // 0' audit-report.json)
+          LOW=$(jq '.metadata.vulnerabilities.low // 0' audit-report.json)
+          TOTAL=$(jq '.metadata.vulnerabilities.total // 0' audit-report.json)
+
+          echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
+          echo "high=$HIGH" >> $GITHUB_OUTPUT
+          echo "moderate=$MODERATE" >> $GITHUB_OUTPUT
+          echo "low=$LOW" >> $GITHUB_OUTPUT
+          echo "total=$TOTAL" >> $GITHUB_OUTPUT
+
+          # Create summary for GitHub
+          {
+            echo "## npm Audit Results"
+            echo ""
+            echo "| Severity | Count |"
+            echo "|----------|-------|"
+            echo "| 🔴 Critical | $CRITICAL |"
+            echo "| 🟠 High | $HIGH |"
+            echo "| 🟡 Moderate | $MODERATE |"
+            echo "| 🔵 Low | $LOW |"
+            echo "| **Total** | **$TOTAL** |"
+            echo ""
+            if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+              echo "### ⚠️ Action Required"
+              echo "Critical or High severity vulnerabilities detected."
+            else
+              echo "### ✅ Status: Safe"
+              echo "No critical or high severity vulnerabilities found."
+            fi
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Generate SARIF report
+        id: sarif
+        working-directory: backend
+        run: |
+          npm audit --json | npx npm-audit-to-sarif > audit.sarif || true
+        continue-on-error: true
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: backend/audit.sarif
+          category: npm-audit
+        continue-on-error: true
+
+      - name: Create PR comment with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const auditReport = JSON.parse(fs.readFileSync('./backend/audit-report.json', 'utf8'));
+
+            const critical = auditReport.metadata?.vulnerabilities?.critical || 0;
+            const high = auditReport.metadata?.vulnerabilities?.high || 0;
+            const moderate = auditReport.metadata?.vulnerabilities?.moderate || 0;
+            const low = auditReport.metadata?.vulnerabilities?.low || 0;
+            const total = auditReport.metadata?.vulnerabilities?.total || 0;
+
+            let statusEmoji = '✅';
+            let statusText = 'Safe - No critical or high vulnerabilities';
+
+            if (critical > 0 || high > 0) {
+              statusEmoji = '🚨';
+              statusText = 'UNSAFE - Critical or High vulnerabilities detected';
+            } else if (moderate > 0) {
+              statusEmoji = '⚠️';
+              statusText = 'Caution - Moderate vulnerabilities found';
+            }
+
+            const comment = `## ${statusEmoji} npm Audit Results
+
+| Severity | Count |
+|----------|-------|
+| 🔴 Critical | ${critical} |
+| 🟠 High | ${high} |
+| 🟡 Moderate | ${moderate} |
+| 🔵 Low | ${low} |
+| **Total** | **${total}** |
+
+**Status:** ${statusText}
+
+${critical > 0 || high > 0 ? '### Action Required\nThis PR cannot be merged until critical or high severity vulnerabilities are resolved.' : '### ✅ Approved for Review\nNo blocking vulnerabilities found.'}
+
+[View detailed audit report](https://github.com/${{ github.repository }}/security/code-scanning)`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Fail if critical vulnerabilities
+        if: steps.parse.outputs.critical > 0
+        run: |
+          echo "🚨 CRITICAL: ${{ steps.parse.outputs.critical }} critical vulnerabilities found"
+          exit 1
+
+      - name: Fail if high vulnerabilities
+        if: steps.parse.outputs.high > 0
+        run: |
+          echo "🚨 HIGH: ${{ steps.parse.outputs.high }} high vulnerabilities found"
+          exit 1
+
+      - name: Report summary
+        if: always()
+        run: |
+          echo "Audit Summary:"
+          echo "- Critical: ${{ steps.parse.outputs.critical }}"
+          echo "- High: ${{ steps.parse.outputs.high }}"
+          echo "- Moderate: ${{ steps.parse.outputs.moderate }}"
+          echo "- Low: ${{ steps.parse.outputs.low }}"
+          echo "- Total: ${{ steps.parse.outputs.total }}"

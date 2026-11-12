@@ -34,6 +34,7 @@ const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 
 const authRoutes = require('./routes/auth');
+const auth2FARoutes = require('./routes/auth-2fa');
 const userRoutes = require('./routes/users');
 const verificationRoutes = require('./routes/verification');
 const subscriptionRoutes = require('./routes/subscriptions');
@@ -261,6 +262,7 @@ const apiV1Router = express.Router();
 
 apiV1Router.use('/health', healthRoutes);
 apiV1Router.use('/auth', authRoutes);
+apiV1Router.use('/auth/2fa', auth2FARoutes);
 apiV1Router.use('/users', userRoutes);
 apiV1Router.use('/verification', verificationRoutes);
 apiV1Router.use('/subscriptions', subscriptionRoutes);

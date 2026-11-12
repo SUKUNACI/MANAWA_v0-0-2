@@ -40,6 +40,10 @@ model User {
   securityAnswerHash    String?
   expoPushToken         String?
   deletedAt             DateTime?
+  twoFAEnabled          Boolean                @default(false)
+  twoFASecret           String?
+  twoFABackupCodes      Json?
+  twoFAEnabledAt        DateTime?
   follows               Follow[]
   receivedMessages      Message[]              @relation("ReceivedMessages")
   sentMessages          Message[]              @relation("SentMessages")
@@ -74,6 +78,21 @@ model RefreshToken {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+model LoginAttempt {
+  id        String   @id @default(uuid())
+  userId    String?
+  email     String
+  status    String // 'success' or 'failed'
+  ipAddress String?
+  userAgent String?
+  metadata  String? // JSON metadata
+  timestamp DateTime @default(now())
+
+  @@index([userId])
+  @@index([email])
+  @@index([timestamp])
 }
 
 model Professional {
