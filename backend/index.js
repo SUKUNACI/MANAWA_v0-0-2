@@ -81,6 +81,9 @@ const analyticsDistributionRoutes = require('./routes/analytics-distribution');
 const configVersionsRoutes = require('./routes/config-versions');
 const adminFeatureFlagsRoutes = require('./routes/admin-feature-flags');
 const adminExperimentsRoutes = require('./routes/admin-experiments');
+const analyticsEventsRoutes = require('./routes/analytics-events');
+const analyticsFunnelsRoutes = require('./routes/analytics-funnels');
+const analyticsRetentionRoutes = require('./routes/analytics-retention');
 
 // Firebase initialization
 const { initializeFirebase, getMessaging } = require('./config/firebase-admin');
@@ -351,6 +354,12 @@ apiV1Router.use('/badges', badgeRoutes);
 apiV1Router.use('/referrals', referralRoutes);
 apiV1Router.use('/analytics', analyticsRoutes);
 apiV1Router.use('/analytics', analyticsDistributionRoutes);
+// Q79-Q81: custom metrics, event tracking, user journey
+apiV1Router.use('/analytics', analyticsEventsRoutes);
+// Q82-Q83: funnel analysis, cohort analysis
+apiV1Router.use('/analytics', analyticsFunnelsRoutes);
+// Q84-Q86: retention, churn prediction, revenue
+apiV1Router.use('/analytics', analyticsRetentionRoutes);
 apiV1Router.use('/video-calls', videoCallRoutes);
 apiV1Router.use('/webhooks/geniuspay', webhooksGeniuspayRoutes);
 
