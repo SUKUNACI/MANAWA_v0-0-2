@@ -1,0 +1,290 @@
+# Artillery Load Testing Configuration for MANAWA Backend
+#
+# Three scenarios: baseline, peak, stress
+#
+# Usage:
+# - Baseline: artillery run artillery-config.yaml --target "http://localhost:4000" --scenario baseline
+# - Peak: artillery run artillery-config.yaml --target "http://localhost:4000" --scenario peak
+# - Stress: artillery run artillery-config.yaml --target "http://localhost:4000" --scenario stress
+# - Report: artillery report results.json --output report.html
+
+config:
+  target: "{{ $processEnvironment.BASE_URL || 'http://localhost:4000' }}"
+  phases:
+    # Baseline: 100 VUs for 5 minutes with ramp-up
+    - duration: 30
+      arrivalRate: 10
+      name: "Baseline Ramp-Up"
+    - duration: 300
+      arrivalRate: 100
+      name: "Baseline Steady State"
+
+  payload:
+    path: "./payload.json"
+
+  variables:
+    projectIds: ["project-1", "project-2", "project-3", "project-4", "project-5"]
+    professionalIds: ["pro-1", "pro-2", "pro-3", "pro-4", "pro-5"]
+    searchTerms: ["electrician", "plumber", "painter", "carpenter", "builder"]
+    authToken: "{{ $processEnvironment.AUTH_TOKEN }}"
+    adminToken: "{{ $processEnvironment.ADMIN_TOKEN }}"
+
+  # HTTP request timeout and retry settings
+  http:
+    timeout: 30
+    max: 10
+
+  # Extract values from responses for reuse
+  defaults:
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "Artillery Load Test / MANAWA v1.0"
+
+scenarios:
+  # Baseline scenario: steady load with core endpoints
+  baseline:
+    flow:
+      # Health check
+      - get:
+          url: "/api/health"
+          capture:
+            - json: "$.status"
+              as: "healthStatus"
+          expect:
+            - statusCode: 200
+            - contentType: json
+          think: 1
+
+      # List projects
+      - get:
+          url: "/api/projects?page=1&limit=20"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          capture:
+            - json: "$[0].id"
+              as: "projectId"
+          expect:
+            - statusCode: [200, 401, 400]
+          think: 1
+
+      # List professionals
+      - get:
+          url: "/api/professionals?page=1&limit=20"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 401, 400]
+          think: 1
+
+      # Search
+      - get:
+          url: "/api/search?q={{ searchTerms.$randomIndex }}&category=all"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 400, 401]
+          think: 2
+
+  # Peak scenario: increased load with more endpoints
+  peak:
+    flow:
+      # Health check
+      - get:
+          url: "/api/health"
+          expect:
+            - statusCode: 200
+          think: 1
+
+      # List projects
+      - get:
+          url: "/api/projects?page=1&limit=20"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 401, 400]
+          think: 1
+
+      # Project details
+      - get:
+          url: "/api/projects/{{ projectIds.$randomIndex }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 404, 401]
+          think: 1
+
+      # List professionals
+      - get:
+          url: "/api/professionals?page=1&limit=20"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 401, 400]
+          think: 1
+
+      # Professional details
+      - get:
+          url: "/api/professionals/{{ professionalIds.$randomIndex }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 404, 401]
+          think: 1
+
+      # Search
+      - get:
+          url: "/api/search?q={{ searchTerms.$randomIndex }}&category=all"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 400, 401]
+          think: 2
+
+      # Create booking
+      - post:
+          url: "/api/bookings"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            projectId: "{{ projectIds.$randomIndex }}"
+            professionalId: "{{ professionalIds.$randomIndex }}"
+            serviceDate: "2026-11-20T10:00:00Z"
+            amount: 500
+          expect:
+            - statusCode: [201, 400, 401, 404]
+          think: 1
+
+      # List messages
+      - get:
+          url: "/api/messages?page=1&limit=20"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 401, 400]
+          think: 1
+
+  # Stress scenario: maximum load with all endpoints
+  stress:
+    flow:
+      # Health check
+      - get:
+          url: "/api/health"
+          expect:
+            - statusCode: 200
+          think: 1
+
+      # List projects
+      - get:
+          url: "/api/projects?page=1&limit=50"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 401, 400]
+          think: 1
+
+      # Project details
+      - get:
+          url: "/api/projects/{{ projectIds.$randomIndex }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 404, 401]
+
+      # My projects
+      - get:
+          url: "/api/projects/mine"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 401]
+          think: 1
+
+      # List professionals
+      - get:
+          url: "/api/professionals?page=1&limit=50"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 401, 400]
+          think: 1
+
+      # Professional details
+      - get:
+          url: "/api/professionals/{{ professionalIds.$randomIndex }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 404, 401]
+
+      # Search multiple times
+      - get:
+          url: "/api/search?q={{ searchTerms.$randomIndex }}&category=all&page=1&limit=50"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 400, 401]
+          think: 1
+
+      # Create booking
+      - post:
+          url: "/api/bookings"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            projectId: "{{ projectIds.$randomIndex }}"
+            professionalId: "{{ professionalIds.$randomIndex }}"
+            serviceDate: "2026-11-20T10:00:00Z"
+            amount: 500
+          expect:
+            - statusCode: [201, 400, 401, 404]
+          think: 1
+
+      # Get booking details
+      - get:
+          url: "/api/bookings/{{ projectIds.$randomIndex }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 404, 401]
+          think: 1
+
+      # List messages
+      - get:
+          url: "/api/messages?page=1&limit=50"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 401, 400]
+          think: 1
+
+      # Get notifications
+      - get:
+          url: "/api/notifications?page=1&limit=50"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 401, 400]
+          think: 1
+
+      # Admin KPIs (with admin token)
+      - get:
+          url: "/api/admin/kpis"
+          headers:
+            Authorization: "Bearer {{ adminToken }}"
+          expect:
+            - statusCode: [200, 401, 403]
+          think: 1
+
+# Reports and metrics
+reporting:
+  processor: "./processor.js"
+  variables:
+    - name: responseTime
+      aggregate: "mean"
+    - name: statusCode
+      aggregate: "histogram"
+
+# Performance thresholds for pass/fail
+defaults:
+  http:
+    timeout: 30

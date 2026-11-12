@@ -1,0 +1,958 @@
+openapi: 3.0.0
+info:
+  title: MANAWA Backend API
+  version: 1.0.0
+  description: Complete API documentation for MANAWA - Platform de mise en relation particuliers/professionnels du bâtiment
+  contact:
+    name: MANAWA Support
+    email: support@manawa.app
+  license:
+    name: Proprietary
+    url: https://manawa.app/license
+
+servers:
+  - url: http://localhost:3000/api
+    description: Development Server
+    variables:
+      port:
+        default: '3000'
+  - url: https://api.manawa.app
+    description: Production Server
+
+tags:
+  - name: Authentication
+    description: User authentication and session management
+  - name: Users
+    description: User profile management
+  - name: Verification
+    description: Email verification and security
+  - name: Professionals
+    description: Professional user profiles and management
+  - name: Projects
+    description: Project creation and management
+  - name: Quotes
+    description: Quote generation and management
+  - name: Bookings
+    description: Booking management
+  - name: Payments
+    description: Payment processing
+  - name: Finances
+    description: Financial transactions and wallet
+  - name: Messages
+    description: Messaging and conversations
+  - name: Notifications
+    description: Push notifications and alerts
+  - name: Reviews
+    description: Project reviews and ratings
+  - name: Subscriptions
+    description: Subscription management
+  - name: Portfolio
+    description: Professional portfolio
+  - name: Admin
+    description: Administrative operations
+  - name: Health
+    description: System health and monitoring
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token. Obtain via /auth/login or /auth/register
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique user identifier
+        email:
+          type: string
+          format: email
+          description: User email address
+        firstName:
+          type: string
+          description: User first name
+        lastName:
+          type: string
+          description: User last name
+        phone:
+          type: string
+          nullable: true
+          description: User phone number
+        city:
+          type: string
+          nullable: true
+          description: User city
+        role:
+          type: string
+          enum: [CLIENT, PROFESSIONAL, ADMIN]
+          description: User role in the system
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: User avatar URL
+        emailVerified:
+          type: boolean
+          description: Whether user email is verified
+        emailVerifiedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Email verification timestamp
+        createdAt:
+          type: string
+          format: date-time
+          description: Account creation timestamp
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update timestamp
+      required: [id, email, firstName, lastName, role]
+
+    Professional:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        trade:
+          type: string
+          description: Primary trade/business category
+        trades:
+          type: array
+          items:
+            type: string
+          description: List of trades the professional handles
+        accountType:
+          type: string
+          enum: [INDEPENDENT, ENTREPRISE, MICRO]
+          description: Business account type
+        companyName:
+          type: string
+          nullable: true
+          description: Company name if applicable
+        siret:
+          type: string
+          nullable: true
+          description: SIRET number for French businesses
+        rating:
+          type: number
+          format: float
+          nullable: true
+          description: Average rating (0-5)
+        ratingCount:
+          type: integer
+          description: Number of ratings
+        portfolio:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortfolioProject'
+          description: Portfolio projects
+        createdAt:
+          type: string
+          format: date-time
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        clientId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          description: Project title
+        description:
+          type: string
+          description: Detailed project description
+        category:
+          type: string
+          description: Project category (e.g., plomberie, électricité)
+        status:
+          type: string
+          enum: [DRAFT, PUBLISHED, MATCHED, IN_PROGRESS, COMPLETED, CANCELLED]
+          description: Current project status
+        budget:
+          type: number
+          format: float
+          nullable: true
+          description: Project budget in EUR
+        location:
+          type: string
+          nullable: true
+          description: Project location/address
+        deadline:
+          type: string
+          format: date
+          nullable: true
+          description: Project deadline
+        photos:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              url:
+                type: string
+                format: uri
+              uploadedAt:
+                type: string
+                format: date-time
+          description: Project photos/images
+        quotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Quote'
+          description: Associated quotes from professionals
+        review:
+          $ref: '#/components/schemas/Review'
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Quote:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        professionalId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+          format: float
+          description: Quote total amount in EUR
+        tva:
+          type: number
+          format: float
+          nullable: true
+          description: VAT amount
+        status:
+          type: string
+          enum: [DRAFT, SENT, ACCEPTED, REJECTED, EXPIRED]
+          description: Quote status
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              description:
+                type: string
+              quantity:
+                type: number
+              unitPrice:
+                type: number
+              subtotal:
+                type: number
+          description: Line items in quote
+        validUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: Quote expiration date
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Booking:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        quoteId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED]
+          description: Booking status
+        scheduledDate:
+          type: string
+          format: date-time
+          description: Scheduled date/time for service
+        completedDate:
+          type: string
+          format: date-time
+          nullable: true
+          description: Actual completion date
+        notes:
+          type: string
+          nullable: true
+          description: Additional notes
+        createdAt:
+          type: string
+          format: date-time
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        bookingId:
+          type: string
+          format: uuid
+          nullable: true
+        quoteId:
+          type: string
+          format: uuid
+          nullable: true
+        amount:
+          type: number
+          format: float
+          description: Payment amount in EUR
+        status:
+          type: string
+          enum: [PENDING, COMPLETED, FAILED, REFUNDED]
+          description: Payment status
+        method:
+          type: string
+          enum: [CARD, BANK_TRANSFER, WALLET]
+          description: Payment method
+        geniuspayRef:
+          type: string
+          nullable: true
+          description: GeniusPay reference number
+        isDeposit:
+          type: boolean
+          description: Whether this is a deposit payment
+        createdAt:
+          type: string
+          format: date-time
+
+    Review:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        clientId:
+          type: string
+          format: uuid
+        professionalId:
+          type: string
+          format: uuid
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: Rating from 1-5
+        comment:
+          type: string
+          nullable: true
+          description: Review comment
+        createdAt:
+          type: string
+          format: date-time
+
+    PortfolioProject:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        professionalId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        photos:
+          type: array
+          items:
+            type: string
+            format: uri
+        createdAt:
+          type: string
+          format: date-time
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [QUOTE_RECEIVED, BOOKING_CONFIRMED, PAYMENT_RECEIVED, MESSAGE, REVIEW, SYSTEM]
+          description: Notification type
+        title:
+          type: string
+        body:
+          type: string
+        data:
+          type: object
+          nullable: true
+          description: Additional notification data
+        read:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        token:
+          type: string
+          description: JWT access token (15 minute expiration)
+        refreshToken:
+          type: string
+          description: Refresh token (30 day expiration)
+
+    PaginatedResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+            limit:
+              type: integer
+            total:
+              type: integer
+            pages:
+              type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        status:
+          type: integer
+          description: HTTP status code
+        timestamp:
+          type: string
+          format: date-time
+          description: Error timestamp
+
+    ValidationError:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+  responses:
+    UnauthorizedError:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Unauthorized
+            status: 401
+
+    ForbiddenError:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Forbidden - insufficient permissions
+            status: 403
+
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Resource not found
+            status: 404
+
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+
+    RateLimitError:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Too many requests, please retry in 15 minutes
+            status: 429
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Internal server error
+            status: 500
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      summary: API health check
+      tags: [Health]
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok, degraded]
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /auth/register:
+    post:
+      summary: Register a new user account
+      tags: [Authentication]
+      operationId: registerUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, firstName, lastName, role]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  minLength: 8
+                  example: SecurePass123!
+                firstName:
+                  type: string
+                  example: Jean
+                lastName:
+                  type: string
+                  example: Dupont
+                phone:
+                  type: string
+                  nullable: true
+                city:
+                  type: string
+                  nullable: true
+                role:
+                  type: string
+                  enum: [CLIENT, PROFESSIONAL]
+                trades:
+                  type: array
+                  items:
+                    type: string
+                  description: For PROFESSIONAL role
+                accountType:
+                  type: string
+                  enum: [INDEPENDENT, ENTREPRISE, MICRO]
+                  description: For PROFESSIONAL role
+                companyName:
+                  type: string
+                  nullable: true
+                  description: For ENTREPRISE account type
+      responses:
+        '201':
+          description: Account created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '409':
+          description: Email already exists
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /auth/login:
+    post:
+      summary: Authenticate user with email and password
+      tags: [Authentication]
+      operationId: loginUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /auth/refresh:
+    post:
+      summary: Refresh access token using refresh token
+      tags: [Authentication]
+      operationId: refreshToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: New access token generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: New JWT access token
+        '401':
+          description: Invalid or expired refresh token
+
+  /auth/logout:
+    post:
+      summary: Logout user and invalidate refresh tokens
+      tags: [Authentication]
+      operationId: logoutUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Successfully logged out
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /users/profile:
+    get:
+      summary: Get current user profile
+      tags: [Users]
+      operationId: getCurrentUserProfile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    put:
+      summary: Update user profile
+      tags: [Users]
+      operationId: updateUserProfile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+                phone:
+                  type: string
+                city:
+                  type: string
+                avatarUrl:
+                  type: string
+                  format: uri
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /users/{userId}:
+    get:
+      summary: Get user public profile
+      tags: [Users]
+      operationId: getUserProfile
+      security: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /projects:
+    post:
+      summary: Create new project
+      tags: [Projects]
+      operationId: createProject
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, description, category]
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                category:
+                  type: string
+                budget:
+                  type: number
+                location:
+                  type: string
+                deadline:
+                  type: string
+                  format: date
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /projects/mine:
+    get:
+      summary: Get current user's projects
+      tags: [Projects]
+      operationId: getUserProjects
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [DRAFT, PUBLISHED, MATCHED, IN_PROGRESS, COMPLETED, CANCELLED]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /projects/{projectId}:
+    get:
+      summary: Get project details
+      tags: [Projects]
+      operationId: getProjectDetails
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    put:
+      summary: Update project
+      tags: [Projects]
+      operationId: updateProject
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                budget:
+                  type: number
+                status:
+                  type: string
+                  enum: [DRAFT, PUBLISHED, MATCHED, IN_PROGRESS, COMPLETED, CANCELLED]
+      responses:
+        '200':
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    delete:
+      summary: Delete project
+      tags: [Projects]
+      operationId: deleteProject
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Project deleted
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
