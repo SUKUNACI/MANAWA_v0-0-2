@@ -32,8 +32,9 @@ const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
-// Q125: Compression brotli + gzip pour mobile (shrink-ray-current remplace compression)
-const shrinkRay = require('shrink-ray-current');
+// Q125: Compression brotli (natif Node.js zlib) + gzip pour mobile
+const compression = require('compression');
+const zlib = require('zlib');
 
 const authRoutes = require('./routes/auth');
 const auth2FARoutes = require('./routes/auth-2fa');
@@ -199,10 +200,36 @@ app.use((req, res, next) => {
 
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 
-// Q125: Brotli (prioritaire) + gzip fallback — 70-90% réduction taille réponse
-// shrink-ray-current choisit automatiquement brotli si Accept-Encoding: br est présent
-app.use(shrinkRay({ threshold: 1024, brotli: { quality: 4 } }));
-console.log('[Compression] Brotli + gzip activés (Q125)');
+// Q125: Brotli natif Node.js (zlib) prioritaire + gzip fallback — aucune dépendance native
+// compression() gère gzip/deflate ; on ajoute brotli via zlib.createBrotliCompress() natif
+app.use(compression({
+  level: 6,
+  threshold: 1024,
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) return false;
+    return compression.filter(req, res);
+  },
+}));
+// Brotli via zlib natif Node.js (disponible depuis Node 10.16, aucun module natif requis)
+app.use((req, res, next) => {
+  const acceptEncoding = req.headers['accept-encoding'] || '';
+  if (!acceptEncoding.includes('br')) return next();
+  const originalWrite = res.write.bind(res);
+  const originalEnd = res.end.bind(res);
+  const brotli = zlib.createBrotliCompress({ params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4 } });
+  const chunks = [];
+  brotli.on('data', chunk => chunks.push(chunk));
+  brotli.on('end', () => {
+    const compressed = Buffer.concat(chunks);
+    res.setHeader('Content-Encoding', 'br');
+    res.setHeader('Content-Length', compressed.length);
+    originalEnd(compressed);
+  });
+  res.write = (chunk) => brotli.write(chunk);
+  res.end = (chunk) => { if (chunk) brotli.write(chunk); brotli.end(); };
+  next();
+});
+console.log('[Compression] Brotli natif Node.js + gzip activés (Q125)');
 
 // Q69: Response size limit middleware - check Content-Length < 5MB
 app.use(setResponseLimitHeaders);
