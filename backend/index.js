@@ -870,5 +870,9 @@ async function startServer() {
 }
 
 // Force Render redeploy - COMPLIANCE Officer endpoints v1
-startServer();
+if (require.main === module) {
+  startServer();
+}
 // Force rebuild v2
+
+module.exports = app;
