@@ -102,11 +102,50 @@ function getCacheTTL() {
   return FEATURE_FLAG_TTL;
 }
 
+// Q76: Redis PubSub channel for hot reload
+const CONFIG_RELOAD_CHANNEL = 'config:reload:feature-flags';
+
+/**
+ * Subscribe to hot reload channel
+ * When admin updates a flag, server publishes to this channel
+ * All instances receive the message and invalidate their cache
+ */
+async function subscribeToHotReload(redisSubscriber) {
+  try {
+    await redisSubscriber.subscribe(CONFIG_RELOAD_CHANNEL, (message) => {
+      logger.info('[FeatureFlags] Hot reload triggered via PubSub', { message });
+      // Async invalidation - fire and forget
+      redis.deleteKey(FEATURE_FLAG_CACHE_KEY).catch(err => {
+        logger.warn('[FeatureFlags] Hot reload cache clear failed', { error: err.message });
+      });
+    });
+    logger.info('[FeatureFlags] Hot reload subscription active', { channel: CONFIG_RELOAD_CHANNEL });
+  } catch (err) {
+    logger.error('[FeatureFlags] Failed to subscribe to hot reload', { error: err.message });
+  }
+}
+
+/**
+ * Publish hot reload event (called after flag update)
+ * All server instances will clear their cache on receipt
+ */
+async function publishHotReload(flagName) {
+  try {
+    await redis.publish(CONFIG_RELOAD_CHANNEL, JSON.stringify({ flag: flagName, ts: Date.now() }));
+    logger.debug('[FeatureFlags] Hot reload published', { flagName });
+  } catch (err) {
+    logger.warn('[FeatureFlags] Failed to publish hot reload', { error: err.message });
+  }
+}
+
 module.exports = {
   DEFAULT_FLAGS,
   FEATURE_FLAG_CACHE_KEY,
   FEATURE_FLAG_TTL,
+  CONFIG_RELOAD_CHANNEL,
   initializeDefaultFlags,
   invalidateCache,
   getCacheTTL,
+  subscribeToHotReload,
+  publishHotReload,
 };
