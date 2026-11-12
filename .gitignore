@@ -30,6 +30,11 @@ backup_*.json
 *.log
 npm-debug.log*
 
+# Audit reports
+backend/audit-reports/
+audit-report.json
+audit.sarif
+
 # OS
 .DS_Store
 Thumbs.db

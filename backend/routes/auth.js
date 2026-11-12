@@ -7,6 +7,8 @@ const rateLimit = require('express-rate-limit');
 const prisma = require('../config/db');
 const logger = require('../utils/logger');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const bruteForceMiddleware = require('../middleware/bruteForceMiddleware');
+const bruteForceConfig = require('../config/brute-force');
 
 const router = express.Router();
 
@@ -142,6 +144,7 @@ router.post(
   '/login',
   authLimiter,
   accountLimiter,
+  bruteForceMiddleware.bruteForceCheckMiddleware(),
   [body('email').isEmail(), body('password').notEmpty()],
   async (req, res, next) => {
     try {
@@ -149,15 +152,81 @@ router.post(
       if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
       const { email, password } = req.body;
+      const emailLower = email.toLowerCase();
+      const ipAddress = req.ip || req.connection.remoteAddress;
+      const userAgent = req.get('user-agent');
 
       // Use findFirst WITHOUT select to get all columns that exist
       const user = await prisma.user.findFirst({
-        where: { email },
+        where: { email: emailLower },
       });
-      if (!user) return res.status(401).json({ error: 'Email ou mot de passe incorrect' });
+      if (!user) {
+        // Failed attempt - track it
+        const attemptCount = await bruteForceMiddleware.trackFailedLogin(emailLower);
+        await bruteForceMiddleware.logLoginAttempt(null, emailLower, 'failed', ipAddress, userAgent, {
+          reason: 'user_not_found',
+        });
+
+        // Check if max attempts exceeded
+        if (attemptCount >= bruteForceConfig.maxAttempts) {
+          await bruteForceMiddleware.lockAccount(emailLower);
+          return res.status(401).json({ error: bruteForceConfig.messages.loginFailed });
+        }
+
+        const remaining = bruteForceConfig.maxAttempts - attemptCount;
+        res.setHeader(bruteForceConfig.headers.attemptsRemaining, remaining);
+
+        return res.status(401).json({
+          error: bruteForceConfig.messages.loginFailed,
+          attemptsRemaining: remaining,
+        });
+      }
 
       const valid = await bcrypt.compare(password, user.passwordHash);
-      if (!valid) return res.status(401).json({ error: 'Email ou mot de passe incorrect' });
+      if (!valid) {
+        // Failed attempt - track it
+        const attemptCount = await bruteForceMiddleware.trackFailedLogin(emailLower);
+        await bruteForceMiddleware.logLoginAttempt(user.id, emailLower, 'failed', ipAddress, userAgent, {
+          reason: 'invalid_password',
+        });
+
+        // Check if max attempts exceeded
+        if (attemptCount >= bruteForceConfig.maxAttempts) {
+          await bruteForceMiddleware.lockAccount(emailLower);
+          logger.error('[Login] Account locked due to max failed attempts', { email: emailLower });
+          return res.status(401).json({ error: bruteForceConfig.messages.loginFailed });
+        }
+
+        const remaining = bruteForceConfig.maxAttempts - attemptCount;
+        res.setHeader(bruteForceConfig.headers.attemptsRemaining, remaining);
+
+        return res.status(401).json({
+          error: bruteForceConfig.messages.loginFailed,
+          attemptsRemaining: remaining,
+        });
+      }
+
+      // Successful login - clear failed attempts and log success
+      await bruteForceMiddleware.clearFailedAttempts(emailLower);
+      await bruteForceMiddleware.logLoginAttempt(user.id, emailLower, 'success', ipAddress, userAgent);
+
+      // Check if 2FA is enabled
+      if (user.twoFAEnabled) {
+        // Generate temporary token for 2FA verification (expires in 10 minutes)
+        const twoFAToken = jwt.sign(
+          { userId: user.id, type: '2fa_login' },
+          process.env.JWT_SECRET,
+          { expiresIn: '10m' }
+        );
+
+        const { passwordHash: _, ...userSafe } = user;
+        return res.status(200).json({
+          requiresTwoFA: true,
+          twoFAToken,
+          user: userSafe,
+          message: 'Authentification à 2 facteurs requise',
+        });
+      }
 
       const accessToken  = generateAccessToken(user);
       const refreshToken = await generateRefreshToken(user.id);
@@ -429,6 +498,129 @@ router.post('/setup-admin', requireAuth, requireRole('ADMIN'), async (req, res) 
   } catch (err) {
     logger.error('Setup admin error', { error: err.message });
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/auth/unlock — Admin unlock account (requires verification)
+router.post('/unlock', requireAuth, requireRole('ADMIN'), async (req, res) => {
+  try {
+    const { email, reason } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'Email requis' });
+    }
+
+    const emailLower = email.toLowerCase();
+    const user = await prisma.user.findUnique({
+      where: { email: emailLower },
+      select: { id: true, email: true },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    }
+
+    // Clear lockout and failed attempts
+    await bruteForceMiddleware.clearLockout(emailLower);
+    await bruteForceMiddleware.clearFailedAttempts(emailLower);
+
+    // Log this action
+    await writeAdminLog(req, 'ACCOUNT_UNLOCK', 'User', user.id, {
+      email: emailLower,
+      reason: reason || 'manual_unlock',
+    });
+
+    logger.info('[Admin] Account unlocked', { email: emailLower, adminId: req.user.id });
+
+    res.json({
+      ok: true,
+      message: `Compte déverrouillé pour ${emailLower}`,
+      email: emailLower,
+    });
+  } catch (err) {
+    logger.error('Unlock account error', {
+      email: req.body?.email,
+      error: err.message,
+    });
+    res.status(500).json({
+      error: 'Erreur lors du déverrouillage du compte',
+      code: err.code || 'UNKNOWN_ERROR',
+    });
+  }
+});
+
+// GET /api/auth/login-history — View own login history
+router.get('/login-history', requireAuth, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const history = await bruteForceMiddleware.getLoginHistory(req.user.id, limit);
+
+    res.json({
+      ok: true,
+      attempts: history,
+      count: history.length,
+    });
+  } catch (err) {
+    logger.error('Get login history error', {
+      userId: req.user.id,
+      error: err.message,
+    });
+    res.status(500).json({
+      error: 'Erreur lors de la récupération de l\'historique',
+      code: err.code || 'UNKNOWN_ERROR',
+    });
+  }
+});
+
+// GET /api/admin/user/:id/security — Admin view security status
+router.get('/admin/user/:id/security', requireAuth, requireRole('ADMIN'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        lastLoginAt: true,
+        suspended: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    }
+
+    // Get attempt counts and lockout status
+    const attemptCount = await bruteForceMiddleware.getAttemptCount(user.email);
+    const lockoutStatus = await bruteForceMiddleware.checkLockout(user.email);
+    const loginHistory = await bruteForceMiddleware.getLoginHistory(id, 10);
+
+    res.json({
+      ok: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        lastLoginAt: user.lastLoginAt,
+        suspended: user.suspended,
+      },
+      security: {
+        failedAttempts: attemptCount,
+        isLocked: lockoutStatus.isLocked,
+        lockoutRemaining: lockoutStatus.remainingSeconds || 0,
+        maxAttempts: bruteForceConfig.maxAttempts,
+        lockoutDuration: bruteForceConfig.lockoutDurationSeconds,
+      },
+      recentAttempts: loginHistory.slice(0, 10),
+    });
+  } catch (err) {
+    logger.error('Get security status error', {
+      userId: req.params.id,
+      error: err.message,
+    });
+    res.status(500).json({
+      error: 'Erreur lors de la récupération du statut de sécurité',
+      code: err.code || 'UNKNOWN_ERROR',
+    });
   }
 });
 

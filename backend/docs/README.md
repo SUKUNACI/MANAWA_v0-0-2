@@ -9,7 +9,7 @@ Complete API documentation for MANAWA - Platform de mise en relation particulier
 Starting with this release, all endpoints are versioned. The current version is **v1**.
 
 - **Current API Version**: `v1` (stable)
-- **API Base URL**: `http://localhost:4000/api/v1/v1`
+- **API Base URL**: `http://localhost:4000/api/v1`
 - **Old Base URL**: `http://localhost:4000/api` (deprecated - redirects to v1)
 
 ### Accessing Documentation
