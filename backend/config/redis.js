@@ -1,8 +1,20 @@
 const logger = require('../utils/logger');
+const { CircuitBreaker } = require('../utils/circuit-breaker');
+const { getConfig } = require('./third-party-api-config');
 
 let redisClient = null;
 let inMemoryCache = new Map();
 let useInMemory = false;
+
+// Get configuration
+const config = getConfig('redis');
+const cbConfig = config?.circuitBreaker || {};
+
+// Initialize Circuit Breaker for Redis
+const circuitBreaker = new CircuitBreaker({
+  serviceName: 'Redis',
+  ...cbConfig,
+});
 
 // In-memory fallback cache with TTL support
 class InMemoryCache {
@@ -113,20 +125,30 @@ async function get(key) {
     return inMemoryCache.get(key);
   }
 
-  try {
-    const value = await redisClient.get(key);
-    if (!value) return null;
-
+  return circuitBreaker.execute(async () => {
     try {
-      return JSON.parse(value);
-    } catch {
-      return value;
+      const value = await redisClient.get(key);
+      if (!value) return null;
+
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    } catch (err) {
+      logger.warn('[Redis] Get error, using in-memory', { key, error: err.message });
+      useInMemory = true;
+      return inMemoryCache.get(key);
     }
-  } catch (err) {
-    logger.warn('[Redis] Get error, using in-memory', { key, error: err.message });
-    useInMemory = true;
-    return inMemoryCache.get(key);
-  }
+  }).catch(err => {
+    // If circuit breaker is open, fallback to in-memory
+    if (err.code === 'CIRCUIT_BREAKER_OPEN') {
+      logger.warn('[Redis] Circuit breaker open, using in-memory cache', { key });
+      useInMemory = true;
+      return inMemoryCache.get(key);
+    }
+    throw err;
+  });
 }
 
 // Set value in cache (Redis or in-memory)
@@ -135,14 +157,25 @@ async function set(key, value, ttl = 3600) {
     return inMemoryCache.set(key, value, ttl);
   }
 
-  try {
-    const serialized = typeof value === 'string' ? value : JSON.stringify(value);
-    await redisClient.setEx(key, ttl, serialized);
-  } catch (err) {
-    logger.warn('[Redis] Set error, using in-memory', { key, error: err.message });
-    useInMemory = true;
-    inMemoryCache.set(key, value, ttl);
-  }
+  return circuitBreaker.execute(async () => {
+    try {
+      const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+      await redisClient.setEx(key, ttl, serialized);
+    } catch (err) {
+      logger.warn('[Redis] Set error, using in-memory', { key, error: err.message });
+      useInMemory = true;
+      inMemoryCache.set(key, value, ttl);
+    }
+  }).catch(err => {
+    // If circuit breaker is open, fallback to in-memory
+    if (err.code === 'CIRCUIT_BREAKER_OPEN') {
+      logger.warn('[Redis] Circuit breaker open, using in-memory cache', { key });
+      useInMemory = true;
+      inMemoryCache.set(key, value, ttl);
+      return;
+    }
+    throw err;
+  });
 }
 
 // Delete key from cache
@@ -151,13 +184,24 @@ async function deleteKey(key) {
     return inMemoryCache.delete(key);
   }
 
-  try {
-    await redisClient.del(key);
-  } catch (err) {
-    logger.warn('[Redis] Delete error, using in-memory', { key, error: err.message });
-    useInMemory = true;
-    inMemoryCache.delete(key);
-  }
+  return circuitBreaker.execute(async () => {
+    try {
+      await redisClient.del(key);
+    } catch (err) {
+      logger.warn('[Redis] Delete error, using in-memory', { key, error: err.message });
+      useInMemory = true;
+      inMemoryCache.delete(key);
+    }
+  }).catch(err => {
+    // If circuit breaker is open, fallback to in-memory
+    if (err.code === 'CIRCUIT_BREAKER_OPEN') {
+      logger.warn('[Redis] Circuit breaker open, using in-memory cache', { key });
+      useInMemory = true;
+      inMemoryCache.delete(key);
+      return;
+    }
+    throw err;
+  });
 }
 
 // Delete keys matching pattern (e.g., user:123:* or projects:*:comments)
@@ -166,17 +210,27 @@ async function deletePattern(pattern) {
     return inMemoryCache.deletePattern(pattern);
   }
 
-  try {
-    const keys = await redisClient.keys(pattern);
-    if (keys.length > 0) {
-      await redisClient.del(keys);
+  return circuitBreaker.execute(async () => {
+    try {
+      const keys = await redisClient.keys(pattern);
+      if (keys.length > 0) {
+        await redisClient.del(keys);
+      }
+      return keys.length;
+    } catch (err) {
+      logger.warn('[Redis] Pattern delete error, using in-memory', { pattern, error: err.message });
+      useInMemory = true;
+      return inMemoryCache.deletePattern(pattern);
     }
-    return keys.length;
-  } catch (err) {
-    logger.warn('[Redis] Pattern delete error, using in-memory', { pattern, error: err.message });
-    useInMemory = true;
-    return inMemoryCache.deletePattern(pattern);
-  }
+  }).catch(err => {
+    // If circuit breaker is open, fallback to in-memory
+    if (err.code === 'CIRCUIT_BREAKER_OPEN') {
+      logger.warn('[Redis] Circuit breaker open, using in-memory cache', { pattern });
+      useInMemory = true;
+      return inMemoryCache.deletePattern(pattern);
+    }
+    throw err;
+  });
 }
 
 // Clear entire cache
@@ -185,13 +239,24 @@ async function clear() {
     return inMemoryCache.clear();
   }
 
-  try {
-    await redisClient.flushDb();
-  } catch (err) {
-    logger.warn('[Redis] Clear error, using in-memory', { error: err.message });
-    useInMemory = true;
-    inMemoryCache.clear();
-  }
+  return circuitBreaker.execute(async () => {
+    try {
+      await redisClient.flushDb();
+    } catch (err) {
+      logger.warn('[Redis] Clear error, using in-memory', { error: err.message });
+      useInMemory = true;
+      inMemoryCache.clear();
+    }
+  }).catch(err => {
+    // If circuit breaker is open, fallback to in-memory
+    if (err.code === 'CIRCUIT_BREAKER_OPEN') {
+      logger.warn('[Redis] Circuit breaker open, using in-memory cache');
+      useInMemory = true;
+      inMemoryCache.clear();
+      return;
+    }
+    throw err;
+  });
 }
 
 // Graceful shutdown
@@ -236,4 +301,6 @@ module.exports = {
   clear,
   disconnect,
   healthCheck,
+  // Expose circuit breaker for monitoring/testing
+  circuitBreaker,
 };

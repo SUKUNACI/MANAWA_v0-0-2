@@ -894,15 +894,17 @@ model Webhook {
 }
 
 model WebhookLog {
-  id          String   @id @default(uuid())
-  webhookId   String
-  event       String
-  payload     String   // JSON payload
-  status      String   // "success" | "failed" | "pending"
-  response    String?  // Response from endpoint
-  attempt     Int      @default(1)
-  nextRetryAt DateTime?
-  createdAt   DateTime @default(now())
+  id               String   @id @default(uuid())
+  webhookId        String
+  event            String
+  payload          String   // JSON payload
+  status           String   // "success" | "failed" | "pending"
+  response         String?  // Response from endpoint
+  attempt          Int      @default(1)
+  nextRetryAt      DateTime?
+  sequence         Int      @default(0) // Q56: Sequence number pour ordre FIFO
+  idempotencyKey   String?  // Q56: Clé d'idempotence pour déduplication
+  createdAt        DateTime @default(now())
 
   webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
 
@@ -910,6 +912,8 @@ model WebhookLog {
   @@index([event])
   @@index([status])
   @@index([createdAt])
+  @@index([sequence]) // Q56: Index sur sequence pour queries
+  @@index([idempotencyKey]) // Q56: Index sur idempotency key
 }
 
 // Notification Templates with versioning

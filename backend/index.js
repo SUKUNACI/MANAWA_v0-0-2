@@ -73,6 +73,8 @@ const backupsAdminRoutes = require('./routes/admin-backups');
 const notificationTemplatesRoutes = require('./routes/notification-templates');
 const notificationPreferencesRoutes = require('./routes/notification-preferences');
 const docsRoutes = require('./routes/docs');
+const webhooksGeniuspayRoutes = require('./routes/webhooks-geniuspay');
+const paymentsRetryRoutes = require('./routes/payments-retry');
 
 // Firebase initialization
 const { initializeFirebase, getMessaging } = require('./config/firebase-admin');
@@ -221,11 +223,21 @@ const uploadLimiter = rateLimit({
 // API Versioning middleware
 const { versioningHeadersMiddleware, apiRedirectMiddleware, versionValidationMiddleware } = require('./middleware/versioningMiddleware');
 
+// Q59: API Timeout middleware for third-party endpoints
+const { paymentTimeoutMiddleware, subscriptionTimeoutMiddleware } = require('./middleware/api-timeout');
+
 // Serve favicon
 app.use('/favicon.png', express.static(require('path').join(__dirname, '../public/favicon.png')));
 app.use('/uploads', uploadLimiter, express.static(require('path').join(__dirname, '../uploads')));
 app.use('/admin', express.static(require('path').join(__dirname, '../public/admin')));
 
+// Q55 + Q56: Middleware de vérification de signature webhook
+const { captureRawBody, webhookSignatureVerification } = require('./middleware/webhook-signature-verification');
+
+// Q55: Capturer le body brut AVANT JSON parsing (pour signature verification)
+app.use(captureRawBody);
+
+// JSON parsing avec gestion spéciale des webhooks
 app.use((req, res, next) => {
   // Skip JSON parsing for webhook endpoints (both old and new paths)
   if (req.originalUrl === '/api/payments/webhooks/geniuspay' ||
@@ -278,7 +290,8 @@ apiV1Router.use('/auth', authRoutes);
 apiV1Router.use('/auth/2fa', auth2FARoutes);
 apiV1Router.use('/users', userRoutes);
 apiV1Router.use('/verification', verificationRoutes);
-apiV1Router.use('/subscriptions', subscriptionRoutes);
+// Q59: Apply 30s timeout middleware to subscriptions routes
+apiV1Router.use('/subscriptions', subscriptionTimeoutMiddleware, subscriptionRoutes);
 apiV1Router.use('/projects', projectRoutes);
 apiV1Router.use('/professionals', professionalRoutes);
 apiV1Router.use('/quotes', injectAdminCookie, quoteRoutes);
@@ -288,7 +301,10 @@ apiV1Router.use('/companies', companiesRoutes);
 apiV1Router.use('/finances', financesRoutes);
 apiV1Router.use('/bookings', bookingsRoutes);
 apiV1Router.use('/reviews', reviewRoutes);
-apiV1Router.use('/payments', paymentRoutes);
+// Q59: Apply 30s timeout middleware to payment routes
+apiV1Router.use('/payments', paymentTimeoutMiddleware, paymentRoutes);
+// Q53: Payment retry routes
+apiV1Router.use('/payments', paymentTimeoutMiddleware, paymentsRetryRoutes);
 apiV1Router.use('/payment-stats', paymentRoutes);
 apiV1Router.use('/admin', injectAdminCookie, adminRoutes);
 apiV1Router.use('/admin/badges', injectAdminCookie, badgeAdminRoutes);
@@ -313,6 +329,7 @@ apiV1Router.use('/badges', badgeRoutes);
 apiV1Router.use('/referrals', referralRoutes);
 apiV1Router.use('/analytics', analyticsRoutes);
 apiV1Router.use('/video-calls', videoCallRoutes);
+apiV1Router.use('/webhooks/geniuspay', webhooksGeniuspayRoutes);
 
 // Mount versioned API routes
 app.use('/api/v1', apiV1Router);
@@ -597,6 +614,28 @@ async function cleanupOldAdminLogs() {
 setInterval(cleanupOldAdminLogs, 24 * 60 * 60 * 1000);
 cleanupOldAdminLogs();
 
+// Q54: Webhook retry scheduler - runs every 30 minutes
+const { webhookRetryScheduler } = require('./jobs/webhook-retry-scheduler');
+async function scheduleWebhookRetries() {
+  try {
+    const logger = require('./utils/logger');
+    const result = await webhookRetryScheduler();
+    logger.debug('[CRON] Webhook retry scheduler completed', result);
+  } catch (err) {
+    const logger = require('./utils/logger');
+    logger.error('[CRON] Webhook retry scheduler error', { error: err.message });
+  }
+}
+// Run immediately on startup (after a delay to ensure DB connection is ready)
+setTimeout(scheduleWebhookRetries, 10 * 1000);
+// Then run every 30 minutes (30 * 60 * 1000 ms)
+setInterval(scheduleWebhookRetries, 30 * 60 * 1000);
+
+// Q52: Schedule daily payment reconciliation (runs at 00:00 UTC)
+// Checks ALL pending payments and syncs with GeniusPay
+const { schedulePaymentReconciliation } = require('./jobs/payment-reconciliation-daily');
+schedulePaymentReconciliation();
+
 // Backup quotidien de la base de données via l'API Neon branching
 // ⚠️ DÉCALÉ DE 5MIN AU DÉMARRAGE POUR NE PAS BLOQUER LE SERVEUR
 const { createDailyBackupBranch } = require('./utils/dbBackup');
@@ -652,6 +691,16 @@ async function startServer() {
       console.log('✓ Workers de file d\'attente initialisés');
     } catch (err) {
       console.error('⚠️  Erreur initialisation workers (non-bloquant):', err.message);
+    }
+
+    // Q56: Initialize webhook queue
+    console.log('⏳ Initialisation de la queue webhook...');
+    try {
+      const { initializeWebhookQueue } = require('./utils/webhook-queue-manager');
+      await initializeWebhookQueue();
+      console.log('✓ Queue webhook initialisée');
+    } catch (err) {
+      console.error('⚠️  Erreur initialisation webhook queue (non-bloquant):', err.message);
     }
 
     server.listen(PORT, () => {

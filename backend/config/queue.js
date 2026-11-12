@@ -85,6 +85,15 @@ const setupQueueErrorHandlers = (queue, queueName) => {
   });
 };
 
+// Q56: Import webhook queue separately (configured in webhook-queue-config.js)
+let webhookQueue = null;
+try {
+  const { webhookQueue: wq } = require('./webhook-queue-config');
+  webhookQueue = wq;
+} catch (err) {
+  logger.warn('[Queue] Failed to load webhook queue config (non-critical):', err.message);
+}
+
 // Setup error handlers for all queues
 [emailQueue, pdfQueue, analyticsQueue, paymentQueue, badgesQueue].forEach((queue, index) => {
   const names = ['emails', 'pdfs', 'analytics', 'payments', 'badges'];
@@ -163,6 +172,7 @@ module.exports = {
   analyticsQueue,
   paymentQueue,
   badgesQueue,
+  webhookQueue, // Q56: Export webhook queue
   getQueueStats,
   retryFailedJobs,
   cleanOldJobs,

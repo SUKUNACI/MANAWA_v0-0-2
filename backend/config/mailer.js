@@ -1,4 +1,9 @@
 const Mailjet = require('node-mailjet');
+const timeoutConfig = require('./timeout-config');
+const { CircuitBreaker } = require('../utils/circuit-breaker');
+const { AdaptiveRateLimiter } = require('../utils/rate-limiter-adaptive');
+const { getConfig } = require('./third-party-api-config');
+const logger = require('../utils/logger');
 
 const MJ_API_KEY = process.env.MAILJET_API_KEY;
 const MJ_SECRET_KEY = process.env.MAILJET_SECRET_KEY;
@@ -7,9 +12,30 @@ const FROM_NAME = process.env.MAILJET_FROM_NAME || 'MANAWA';
 
 const isConfigured = !!(MJ_API_KEY && MJ_SECRET_KEY);
 
+// Get configuration
+const config = getConfig('mailjet');
+const cbConfig = config?.circuitBreaker || {};
+const rlConfig = config?.rateLimiter || {};
+
+// Initialize Circuit Breaker and Rate Limiter
+const circuitBreaker = new CircuitBreaker({
+  serviceName: 'Mailjet',
+  ...cbConfig,
+});
+
+const rateLimiter = new AdaptiveRateLimiter({
+  serviceName: 'Mailjet',
+  ...rlConfig,
+});
+
 let mailjet = null;
 if (isConfigured) {
-  mailjet = new Mailjet({ apiKey: MJ_API_KEY, apiSecret: MJ_SECRET_KEY });
+  // Q59: Add 5s timeout for Mailjet API calls
+  mailjet = new Mailjet({
+    apiKey: MJ_API_KEY,
+    apiSecret: MJ_SECRET_KEY,
+    timeout: timeoutConfig.MAILJET_TIMEOUT, // 5 seconds
+  });
 }
 
 function buildHtml(code, isVerification) {
@@ -51,38 +77,43 @@ async function sendVerificationEmail(to, code, purpose) {
     return { sent: false, devCode: code };
   }
 
-  try {
-    const response = await mailjet
-      .post('send', { version: 'v3.1' })
-      .request({
-        Messages: [
-          {
-            From: { Email: FROM_EMAIL, Name: FROM_NAME },
-            To: [{ Email: to }],
-            Subject: subject,
-            TextPart: text,
-            HTMLPart: html,
-          },
-        ],
-      });
+  return circuitBreaker.execute(async () => {
+    return rateLimiter.execute(async () => {
+      try {
+        const response = await mailjet
+          .post('send', { version: 'v3.1' })
+          .request({
+            Messages: [
+              {
+                From: { Email: FROM_EMAIL, Name: FROM_NAME },
+                To: [{ Email: to }],
+                Subject: subject,
+                TextPart: text,
+                HTMLPart: html,
+              },
+            ],
+          });
 
-    const status = response.body?.Messages?.[0]?.Status;
-    if (status && status !== 'success') {
-      throw new Error(`Mailjet message status: ${status}`);
-    }
+        const status = response.body?.Messages?.[0]?.Status;
+        if (status && status !== 'success') {
+          throw new Error(`Mailjet message status: ${status}`);
+        }
 
-    return { sent: true };
-  } catch (err) {
-    const statusCode = err.statusCode || err.response?.statusCode;
-    const errorInfo = err.response?.body || err.message;
-    logger.error(`[Mailjet] Erreur envoi email (${statusCode}):`, errorInfo);
+        logger.info(`[Mailjet] ✅ ${isVerification ? 'Verification' : 'Reset'} email sent to ${to}`);
+        return { sent: true };
+      } catch (err) {
+        const statusCode = err.statusCode || err.response?.statusCode;
+        const errorInfo = err.response?.body || err.message;
+        logger.error(`[Mailjet] Erreur envoi email (${statusCode}):`, errorInfo);
 
-    if (statusCode === 401) throw new Error('Mailjet : clés API invalides');
-    if (statusCode === 429) throw new Error('Mailjet : limite de débit atteinte, réessayez plus tard');
-    if (statusCode >= 500) throw new Error('Mailjet : erreur serveur, réessayez plus tard');
+        if (statusCode === 401) throw new Error('Mailjet : clés API invalides');
+        if (statusCode === 429) throw new Error('Mailjet : limite de débit atteinte, réessayez plus tard');
+        if (statusCode >= 500) throw new Error('Mailjet : erreur serveur, réessayez plus tard');
 
-    throw new Error(`Impossible d'envoyer l'email de ${isVerification ? 'vérification' : 'réinitialisation'}`);
-  }
+        throw new Error(`Impossible d'envoyer l'email de ${isVerification ? 'vérification' : 'réinitialisation'}`);
+      }
+    });
+  });
 }
 
 async function sendPackageSuspensionEmail(to, packageTitle, reason) {
@@ -112,32 +143,36 @@ async function sendPackageSuspensionEmail(to, packageTitle, reason) {
     return { sent: false };
   }
 
-  try {
-    const response = await mailjet
-      .post('send', { version: 'v3.1' })
-      .request({
-        Messages: [
-          {
-            From: { Email: FROM_EMAIL, Name: FROM_NAME },
-            To: [{ Email: to }],
-            Subject: subject,
-            TextPart: text,
-            HTMLPart: html,
-          },
-        ],
-      });
+  return circuitBreaker.execute(async () => {
+    return rateLimiter.execute(async () => {
+      try {
+        const response = await mailjet
+          .post('send', { version: 'v3.1' })
+          .request({
+            Messages: [
+              {
+                From: { Email: FROM_EMAIL, Name: FROM_NAME },
+                To: [{ Email: to }],
+                Subject: subject,
+                TextPart: text,
+                HTMLPart: html,
+              },
+            ],
+          });
 
-    const status = response.body?.Messages?.[0]?.Status;
-    if (status && status !== 'success') {
-      throw new Error(`Mailjet message status: ${status}`);
-    }
+        const status = response.body?.Messages?.[0]?.Status;
+        if (status && status !== 'success') {
+          throw new Error(`Mailjet message status: ${status}`);
+        }
 
-    logger.info(`[Mailjet] ✅ Email suspension envoyé à ${to}`);
-    return { sent: true };
-  } catch (err) {
-    logger.error(`[Mailjet] Erreur envoi email suspension:`, err.message);
-    return { sent: false, error: err.message };
-  }
+        logger.info(`[Mailjet] ✅ Email suspension envoyé à ${to}`);
+        return { sent: true };
+      } catch (err) {
+        logger.error(`[Mailjet] Erreur envoi email suspension:`, err.message);
+        return { sent: false, error: err.message };
+      }
+    });
+  });
 }
 
 /**
@@ -157,32 +192,36 @@ async function send(options) {
     return { sent: false };
   }
 
-  try {
-    const response = await mailjet
-      .post('send', { version: 'v3.1' })
-      .request({
-        Messages: [
-          {
-            From: { Email: FROM_EMAIL, Name: FROM_NAME },
-            To: [{ Email: to }],
-            Subject: subject,
-            TextPart: text || subject,
-            HTMLPart: html || text,
-          },
-        ],
-      });
+  return circuitBreaker.execute(async () => {
+    return rateLimiter.execute(async () => {
+      try {
+        const response = await mailjet
+          .post('send', { version: 'v3.1' })
+          .request({
+            Messages: [
+              {
+                From: { Email: FROM_EMAIL, Name: FROM_NAME },
+                To: [{ Email: to }],
+                Subject: subject,
+                TextPart: text || subject,
+                HTMLPart: html || text,
+              },
+            ],
+          });
 
-    const status = response.body?.Messages?.[0]?.Status;
-    if (status && status !== 'success') {
-      throw new Error(`Mailjet message status: ${status}`);
-    }
+        const status = response.body?.Messages?.[0]?.Status;
+        if (status && status !== 'success') {
+          throw new Error(`Mailjet message status: ${status}`);
+        }
 
-    logger.info(`[Mailjet] ✅ Email envoyé à ${to}`);
-    return { sent: true };
-  } catch (err) {
-    logger.error(`[Mailjet] Erreur envoi email:`, err.message);
-    return { sent: false, error: err.message };
-  }
+        logger.info(`[Mailjet] ✅ Email envoyé à ${to}`);
+        return { sent: true };
+      } catch (err) {
+        logger.error(`[Mailjet] Erreur envoi email:`, err.message);
+        return { sent: false, error: err.message };
+      }
+    });
+  });
 }
 
-module.exports = { sendVerificationEmail, sendPackageSuspensionEmail, send, isConfigured };
+module.exports = { sendVerificationEmail, sendPackageSuspensionEmail, send, isConfigured, circuitBreaker, rateLimiter };
