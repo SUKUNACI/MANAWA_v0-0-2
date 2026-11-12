@@ -83,13 +83,13 @@ function validatePageBasedPaginationQuery() {
   return [
     query('page')
       .optional()
-      .isInt({ min: 1 })
-      .withMessage('page must be >= 1')
+      .isInt()
+      .withMessage('page must be an integer')
       .toInt(),
     query('limit')
       .optional()
-      .isInt({ min: paginationConfig.MIN_LIMIT, max: paginationConfig.MAX_LIMIT })
-      .withMessage(`limit must be between ${paginationConfig.MIN_LIMIT} and ${paginationConfig.MAX_LIMIT}`)
+      .isInt()
+      .withMessage('limit must be an integer')
       .toInt(),
   ];
 }
