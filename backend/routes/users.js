@@ -85,9 +85,14 @@ router.get('/me/recently-viewed', requireAuth, async (req, res, next) => {
       },
       orderBy: { createdAt: 'desc' },
       take: 50,
-      distinct: ['professionalId'], // Built-in deduplication, not manual loop
     });
-    res.json(views.slice(0, 10).map((v) => v.professional));
+    const seen = new Set();
+    const unique = views.filter((v) => {
+      if (seen.has(v.professionalId)) return false;
+      seen.add(v.professionalId);
+      return true;
+    });
+    res.json(unique.slice(0, 10).map((v) => v.professional));
   } catch (err) {
     next(err);
   }

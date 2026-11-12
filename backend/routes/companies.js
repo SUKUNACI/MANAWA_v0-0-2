@@ -78,7 +78,13 @@ router.get('/', adminLimiter, requireAuth, requirePermission('companies'),
       }),
     ]);
 
-    res.json(buildPaginatedResponse(companies, limit, offset, total));
+    const page = Math.floor(offset / limit) + 1;
+    res.json({
+      companies,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    });
   } catch (err) {
     next(err);
   }
