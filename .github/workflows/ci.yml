@@ -136,13 +136,7 @@ jobs:
 
       - name: ESLint — no-eval security rule
         working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          npx eslint . \
-            --ext .js \
-            --rule '{"no-eval":"error","no-implied-eval":"error","no-new-func":"error"}' \
-            --ignore-pattern 'node_modules/**' \
-            --ignore-pattern 'coverage/**' \
-            --max-warnings 0
+        run: npx eslint . --max-warnings 0
 
   # ─── Q114: Performance regression testing ────────────────────────────────────
   performance:

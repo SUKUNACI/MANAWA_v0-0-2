@@ -23,8 +23,10 @@ const API_URL = 'http://localhost:5000';
 // Mock admin token - will be set from env or test setup
 let adminAuthToken = process.env.TEST_ADMIN_TOKEN || 'Bearer mock-token';
 
+// Module-level variable so the export at line 575 can reference it
+let testBookingId = null;
+
 describe('🔥 SMOKE TEST: Reservations Module', () => {
-  let testBookingId = null;
   let testBooking = null;
 
   describe('1️⃣ PAGE LOAD & DATA POPULATION', () => {
