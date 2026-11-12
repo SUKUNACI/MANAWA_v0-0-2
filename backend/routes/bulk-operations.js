@@ -11,6 +11,8 @@ const prisma = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const bulkConfig = require('../config/bulk-config');
 const logger = require('../utils/logger');
+const { buildPaginationQuery } = require('../utils/sorting-helper');
+const { getSortableFields } = require('../config/sortable-fields');
 
 const router = express.Router();
 

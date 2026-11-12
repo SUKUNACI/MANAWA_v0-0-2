@@ -5,6 +5,8 @@ const prisma = require('../config/db');
 const { requireAuth } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
 const logger = require('../utils/logger');
+const { buildPaginationQuery } = require('../utils/sorting-helper');
+const { getSortableFields } = require('../config/sortable-fields');
 const { applyPageBasedPagination, validatePageBasedPaginationQuery, buildPaginatedResponse } = require('../utils/pagination-helper');
 
 const router = express.Router();
@@ -44,8 +46,7 @@ router.get(
   requireAuth,
   requireAdmin,
   [
-    query('page').optional().isInt({ min: 1 }).withMessage('Invalid page'),
-    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Invalid limit'),
+    ...validatePageBasedPaginationQuery(),
     query('language').optional().isIn(['fr', 'en', 'es', 'de']).withMessage('Invalid language'),
     query('type').optional().trim().isLength({ min: 1 }).withMessage('Invalid type'),
     query('isActive').optional().isIn(['true', 'false']).withMessage('Invalid isActive'),
@@ -53,8 +54,7 @@ router.get(
   handleValidationErrors,
   async (req, res, next) => {
     try {
-      const page = Math.max(1, parseInt(req.query.page) || 1);
-      const limit = Math.min(50, parseInt(req.query.limit) || 20);
+      const { limit, skip, offset } = applyPageBasedPagination(req.query, 'notification-templates');
       const language = req.query.language || undefined;
       const type = req.query.type || undefined;
       const isActive = req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined;
@@ -65,26 +65,18 @@ router.get(
       if (type) where.type = type;
       if (isActive !== undefined) where.isActive = isActive;
 
-      // Get total count
-      const total = await prisma.notificationTemplate.count({ where });
+      // Get total count and templates in parallel
+      const [templates, total] = await Promise.all([
+        prisma.notificationTemplate.findMany({
+          where,
+          orderBy: [{ name: 'asc' }, { version: 'desc' }],
+          skip,
+          take: limit,
+        }),
+        prisma.notificationTemplate.count({ where }),
+      ]);
 
-      // Get templates
-      const templates = await prisma.notificationTemplate.findMany({
-        where,
-        orderBy: [{ name: 'asc' }, { version: 'desc' }],
-        skip: (page - 1) * limit,
-        take: limit,
-      });
-
-      res.json({
-        templates,
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit),
-        },
-      });
+      res.json(buildPaginatedResponse(templates, limit, offset, total));
     } catch (err) {
       next(err);
     }

@@ -2,9 +2,12 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { query, validationResult } = require('express-validator');
 const prisma = require('../config/db');
+const { buildPaginationQuery } = require('../utils/sorting-helper');
+const { getSortableFields } = require('../config/sortable-fields');
 const { requireAuth, optionalAuth } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
 const { validateFilters, applyFilters } = require('../utils/filter-helper');
+const { applyPageBasedPagination, validatePageBasedPaginationQuery, buildPaginatedResponse } = require('../utils/pagination-helper');
 
 const router = express.Router();
 

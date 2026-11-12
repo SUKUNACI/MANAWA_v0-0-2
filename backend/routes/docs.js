@@ -20,6 +20,8 @@ const router = express.Router();
 try {
   // Load Swagger configuration
   const specs = require('../docs/swagger');
+const { buildPaginationQuery } = require('../utils/sorting-helper');
+const { getSortableFields } = require('../config/sortable-fields');
 
   // Mount Swagger UI
   router.use('/', swaggerUi.serve, swaggerUi.setup(specs, {

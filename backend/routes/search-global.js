@@ -17,6 +17,8 @@ const { handleValidationErrors } = require('../middleware/validateInput');
 const { globalSearch } = require('../config/meilisearch');
 const { validateFilters } = require('../utils/filter-helper');
 const logger = require('../utils/logger');
+const { buildPaginationQuery } = require('../utils/sorting-helper');
+const { getSortableFields } = require('../config/sortable-fields');
 
 const router = express.Router();
 
