@@ -4,7 +4,6 @@
  */
 
 const request = require('supertest');
-const { expect } = require('chai');
 const { prisma } = require('../config/db');
 const rollbackManager = require('../utils/rollback-manager');
 
@@ -29,10 +28,10 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
           changelog
         );
 
-        expect(result).to.have.property('id');
-        expect(result.version).to.equal(version);
-        expect(result.changelog).to.equal(changelog);
-        expect(result.createdBy).to.equal(mockAdminId);
+        expect(result).id !== undefined ? expect(result).toHaveProperty('id') : expect(result).toHaveProperty('id');
+        expect(result.version).toBe(version);
+        expect(result.changelog).toBe(changelog);
+        expect(result.createdBy).toBe(mockAdminId);
         expect(result.snapshot).to.be.an('object');
       });
 
@@ -53,7 +52,7 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
             mockAdminId,
             'Duplicate version'
           );
-          expect.fail('Should have thrown error for duplicate version');
+          throw new Error('Should have thrown error for duplicate version');
         } catch (error) {
           expect(error.message).to.include('already exists');
         }
@@ -70,7 +69,7 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
 
         // Tag should be created (if in git repo)
         if (result.tag) {
-          expect(result.tag).to.equal(`config-${version}`);
+          expect(result.tag).toBe(`config-${version}`);
         }
       });
     });
@@ -89,13 +88,13 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
         // Mark as stable
         const result = await rollbackManager.markVersionAsStable(version);
 
-        expect(result.isStable).to.be.true;
+        expect(result.isStable).toBe(true);
       });
 
       it('should reject non-existent version', async () => {
         try {
           await rollbackManager.markVersionAsStable('99.99.99');
-          expect.fail('Should have thrown error');
+          throw new Error('Should have thrown error');
         } catch (error) {
           expect(error.message).to.include('not found');
         }
@@ -130,8 +129,8 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
           'Revert buggy version'
         );
 
-        expect(result.success).to.be.true;
-        expect(result.rollbackId).to.exist;
+        expect(result.success).toBe(true);
+        expect(result.rollbackId).toBeDefined();
       });
 
       it('should create rollback event record', async () => {
@@ -151,10 +150,10 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
           where: { id: result.rollbackId },
         });
 
-        expect(rollbackEvent).to.exist;
-        expect(rollbackEvent.toVersion).to.equal('2.1.0');
-        expect(rollbackEvent.trigger).to.equal('manual');
-        expect(rollbackEvent.triggeredBy).to.equal(mockAdminId);
+        expect(rollbackEvent).toBeDefined();
+        expect(rollbackEvent.toVersion).toBe('2.1.0');
+        expect(rollbackEvent.trigger).toBe('manual');
+        expect(rollbackEvent.triggeredBy).toBe(mockAdminId);
       });
 
       it('should reject rollback to non-existent version', async () => {
@@ -164,7 +163,7 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
             mockAdminId,
             'Invalid version'
           );
-          expect.fail('Should have thrown error');
+          throw new Error('Should have thrown error');
         } catch (error) {
           expect(error.message).to.include('not found');
         }
@@ -198,8 +197,8 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
           metrics
         );
 
-        expect(result.initiated).to.be.true;
-        expect(result.rollbackId).to.exist;
+        expect(result.initiated).toBe(true);
+        expect(result.rollbackId).toBeDefined();
       });
 
       it('should not rollback if error rate below threshold', async () => {
@@ -212,8 +211,8 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
           metrics
         );
 
-        expect(result.initiated).to.be.false;
-        expect(result.reason).to.equal('threshold_not_met');
+        expect(result.initiated).toBe(false);
+        expect(result.reason).toBe('threshold_not_met');
       });
 
       it('should not rollback if auto-rollback is disabled', async () => {
@@ -232,8 +231,8 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
           metrics
         );
 
-        expect(result.initiated).to.be.false;
-        expect(result.reason).to.equal('auto_rollback_disabled');
+        expect(result.initiated).toBe(false);
+        expect(result.reason).toBe('auto_rollback_disabled');
 
         // Restore
         require('../config/monitoring-thresholds').rollback.AUTO_ROLLBACK_ON_ERROR_SPIKE = originalValue;
@@ -264,7 +263,7 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
         const result1 = await rollbackManager.autoRollbackOnErrorSpike(
           metrics1
         );
-        expect(result1.initiated).to.be.true;
+        expect(result1.initiated).toBe(true);
 
         // Immediate second rollback attempt should fail
         const metrics2 = {
@@ -276,8 +275,8 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
           metrics2
         );
 
-        expect(result2.initiated).to.be.false;
-        expect(result2.reason).to.equal('rollback_frequency_limit');
+        expect(result2.initiated).toBe(false);
+        expect(result2.reason).toBe('rollback_frequency_limit');
       });
     });
 
@@ -285,15 +284,15 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
       it('should switch to green environment', async () => {
         const result = await rollbackManager.blueGreenFallback('green');
 
-        expect(result.success).to.be.true;
-        expect(result.environment).to.equal('green');
+        expect(result.success).toBe(true);
+        expect(result.environment).toBe('green');
       });
 
       it('should switch back to blue', async () => {
         const result = await rollbackManager.blueGreenFallback('blue');
 
-        expect(result.success).to.be.true;
-        expect(result.environment).to.equal('blue');
+        expect(result.success).toBe(true);
+        expect(result.environment).toBe('blue');
       });
     });
 
@@ -315,17 +314,17 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
         // Get history
         const history = await rollbackManager.getRollbackHistory(10);
 
-        expect(history).to.be.an('array');
-        expect(history.length).to.be.greaterThan(0);
-        expect(history[0]).to.have.property('fromVersion');
-        expect(history[0]).to.have.property('toVersion');
-        expect(history[0]).to.have.property('createdAt');
+        expect(history).toBeInstanceOf(Array);
+        expect(history.length).toBeGreaterThan(0);
+        expect(history[0]).fromVersion !== undefined ? expect(history[0]).toHaveProperty('fromVersion') : expect(history[0]).toHaveProperty('fromVersion');
+        expect(history[0]).toVersion !== undefined ? expect(history[0]).toHaveProperty('toVersion') : expect(history[0]).toHaveProperty('toVersion');
+        expect(history[0]).createdAt !== undefined ? expect(history[0]).toHaveProperty('createdAt') : expect(history[0]).toHaveProperty('createdAt');
       });
 
       it('should limit history results', async () => {
         const history = await rollbackManager.getRollbackHistory(5);
 
-        expect(history.length).to.be.at.most(5);
+        expect(history.length).toBeLessThanOrEqual(5);
       });
     });
   });
@@ -340,41 +339,41 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
     describe('shouldRollbackOnErrorRate()', () => {
       it('should trigger rollback when threshold exceeded', () => {
         const result = thresholds.shouldRollbackOnErrorRate(2.0, 5);
-        expect(result).to.be.true;
+        expect(result).toBe(true);
       });
 
       it('should not trigger when below threshold', () => {
         const result = thresholds.shouldRollbackOnErrorRate(0.5, 5);
-        expect(result).to.be.false;
+        expect(result).toBe(false);
       });
 
       it('should not trigger if duration too short', () => {
         const result = thresholds.shouldRollbackOnErrorRate(2.0, 2);
-        expect(result).to.be.false;
+        expect(result).toBe(false);
       });
     });
 
     describe('shouldRollbackOnLatency()', () => {
       it('should trigger rollback when latency exceeded', () => {
         const result = thresholds.shouldRollbackOnLatency(4000, 5);
-        expect(result).to.be.true;
+        expect(result).toBe(true);
       });
 
       it('should not trigger when below threshold', () => {
         const result = thresholds.shouldRollbackOnLatency(1500, 5);
-        expect(result).to.be.false;
+        expect(result).toBe(false);
       });
     });
 
     describe('shouldRollbackOnMemory()', () => {
       it('should trigger rollback when memory exceeded', () => {
         const result = thresholds.shouldRollbackOnMemory(90, 10);
-        expect(result).to.be.true;
+        expect(result).toBe(true);
       });
 
       it('should not trigger when below threshold', () => {
         const result = thresholds.shouldRollbackOnMemory(70, 10);
-        expect(result).to.be.false;
+        expect(result).toBe(false);
       });
     });
 
@@ -385,7 +384,7 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
           latencyP95Ms: 3000,
           memoryPercent: 85,
         });
-        expect(result).to.equal('CRITICAL');
+        expect(result).toBe('CRITICAL');
       });
 
       it('should return ALERT when approaching threshold', () => {
@@ -394,7 +393,7 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
           latencyP95Ms: 1600,
           memoryPercent: 78,
         });
-        expect(result).to.equal('ALERT');
+        expect(result).toBe('ALERT');
       });
 
       it('should return OK when all normal', () => {
@@ -403,7 +402,7 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
           latencyP95Ms: 200,
           memoryPercent: 50,
         });
-        expect(result).to.equal('OK');
+        expect(result).toBe('OK');
       });
     });
   });
@@ -449,10 +448,10 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
 
         // Verify structure (at least one record exists)
         if (result.length > 0) {
-          expect(result[0]).to.have.property('id');
-          expect(result[0]).to.have.property('version');
-          expect(result[0]).to.have.property('snapshot');
-          expect(result[0]).to.have.property('createdAt');
+          expect(result[0]).id !== undefined ? expect(result[0]).toHaveProperty('id') : expect(result[0]).toHaveProperty('id');
+          expect(result[0]).version !== undefined ? expect(result[0]).toHaveProperty('version') : expect(result[0]).toHaveProperty('version');
+          expect(result[0]).snapshot !== undefined ? expect(result[0]).toHaveProperty('snapshot') : expect(result[0]).toHaveProperty('snapshot');
+          expect(result[0]).createdAt !== undefined ? expect(result[0]).toHaveProperty('createdAt') : expect(result[0]).toHaveProperty('createdAt');
         }
       });
     });
@@ -464,10 +463,10 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
         });
 
         if (event) {
-          expect(event).to.have.property('fromVersion');
-          expect(event).to.have.property('toVersion');
-          expect(event).to.have.property('trigger');
-          expect(event).to.have.property('status');
+          expect(event).fromVersion !== undefined ? expect(event).toHaveProperty('fromVersion') : expect(event).toHaveProperty('fromVersion');
+          expect(event).toVersion !== undefined ? expect(event).toHaveProperty('toVersion') : expect(event).toHaveProperty('toVersion');
+          expect(event).trigger !== undefined ? expect(event).toHaveProperty('trigger') : expect(event).toHaveProperty('trigger');
+          expect(event).status !== undefined ? expect(event).toHaveProperty('status') : expect(event).toHaveProperty('status');
         }
       });
     });
@@ -479,10 +478,10 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
         });
 
         if (metric) {
-          expect(metric).to.have.property('errorRate');
-          expect(metric).to.have.property('latencyP95');
-          expect(metric).to.have.property('memoryUsage');
-          expect(metric).to.have.property('cpuUsage');
+          expect(metric).errorRate !== undefined ? expect(metric).toHaveProperty('errorRate') : expect(metric).toHaveProperty('errorRate');
+          expect(metric).latencyP95 !== undefined ? expect(metric).toHaveProperty('latencyP95') : expect(metric).toHaveProperty('latencyP95');
+          expect(metric).memoryUsage !== undefined ? expect(metric).toHaveProperty('memoryUsage') : expect(metric).toHaveProperty('memoryUsage');
+          expect(metric).cpuUsage !== undefined ? expect(metric).toHaveProperty('cpuUsage') : expect(metric).toHaveProperty('cpuUsage');
         }
       });
     });
@@ -494,9 +493,9 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
         });
 
         if (check) {
-          expect(check).to.have.property('backupId');
-          expect(check).to.have.property('checkType');
-          expect(check).to.have.property('status');
+          expect(check).backupId !== undefined ? expect(check).toHaveProperty('backupId') : expect(check).toHaveProperty('backupId');
+          expect(check).checkType !== undefined ? expect(check).toHaveProperty('checkType') : expect(check).toHaveProperty('checkType');
+          expect(check).status !== undefined ? expect(check).toHaveProperty('status') : expect(check).toHaveProperty('status');
         }
       });
     });
@@ -514,11 +513,11 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
         mockAdminId,
         'Step 1: Create version'
       );
-      expect(v1).to.exist;
+      expect(v1).toBeDefined();
 
       // 2. Mark as stable
       const marked = await rollbackManager.markVersionAsStable('6.0.0');
-      expect(marked.isStable).to.be.true;
+      expect(marked.isStable).toBe(true);
 
       // 3. Rollback
       const result = await rollbackManager.rollbackConfiguration(
@@ -526,11 +525,11 @@ describe('Q77 + Q78: Configuration Versioning & Rollback Strategy', () => {
         mockAdminId,
         'Step 3: Rollback'
       );
-      expect(result.success).to.be.true;
+      expect(result.success).toBe(true);
 
       // 4. Verify history
       const history = await rollbackManager.getRollbackHistory(1);
-      expect(history.length).to.be.greaterThan(0);
+      expect(history.length).toBeGreaterThan(0);
     });
   });
 });
