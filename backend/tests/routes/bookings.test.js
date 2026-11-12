@@ -4,7 +4,7 @@ const { clientToken, proToken, adminToken } = require('../helpers');
 
 // ============ MOCK SETUP ============
 
-jest.mock('../../src/config/db', () => ({
+jest.mock('../../config/db', () => ({
   booking: {
     findMany: jest.fn(),
     findUnique: jest.fn(),
@@ -31,11 +31,11 @@ jest.mock('../../src/config/db', () => ({
   },
 }));
 
-jest.mock('../../src/config/pushNotifications', () => ({
+jest.mock('../../config/pushNotifications', () => ({
   sendPushNotification: jest.fn().mockResolvedValue(true),
 }));
 
-jest.mock('../../src/middleware/auth', () => ({
+jest.mock('../../middleware/auth', () => ({
   requireAuth: (req, res, next) => {
     const token = req.headers.authorization?.split(' ')[1];
     if (token) {
@@ -51,9 +51,9 @@ jest.mock('../../src/middleware/auth', () => ({
   },
 }));
 
-const prisma = require('../../src/config/db');
-const bookingsRouter = require('../../src/routes/bookings');
-const { sendPushNotification } = require('../../src/config/pushNotifications');
+const prisma = require('../../config/db');
+const bookingsRouter = require('../../routes/bookings');
+const { sendPushNotification } = require('../../config/pushNotifications');
 
 const app = express();
 app.use(express.json());
