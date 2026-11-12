@@ -945,3 +945,74 @@ model NotificationPreference {
 
   @@index([userId])
 }
+
+// Q77: Configuration Versioning
+model ConfigVersion {
+  id        String   @id @default(uuid())
+  version   String   @unique // e.g., "1.0.0", "1.0.1"
+  snapshot  Json     // Configuration snapshot JSON
+  createdAt DateTime @default(now())
+  createdBy String?  // Admin user ID who created this version
+  tag       String?  // Git tag associated with this version
+  changelog String?  // Changelog text describing changes
+  isStable  Boolean  @default(false) // Marked as production stable version
+
+  @@index([version])
+  @@index([createdAt])
+  @@index([isStable])
+}
+
+// Q78: Rollback events tracking
+model RollbackEvent {
+  id              String   @id @default(uuid())
+  fromVersion     String   // Previous version
+  toVersion       String   // Target version for rollback
+  trigger         String   // "manual" | "auto_error_spike" | "auto_latency" | "auto_memory"
+  reason          String?  // Detailed reason
+  metrics         Json?    // Error rate, latency, memory at time of rollback
+  status          String   @default("INITIATED") // INITIATED | IN_PROGRESS | COMPLETED | FAILED
+  completedAt     DateTime?
+  triggeredBy     String?  // Admin user ID or "system"
+  databaseRollback Boolean @default(false) // If true, database was also rolled back
+  backupUsed      String?  // Backup ID used if applicable
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([trigger])
+}
+
+// Q78: Hourly backup integrity check results
+model BackupIntegrityCheck {
+  id              String   @id @default(uuid())
+  backupId        String   // Reference to backup
+  checkType       String   // "FULL_BACKUP" | "INCREMENTAL" | "DATABASE" | "FILESYSTEM"
+  status          String   @default("PENDING") // PENDING | SUCCESS | FAILED
+  errorMessage    String?
+  checksPerformed Int      @default(0) // Number of integrity checks performed
+  checksSuccessful Int     @default(0) // Number that passed
+  duration        Int?     // Check duration in milliseconds
+  createdAt       DateTime @default(now())
+
+  @@index([backupId])
+  @@index([checkType])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Q78: System health metrics for rollback decisions
+model SystemHealthMetric {
+  id           String   @id @default(uuid())
+  timestamp    DateTime @default(now())
+  errorRate    Float    @default(0) // Percentage 0-100
+  latencyP95   Int      @default(0) // Milliseconds
+  latencyP99   Int      @default(0)
+  memoryUsage  Float    @default(0) // Percentage 0-100
+  cpuUsage     Float    @default(0) // Percentage 0-100
+  activeUsers  Int      @default(0)
+  dbConnections Int     @default(0)
+  cacheHitRate Float    @default(0) // Percentage 0-100
+
+  @@index([timestamp])
+  @@index([errorRate])
+}
