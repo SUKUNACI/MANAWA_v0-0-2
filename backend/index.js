@@ -59,6 +59,7 @@ const disputeRoutes = require('./routes/disputes');
 const availabilityRoutes = require('./routes/availability');
 const packageRoutes = require('./routes/packages');
 const searchRoutes = require('./routes/search');
+const searchGlobalRoutes = require('./routes/search-global');
 const badgeRoutes = require('./routes/badges');
 const badgeAdminRoutes = require('./routes/badges-admin');
 const referralRoutes = require('./routes/referrals');
@@ -75,6 +76,8 @@ const notificationPreferencesRoutes = require('./routes/notification-preferences
 const docsRoutes = require('./routes/docs');
 const webhooksGeniuspayRoutes = require('./routes/webhooks-geniuspay');
 const paymentsRetryRoutes = require('./routes/payments-retry');
+const searchFacetsRoutes = require('./routes/search-facets');
+const analyticsDistributionRoutes = require('./routes/analytics-distribution');
 
 // Firebase initialization
 const { initializeFirebase, getMessaging } = require('./config/firebase-admin');
@@ -83,6 +86,9 @@ const { setMessaging } = require('./config/pushNotifications');
 // Redis initialization for caching
 const redis = require('./config/redis');
 const { cacheGet, cacheInvalidate } = require('./middleware/cacheMiddleware');
+
+// Q69: Response size limit middleware
+const { responseSizeLimitMiddleware, setResponseLimitHeaders, validatePaginationMiddleware } = require('./middleware/response-size-limit');
 
 const helmet = require('helmet');
 
@@ -184,6 +190,11 @@ app.use(compression({
   type: ['application/json', 'text/html', 'text/css', 'text/javascript', 'application/javascript'],
 }));
 console.log('[Compression] Enabled gzip compression for API responses');
+
+// Q69: Response size limit middleware - check Content-Length < 5MB
+app.use(setResponseLimitHeaders);
+app.use(responseSizeLimitMiddleware);
+console.log('[Q69] Response size limit middleware registered (5MB max)');
 
 // Initialize Firebase
 const firebaseApp = initializeFirebase();
@@ -325,9 +336,12 @@ apiV1Router.use('/disputes', disputeRoutes);
 apiV1Router.use('/availability', availabilityRoutes);
 apiV1Router.use('/packages', packageRoutes);
 apiV1Router.use('/search', searchRoutes);
+apiV1Router.use('/search', searchFacetsRoutes);
+apiV1Router.use('/search/global', searchGlobalRoutes);
 apiV1Router.use('/badges', badgeRoutes);
 apiV1Router.use('/referrals', referralRoutes);
 apiV1Router.use('/analytics', analyticsRoutes);
+apiV1Router.use('/analytics', analyticsDistributionRoutes);
 apiV1Router.use('/video-calls', videoCallRoutes);
 apiV1Router.use('/webhooks/geniuspay', webhooksGeniuspayRoutes);
 
@@ -703,11 +717,43 @@ async function startServer() {
       console.error('⚠️  Erreur initialisation webhook queue (non-bloquant):', err.message);
     }
 
+    // Q66: Initialize MeiliSearch
+    console.log('⏳ Initialisation de MeiliSearch...');
+    try {
+      const { ensureIndices, healthCheck } = require('./config/meilisearch');
+      const meilisearchHealth = await healthCheck();
+      if (meilisearchHealth.status === 'ok') {
+        await ensureIndices();
+        console.log('✓ MeiliSearch initialisé et indices créés');
+      } else {
+        console.error('⚠️  MeiliSearch indisponible (non-bloquant):', meilisearchHealth.error);
+      }
+    } catch (err) {
+      console.error('⚠️  Erreur initialisation MeiliSearch (non-bloquant):', err.message);
+    }
+
     server.listen(PORT, () => {
       console.log(`✓ Serveur MANAWA démarré sur le port ${PORT}`);
       logger.info('Server started', { port: PORT });
       seedConfig().catch(err => console.error('[Config] Erreur seed:', err.message));
       ensureSuperAdmin().catch(err => console.error('[Boot] Erreur ensureSuperAdmin:', err.message));
+
+      // Q66: Schedule daily MeiliSearch synchronization (1h after startup, then daily)
+      setTimeout(() => {
+        logger.info('[MeiliSearch] Scheduling daily sync...');
+        const { syncAllIndices } = require('./jobs/meilisearch-sync');
+
+        syncAllIndices().catch(err => {
+          logger.error('[MeiliSearch] Initial sync error', { error: err.message });
+        });
+
+        // Then schedule daily syncs at 02:00 UTC
+        setInterval(() => {
+          syncAllIndices().catch(err => {
+            logger.error('[MeiliSearch] Daily sync error', { error: err.message });
+          });
+        }, 24 * 60 * 60 * 1000);
+      }, 60 * 60 * 1000); // 1 hour after startup
     });
 
     // Graceful shutdown

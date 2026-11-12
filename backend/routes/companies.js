@@ -4,6 +4,7 @@ const { param, query, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth, requirePermission } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
+const { applyPageBasedPagination, validatePageBasedPaginationQuery, buildPaginatedResponse } = require('../utils/pagination-helper');
 
 const router = express.Router();
 
@@ -20,15 +21,14 @@ const adminLimiter = rateLimit({
 // GET /api/companies - List all companies
 router.get('/', adminLimiter, requireAuth, requirePermission('companies'),
   [
-    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
-    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1-100'),
+    ...validatePageBasedPaginationQuery(),
     query('search').optional().trim().isLength({ max: 100 }).withMessage('search too long'),
   ],
   handleValidationErrors,
   async (req, res, next) => {
   try {
-    const { page = 1, limit = 50, search } = req.query;
-    const skip = (page - 1) * limit;
+    const { search } = req.query;
+    const { limit, skip, offset } = applyPageBasedPagination(req.query, 'companies');
 
     let where = {};
     if (search) {
@@ -40,47 +40,43 @@ router.get('/', adminLimiter, requireAuth, requirePermission('companies'),
       };
     }
 
-    const companies = await prisma.professional.findMany({
-      where: {
-        ...where,
-        accountType: 'ENTREPRISE',
-        companyName: { not: null },
-      },
-      select: {
-        id: true,
-        companyName: true,
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-          },
+    const [companies, total] = await Promise.all([
+      prisma.professional.findMany({
+        where: {
+          ...where,
+          accountType: 'ENTREPRISE',
+          companyName: { not: null },
         },
-        trades: true,
-        trustScore: true,
-        createdAt: true,
-      },
-      skip,
-      take: parseInt(limit),
-      orderBy: { createdAt: 'desc' },
-    });
+        select: {
+          id: true,
+          companyName: true,
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              phone: true,
+            },
+          },
+          trades: true,
+          trustScore: true,
+          createdAt: true,
+        },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.professional.count({
+        where: {
+          ...where,
+          accountType: 'ENTREPRISE',
+          companyName: { not: null },
+        },
+      }),
+    ]);
 
-    const total = await prisma.professional.count({
-      where: {
-        ...where,
-        accountType: 'ENTREPRISE',
-        companyName: { not: null },
-      },
-    });
-
-    res.json({
-      companies,
-      total,
-      page: parseInt(page),
-      totalPages: Math.ceil(total / limit),
-    });
+    res.json(buildPaginatedResponse(companies, limit, offset, total));
   } catch (err) {
     next(err);
   }

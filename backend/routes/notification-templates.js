@@ -5,6 +5,7 @@ const prisma = require('../config/db');
 const { requireAuth } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
 const logger = require('../utils/logger');
+const { applyPageBasedPagination, validatePageBasedPaginationQuery, buildPaginatedResponse } = require('../utils/pagination-helper');
 
 const router = express.Router();
 

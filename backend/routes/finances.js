@@ -4,6 +4,7 @@ const { query, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth, requirePermission } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
+const { applyPageBasedPagination, validatePageBasedPaginationQuery, buildPaginatedResponse } = require('../utils/pagination-helper');
 
 const router = express.Router();
 
@@ -20,8 +21,7 @@ const adminLimiter = rateLimit({
 // GET /api/finances - Financial summary and transactions
 router.get('/', adminLimiter, requireAuth, requirePermission('finances'),
   [
-    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
-    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1-100'),
+    ...validatePageBasedPaginationQuery(),
     query('startDate').optional().isISO8601().withMessage('invalid startDate format'),
     query('endDate').optional().isISO8601().withMessage('invalid endDate format'),
     query('status').optional().isIn(['PENDING', 'COMPLETED', 'FAILED']).withMessage('invalid status'),
@@ -29,8 +29,8 @@ router.get('/', adminLimiter, requireAuth, requirePermission('finances'),
   handleValidationErrors,
   async (req, res, next) => {
   try {
-    const { page = 1, limit = 50, startDate, endDate, status } = req.query;
-    const skip = (page - 1) * limit;
+    const { startDate, endDate, status } = req.query;
+    const { limit, skip, offset } = applyPageBasedPagination(req.query, 'finances');
 
     let where = {};
     if (startDate || endDate) {
@@ -40,51 +40,47 @@ router.get('/', adminLimiter, requireAuth, requirePermission('finances'),
     }
     if (status) where.status = status;
 
-    const payments = await prisma.payment.findMany({
-      where,
-      include: {
-        quote: {
-          include: {
-            project: true,
-            professional: {
-              include: {
-                user: {
-                  select: {
-                    email: true,
-                    firstName: true,
-                    lastName: true,
+    const [payments, total, summary] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        include: {
+          quote: {
+            include: {
+              project: true,
+              professional: {
+                include: {
+                  user: {
+                    select: {
+                      email: true,
+                      firstName: true,
+                      lastName: true,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-      skip,
-      take: parseInt(limit),
-      orderBy: { createdAt: 'desc' },
-    });
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.payment.count({ where }),
+      prisma.payment.aggregate({
+        where,
+        _sum: { amount: true },
+        _count: true,
+      }),
+    ]);
 
-    const total = await prisma.payment.count({ where });
-
-    // Calculate summary
-    const summary = await prisma.payment.aggregate({
-      where,
-      _sum: { amount: true },
-      _count: true,
-    });
-
+    const paginatedResponse = buildPaginatedResponse(payments, limit, offset, total);
     res.json({
-      transactions: payments,
+      ...paginatedResponse,
+      transactions: paginatedResponse.data,
+      data: undefined,
       summary: {
         totalAmount: summary._sum.amount || 0,
         transactionCount: summary._count,
-      },
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        totalPages: Math.ceil(total / limit),
       },
     });
   } catch (err) {
