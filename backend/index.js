@@ -78,6 +78,7 @@ const webhooksGeniuspayRoutes = require('./routes/webhooks-geniuspay');
 const paymentsRetryRoutes = require('./routes/payments-retry');
 const searchFacetsRoutes = require('./routes/search-facets');
 const analyticsDistributionRoutes = require('./routes/analytics-distribution');
+const configVersionsRoutes = require('./routes/config-versions');
 
 // Firebase initialization
 const { initializeFirebase, getMessaging } = require('./config/firebase-admin');
@@ -324,6 +325,8 @@ apiV1Router.use('/admin/kpis', injectAdminCookie, kpisAdminRoutes);
 apiV1Router.use('/admin/webhooks', injectAdminCookie, webhooksAdminRoutes);
 apiV1Router.use('/admin/queues', injectAdminCookie, queuesAdminRoutes);
 apiV1Router.use('/admin/backups', injectAdminCookie, backupsAdminRoutes);
+// Q77 + Q78: Configuration versioning & rollback
+apiV1Router.use('/admin/config/versions', injectAdminCookie, configVersionsRoutes);
 apiV1Router.use('/role-permissions', injectAdminCookie, rolePermissionsRoutes);
 apiV1Router.use('/support', supportRoutes);
 apiV1Router.use('/portfolio-projects', portfolioProjectsRoutes);
