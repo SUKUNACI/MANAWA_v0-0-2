@@ -109,7 +109,17 @@ async function optionalAuth(req, res, next) {
 }
 
 function requireSuperAdmin(req, res, next) {
-  if (!req.user) return res.status(401).json({ error: 'Non authentifié' });
+  if (!req.user) {
+    // Authenticate first if not already done, then re-check adminLevel
+    return requireAuth(req, res, (err) => {
+      if (err) return next(err);
+      if (!req.user) return res.status(401).json({ error: 'Non authentifié' });
+      if (req.user.adminLevel !== 'SUPER') {
+        return res.status(403).json({ error: 'Accès réservé au super administrateur' });
+      }
+      next();
+    });
+  }
   if (req.user.adminLevel !== 'SUPER') {
     return res.status(403).json({ error: 'Accès réservé au super administrateur' });
   }
