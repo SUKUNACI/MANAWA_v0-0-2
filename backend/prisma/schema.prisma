@@ -1016,3 +1016,76 @@ model SystemHealthMetric {
   @@index([timestamp])
   @@index([errorRate])
 }
+
+// Q71: Feature Flags System
+model FeatureFlag {
+  id                 String   @id @default(uuid())
+  name               String   @unique
+  description        String?
+  enabled            Boolean  @default(false)
+  rolloutPercentage  Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([name])
+  @@index([enabled])
+}
+
+// Q72: A/B Testing Framework
+model Experiment {
+  id                String              @id @default(uuid())
+  name              String              @unique
+  description       String?
+  status            String              @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED
+  trafficPercentage Int                 @default(100) // % of users included
+  startedAt         DateTime?
+  endedAt           DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  variants          ExperimentVariant[]
+  assignments       ExperimentAssignment[]
+
+  @@index([name])
+  @@index([status])
+}
+
+model ExperimentVariant {
+  id           String               @id @default(uuid())
+  experimentId String
+  name         String               // "control" | "variant_a" | "variant_b"
+  weight       Int                  @default(50) // Traffic weight (% out of total)
+  experiment   Experiment           @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  assignments  ExperimentAssignment[]
+  metrics      ExperimentMetric[]
+
+  @@unique([experimentId, name])
+  @@index([experimentId])
+}
+
+model ExperimentAssignment {
+  id           String            @id @default(uuid())
+  experimentId String
+  variantId    String
+  userId       String
+  createdAt    DateTime          @default(now())
+  experiment   Experiment        @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  variant      ExperimentVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([experimentId, userId])
+  @@index([experimentId])
+  @@index([userId])
+}
+
+model ExperimentMetric {
+  id         String            @id @default(uuid())
+  variantId  String
+  metricName String
+  value      Float
+  metadata   String?
+  createdAt  DateTime          @default(now())
+  variant    ExperimentVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@index([variantId])
+  @@index([metricName])
+  @@index([createdAt])
+}
