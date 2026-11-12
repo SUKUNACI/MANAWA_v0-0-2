@@ -158,43 +158,34 @@ router.get('/tokens', readLimiter, requireAuth, handleValidationErrors, async (r
 // GET /api/notifications/history — List user's notifications
 router.get('/history', readLimiter, requireAuth,
   [
-    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
-    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1-100'),
+    ...validatePageBasedPaginationQuery(),
     query('archived').optional().isIn(['true', 'false']).withMessage('archived must be true/false'),
   ],
   handleValidationErrors,
   async (req, res, next) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(50, parseInt(req.query.limit) || 30);
+    const { limit, skip, offset } = applyPageBasedPagination(req.query, 'notifications');
     const archived = req.query.archived === 'true' ? true : false;
 
-    const notifications = await prisma.notification.findMany({
-      where: {
-        userId: req.user.id,
-        isArchived: archived,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: (page - 1) * limit,
-    });
+    const [notifications, total] = await Promise.all([
+      prisma.notification.findMany({
+        where: {
+          userId: req.user.id,
+          isArchived: archived,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip,
+      }),
+      prisma.notification.count({
+        where: {
+          userId: req.user.id,
+          isArchived: archived,
+        },
+      }),
+    ]);
 
-    const total = await prisma.notification.count({
-      where: {
-        userId: req.user.id,
-        isArchived: archived,
-      },
-    });
-
-    res.json({
-      notifications,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
-    });
+    res.json(buildPaginatedResponse(notifications, limit, offset, total));
   } catch (err) {
     next(err);
   }

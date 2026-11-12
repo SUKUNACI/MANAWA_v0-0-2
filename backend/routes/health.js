@@ -4,6 +4,8 @@ const router = express.Router();
 const { checkDatabaseHealth } = require('../utils/health-check');
 const redis = require('../config/redis');
 const logger = require('../utils/logger');
+const { buildPaginationQuery } = require('../utils/sorting-helper');
+const { getSortableFields } = require('../config/sortable-fields');
 
 // Rate limiters
 const healthLimiter = rateLimit({

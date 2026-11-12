@@ -3,6 +3,8 @@ const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 const { param, body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
+const { buildPaginationQuery } = require('../utils/sorting-helper');
+const { getSortableFields } = require('../config/sortable-fields');
 const { handleValidationErrors } = require('../middleware/validateInput');
 
 const router = express.Router();

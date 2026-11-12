@@ -4,8 +4,11 @@ const { body, query, param, validationResult } = require('express-validator');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
 const logger = require('../utils/logger');
+const { buildPaginationQuery } = require('../utils/sorting-helper');
+const { getSortableFields } = require('../config/sortable-fields');
 const prisma = require('../config/db');
 const AWS = require('aws-sdk');
+const { applyPagination, validatePaginationQuery, buildPaginatedResponse } = require('../utils/pagination-helper');
 
 const router = express.Router();
 

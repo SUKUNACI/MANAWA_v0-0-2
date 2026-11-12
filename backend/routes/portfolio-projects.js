@@ -4,9 +4,12 @@ const { param, body, query, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const upload = require('../config/upload');
+const { buildPaginationQuery } = require('../utils/sorting-helper');
+const { getSortableFields } = require('../config/sortable-fields');
 const { verifyMagicBytes } = require('../config/upload');
 const { uploadBuffer } = require('../config/cloudinary');
 const { handleValidationErrors } = require('../middleware/validateInput');
+const { applyPageBasedPagination, validatePageBasedPaginationQuery, buildPaginatedResponse } = require('../utils/pagination-helper');
 
 const router = express.Router();
 
@@ -51,16 +54,14 @@ const likeLimiter = rateLimit({
 // GET /api/portfolio-projects — feed public
 router.get('/', readLimiter,
   [
-    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
-    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1-100'),
+    ...validatePageBasedPaginationQuery(),
     query('trade').optional().trim().isLength({ max: 100 }).withMessage('trade too long'),
     query('professionalId').optional().trim().notEmpty(),
   ],
   handleValidationErrors,
   async (req, res, next) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(50, parseInt(req.query.limit) || 10);
+    const { limit, skip, offset } = applyPageBasedPagination(req.query, 'portfolio-projects');
     const { trade, professionalId } = req.query;
 
     // userId optionnel pour savoir si l'utilisateur a liké
@@ -95,7 +96,7 @@ router.get('/', readLimiter,
           likes: userId ? { where: { userId }, select: { id: true } } : false,
         },
         orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
+        skip,
         take: limit,
       }),
       prisma.portfolioProject.count({ where }),
@@ -115,7 +116,7 @@ router.get('/', readLimiter,
       };
     });
 
-    res.json({ projects: result, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+    res.json(buildPaginatedResponse(result, limit, offset, total));
   } catch (err) {
     next(err);
   }

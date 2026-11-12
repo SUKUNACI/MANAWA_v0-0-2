@@ -6,6 +6,8 @@ const { requireAuth, requireRole, optionalAuth } = require('../middleware/auth')
 const { BADGES, computeBadges } = require('../utils/badges');
 const { handleValidationErrors } = require('../middleware/validateInput');
 const logger = require('../utils/logger');
+const { buildPaginationQuery } = require('../utils/sorting-helper');
+const { getSortableFields } = require('../config/sortable-fields');
 
 const router = express.Router();
 

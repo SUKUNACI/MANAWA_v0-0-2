@@ -3,6 +3,8 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const CDNHelper = require('../utils/cdn-helpers');
 const { cloudinary, FOLDERS } = require('../config/cdn');
 const logger = require('../utils/logger');
+const { buildPaginationQuery } = require('../utils/sorting-helper');
+const { getSortableFields } = require('../config/sortable-fields');
 
 const router = express.Router();
 

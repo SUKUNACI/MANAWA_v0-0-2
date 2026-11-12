@@ -3,6 +3,8 @@ const { body, validationResult } = require('express-validator');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const prisma = require('../config/db');
 const logger = require('../utils/logger');
+const { buildPaginationQuery } = require('../utils/sorting-helper');
+const { getSortableFields } = require('../config/sortable-fields');
 const {
   WEBHOOK_EVENTS,
   registerWebhook,
