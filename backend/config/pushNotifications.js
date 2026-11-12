@@ -1,5 +1,7 @@
 const axios = require('axios');
 const prisma = require('./db');
+const dedup = require('../utils/notification-deduplication');
+const fallback = require('./push-notification-fallback');
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
@@ -79,9 +81,19 @@ async function sendViaExpo(token, title, body, data = {}) {
   }
 }
 
-// Main function: Send to single user
+// Main function: Send to single user with deduplication and fallback
 async function sendPushNotification(userId, title, body, data = {}) {
   try {
+    // Check deduplication
+    const content = `${title}||${body}`;
+    const notificationType = data.type || 'GENERAL';
+    const { isDuplicate, marked } = await dedup.checkAndMark(userId, notificationType, content);
+
+    if (isDuplicate) {
+      logger.warn(`[Push] Duplicate notification blocked for user ${userId}`);
+      return { sent: false, reason: 'duplicate' };
+    }
+
     // Get user's tokens from PushToken table (new) + legacy expoPushToken
     const tokens = await prisma.pushToken.findMany({
       where: {
@@ -92,6 +104,20 @@ async function sendPushNotification(userId, title, body, data = {}) {
 
     if (tokens.length === 0) {
       logger.warn('[Push] No active tokens for user:', userId);
+      // Try email fallback
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { email: true },
+        });
+
+        if (user?.email) {
+          await fallback.sendEmailFallback(user.email, title, body, data);
+          return { sent: true, method: 'EMAIL_FALLBACK', reason: 'no_tokens' };
+        }
+      } catch (err) {
+        logger.warn('[Push] Email fallback failed:', err.message);
+      }
       return { sent: false, reason: 'no_tokens' };
     }
 
@@ -129,21 +155,19 @@ async function sendPushNotification(userId, title, body, data = {}) {
   }
 }
 
-// Send to multiple users (optimized for FCM multicast)
+// Send to multiple users with batching optimization
 async function sendPushToMultiple(userIds, title, body, data = {}) {
-  const results = [];
+  // Use batching if configured
+  const batching = require('./notification-batching');
 
-  for (const userId of userIds) {
-    const result = await sendPushNotification(userId, title, body, data);
-    results.push({ userId, ...result });
-  }
+  const notifications = userIds.map(userId => ({
+    userId,
+    title,
+    body,
+    data,
+  }));
 
-  const successCount = results.filter(r => r.sent).length;
-  return {
-    sent: successCount,
-    total: userIds.length,
-    details: results,
-  };
+  return await batching.sendNotificationsBatch(notifications);
 }
 
 module.exports = {

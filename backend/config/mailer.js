@@ -140,4 +140,49 @@ async function sendPackageSuspensionEmail(to, packageTitle, reason) {
   }
 }
 
-module.exports = { sendVerificationEmail, sendPackageSuspensionEmail, isConfigured };
+/**
+ * Generic email send function for notification fallback
+ * @param {object} options - Email options
+ * @param {string} options.to - Recipient email
+ * @param {string} options.subject - Email subject
+ * @param {string} options.html - HTML content
+ * @param {string} options.text - Plain text content
+ * @returns {Promise<{sent: boolean}>}
+ */
+async function send(options) {
+  const { to, subject, html, text } = options;
+
+  if (!isConfigured) {
+    logger.info(`[MAILJET non configuré] Email pour ${to}: "${subject}"`);
+    return { sent: false };
+  }
+
+  try {
+    const response = await mailjet
+      .post('send', { version: 'v3.1' })
+      .request({
+        Messages: [
+          {
+            From: { Email: FROM_EMAIL, Name: FROM_NAME },
+            To: [{ Email: to }],
+            Subject: subject,
+            TextPart: text || subject,
+            HTMLPart: html || text,
+          },
+        ],
+      });
+
+    const status = response.body?.Messages?.[0]?.Status;
+    if (status && status !== 'success') {
+      throw new Error(`Mailjet message status: ${status}`);
+    }
+
+    logger.info(`[Mailjet] ✅ Email envoyé à ${to}`);
+    return { sent: true };
+  } catch (err) {
+    logger.error(`[Mailjet] Erreur envoi email:`, err.message);
+    return { sent: false, error: err.message };
+  }
+}
+
+module.exports = { sendVerificationEmail, sendPackageSuspensionEmail, send, isConfigured };

@@ -1,0 +1,234 @@
+{
+  "fr": {
+    "ORDER_CONFIRMED": {
+      "title": "Commande confirmée",
+      "body": "Votre commande #{{orderId}} a été confirmée. Total: {{amount}}€"
+    },
+    "ORDER_SHIPPED": {
+      "title": "Commande expédiée",
+      "body": "Votre commande #{{orderId}} a été expédiée. Numéro de suivi: {{trackingNumber}}"
+    },
+    "ORDER_DELIVERED": {
+      "title": "Commande livrée",
+      "body": "Votre commande #{{orderId}} a été livrée. Merci!"
+    },
+    "ORDER_CANCELLED": {
+      "title": "Commande annulée",
+      "body": "Votre commande #{{orderId}} a été annulée. Remboursement en cours..."
+    },
+    "PAYMENT_RECEIVED": {
+      "title": "Paiement reçu",
+      "body": "Paiement de {{amount}}€ reçu. Référence: {{reference}}"
+    },
+    "PAYMENT_FAILED": {
+      "title": "Échec du paiement",
+      "body": "Le paiement de {{amount}}€ a échoué. Veuillez réessayer ou contacter le support."
+    },
+    "MESSAGE_RECEIVED": {
+      "title": "Nouveau message",
+      "body": "{{senderName}} vous a envoyé un message: {{preview}}"
+    },
+    "REVIEW_RECEIVED": {
+      "title": "Nouvel avis",
+      "body": "{{authorName}} a laissé un avis {{rating}}/5 sur votre profil"
+    },
+    "BOOKING_CONFIRMED": {
+      "title": "Réservation confirmée",
+      "body": "Votre réservation #{{bookingId}} a été confirmée pour le {{date}}"
+    },
+    "BOOKING_CANCELLED": {
+      "title": "Réservation annulée",
+      "body": "Votre réservation #{{bookingId}} a été annulée. Remboursement en cours..."
+    },
+    "DISPUTE_CREATED": {
+      "title": "Litige créé",
+      "body": "Un litige a été créé pour la commande #{{orderId}}. L'équipe support va vous contacter."
+    },
+    "DISPUTE_RESOLVED": {
+      "title": "Litige résolu",
+      "body": "Le litige pour la commande #{{orderId}} a été résolu."
+    },
+    "PROMOTIONAL": {
+      "title": "Offre spéciale",
+      "body": "{{title}}: {{description}}"
+    },
+    "SYSTEM_ALERT": {
+      "title": "Alerte système",
+      "body": "{{message}}"
+    }
+  },
+  "en": {
+    "ORDER_CONFIRMED": {
+      "title": "Order Confirmed",
+      "body": "Your order #{{orderId}} has been confirmed. Total: {{amount}}€"
+    },
+    "ORDER_SHIPPED": {
+      "title": "Order Shipped",
+      "body": "Your order #{{orderId}} has been shipped. Tracking: {{trackingNumber}}"
+    },
+    "ORDER_DELIVERED": {
+      "title": "Order Delivered",
+      "body": "Your order #{{orderId}} has been delivered. Thank you!"
+    },
+    "ORDER_CANCELLED": {
+      "title": "Order Cancelled",
+      "body": "Your order #{{orderId}} has been cancelled. Refund in progress..."
+    },
+    "PAYMENT_RECEIVED": {
+      "title": "Payment Received",
+      "body": "Payment of {{amount}}€ received. Reference: {{reference}}"
+    },
+    "PAYMENT_FAILED": {
+      "title": "Payment Failed",
+      "body": "Payment of {{amount}}€ failed. Please retry or contact support."
+    },
+    "MESSAGE_RECEIVED": {
+      "title": "New Message",
+      "body": "{{senderName}} sent you a message: {{preview}}"
+    },
+    "REVIEW_RECEIVED": {
+      "title": "New Review",
+      "body": "{{authorName}} left a {{rating}}/5 review on your profile"
+    },
+    "BOOKING_CONFIRMED": {
+      "title": "Booking Confirmed",
+      "body": "Your booking #{{bookingId}} has been confirmed for {{date}}"
+    },
+    "BOOKING_CANCELLED": {
+      "title": "Booking Cancelled",
+      "body": "Your booking #{{bookingId}} has been cancelled. Refund in progress..."
+    },
+    "DISPUTE_CREATED": {
+      "title": "Dispute Created",
+      "body": "A dispute has been created for order #{{orderId}}. Support will contact you."
+    },
+    "DISPUTE_RESOLVED": {
+      "title": "Dispute Resolved",
+      "body": "The dispute for order #{{orderId}} has been resolved."
+    },
+    "PROMOTIONAL": {
+      "title": "Special Offer",
+      "body": "{{title}}: {{description}}"
+    },
+    "SYSTEM_ALERT": {
+      "title": "System Alert",
+      "body": "{{message}}"
+    }
+  },
+  "es": {
+    "ORDER_CONFIRMED": {
+      "title": "Pedido Confirmado",
+      "body": "Su pedido #{{orderId}} ha sido confirmado. Total: {{amount}}€"
+    },
+    "ORDER_SHIPPED": {
+      "title": "Pedido Enviado",
+      "body": "Su pedido #{{orderId}} ha sido enviado. Seguimiento: {{trackingNumber}}"
+    },
+    "ORDER_DELIVERED": {
+      "title": "Pedido Entregado",
+      "body": "Su pedido #{{orderId}} ha sido entregado. ¡Gracias!"
+    },
+    "ORDER_CANCELLED": {
+      "title": "Pedido Cancelado",
+      "body": "Su pedido #{{orderId}} ha sido cancelado. Reembolso en proceso..."
+    },
+    "PAYMENT_RECEIVED": {
+      "title": "Pago Recibido",
+      "body": "Pago de {{amount}}€ recibido. Referencia: {{reference}}"
+    },
+    "PAYMENT_FAILED": {
+      "title": "Pago Fallido",
+      "body": "El pago de {{amount}}€ falló. Por favor reintente o contacte al soporte."
+    },
+    "MESSAGE_RECEIVED": {
+      "title": "Nuevo Mensaje",
+      "body": "{{senderName}} le envió un mensaje: {{preview}}"
+    },
+    "REVIEW_RECEIVED": {
+      "title": "Nueva Reseña",
+      "body": "{{authorName}} dejó una reseña {{rating}}/5 en su perfil"
+    },
+    "BOOKING_CONFIRMED": {
+      "title": "Reserva Confirmada",
+      "body": "Su reserva #{{bookingId}} ha sido confirmada para {{date}}"
+    },
+    "BOOKING_CANCELLED": {
+      "title": "Reserva Cancelada",
+      "body": "Su reserva #{{bookingId}} ha sido cancelada. Reembolso en proceso..."
+    },
+    "DISPUTE_CREATED": {
+      "title": "Litigio Creado",
+      "body": "Se ha creado un litigio para el pedido #{{orderId}}. El equipo de soporte se contactará."
+    },
+    "DISPUTE_RESOLVED": {
+      "title": "Litigio Resuelto",
+      "body": "El litigio para el pedido #{{orderId}} ha sido resuelto."
+    },
+    "PROMOTIONAL": {
+      "title": "Oferta Especial",
+      "body": "{{title}}: {{description}}"
+    },
+    "SYSTEM_ALERT": {
+      "title": "Alerta del Sistema",
+      "body": "{{message}}"
+    }
+  },
+  "de": {
+    "ORDER_CONFIRMED": {
+      "title": "Bestellung bestätigt",
+      "body": "Ihre Bestellung #{{orderId}} wurde bestätigt. Gesamt: {{amount}}€"
+    },
+    "ORDER_SHIPPED": {
+      "title": "Bestellung versendet",
+      "body": "Ihre Bestellung #{{orderId}} wurde versendet. Verfolgung: {{trackingNumber}}"
+    },
+    "ORDER_DELIVERED": {
+      "title": "Bestellung geliefert",
+      "body": "Ihre Bestellung #{{orderId}} wurde geliefert. Danke!"
+    },
+    "ORDER_CANCELLED": {
+      "title": "Bestellung storniert",
+      "body": "Ihre Bestellung #{{orderId}} wurde storniert. Rückerstattung läuft..."
+    },
+    "PAYMENT_RECEIVED": {
+      "title": "Zahlung eingegangen",
+      "body": "Zahlung von {{amount}}€ eingegangen. Referenz: {{reference}}"
+    },
+    "PAYMENT_FAILED": {
+      "title": "Zahlung fehlgeschlagen",
+      "body": "Die Zahlung von {{amount}}€ ist fehlgeschlagen. Bitte versuchen Sie es erneut oder kontaktieren Sie den Support."
+    },
+    "MESSAGE_RECEIVED": {
+      "title": "Neue Nachricht",
+      "body": "{{senderName}} hat Ihnen eine Nachricht gesendet: {{preview}}"
+    },
+    "REVIEW_RECEIVED": {
+      "title": "Neue Bewertung",
+      "body": "{{authorName}} hat Ihrem Profil eine {{rating}}/5-Bewertung hinterlassen"
+    },
+    "BOOKING_CONFIRMED": {
+      "title": "Buchung bestätigt",
+      "body": "Ihre Buchung #{{bookingId}} wurde für {{date}} bestätigt"
+    },
+    "BOOKING_CANCELLED": {
+      "title": "Buchung storniert",
+      "body": "Ihre Buchung #{{bookingId}} wurde storniert. Rückerstattung läuft..."
+    },
+    "DISPUTE_CREATED": {
+      "title": "Streitfall erstellt",
+      "body": "Ein Streitfall für Bestellung #{{orderId}} wurde erstellt. Der Support wird sich mit Ihnen in Verbindung setzen."
+    },
+    "DISPUTE_RESOLVED": {
+      "title": "Streitfall gelöst",
+      "body": "Der Streitfall für Bestellung #{{orderId}} wurde gelöst."
+    },
+    "PROMOTIONAL": {
+      "title": "Spezialangebot",
+      "body": "{{title}}: {{description}}"
+    },
+    "SYSTEM_ALERT": {
+      "title": "Systembenachrichtigung",
+      "body": "{{message}}"
+    }
+  }
+}

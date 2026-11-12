@@ -70,6 +70,8 @@ const healthRoutes = require('./routes/health');
 const webhooksAdminRoutes = require('./routes/webhooks-admin');
 const queuesAdminRoutes = require('./routes/queues-admin');
 const backupsAdminRoutes = require('./routes/admin-backups');
+const notificationTemplatesRoutes = require('./routes/notification-templates');
+const notificationPreferencesRoutes = require('./routes/notification-preferences');
 const docsRoutes = require('./routes/docs');
 
 // Firebase initialization
@@ -299,6 +301,8 @@ apiV1Router.use('/role-permissions', injectAdminCookie, rolePermissionsRoutes);
 apiV1Router.use('/support', supportRoutes);
 apiV1Router.use('/portfolio-projects', portfolioProjectsRoutes);
 apiV1Router.use('/notifications', notificationRoutes);
+apiV1Router.use('/admin/notification-templates', injectAdminCookie, notificationTemplatesRoutes);
+apiV1Router.use('/users/notification-preferences', notificationPreferencesRoutes);
 apiV1Router.use('/reports', reportsRoutes);
 apiV1Router.use('/moderation', reportsRoutes);
 apiV1Router.use('/disputes', disputeRoutes);

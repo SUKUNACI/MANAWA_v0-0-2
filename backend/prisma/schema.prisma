@@ -67,6 +67,8 @@ model User {
   initiatedCalls        VideoCall[]            @relation("InitiatedCalls")
   receivedCalls         VideoCall[]            @relation("ReceivedCalls")
   packageSuspensionLogs PackageSuspensionLog[]
+  notificationPreference NotificationPreference?
+  locale                String                 @default("fr") // fr, en, es, de
 }
 
 model RefreshToken {
@@ -576,20 +578,22 @@ model PushTokenMigrationLog {
 }
 
 model Notification {
-  id        String   @id @default(uuid())
-  userId    String
-  type      String?
-  title     String
-  body      String?
-  message   String?
-  data      Json?
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  userId     String
+  type       String?
+  title      String
+  body       String?
+  message    String?
+  data       Json?
+  read       Boolean  @default(false)
+  isArchived Boolean  @default(false)
+  createdAt  DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([createdAt])
+  @@index([isArchived])
 }
 
 model BroadcastLog {
@@ -906,4 +910,34 @@ model WebhookLog {
   @@index([event])
   @@index([status])
   @@index([createdAt])
+}
+
+// Notification Templates with versioning
+model NotificationTemplate {
+  id        String   @id @default(uuid())
+  name      String   // e.g., "ORDER_CONFIRMED"
+  type      String   // e.g., "order", "payment", "message"
+  language  String   // "fr", "en", "es", "de"
+  title     String   @db.VarChar(200)
+  body      String   @db.Text
+  variables Json     // Array of variable names
+  version   Int      @default(1)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([name, language, version])
+  @@index([name])
+  @@index([isActive])
+  @@index([language])
+}
+
+// User Notification Preferences
+model NotificationPreference {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferences Json     // Nested structure: { TYPE: { email: bool, push: bool, sms: bool } }
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
 }
