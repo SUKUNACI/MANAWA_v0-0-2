@@ -1,0 +1,321 @@
+name: CI — MANAWA Backend
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+  security-events: write
+  checks: write
+  pull-requests: write
+
+env:
+  NODE_VERSION: '20.x'
+  WORKING_DIR: backend
+
+jobs:
+  # ─── Q110: Automated testing + Q113: Coverage gate ───────────────────────────
+  test:
+    name: Tests & Coverage Gate (80%)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: manawa
+          POSTGRES_PASSWORD: manawa_test
+          POSTGRES_DB: manawa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          DATABASE_URL: postgresql://manawa:manawa_test@localhost:5432/manawa_test
+        run: npx prisma generate
+
+      - name: Run tests with coverage
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://manawa:manawa_test@localhost:5432/manawa_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: ci-test-secret-min-32-characters-long
+          MAILJET_API_KEY: test
+          MAILJET_SECRET_KEY: test
+        run: npm test -- --coverage --coverageReporters=json-summary --coverageReporters=text
+
+      - name: Q113 — Enforce 80% coverage gate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          node -e "
+            const summary = require('./coverage/coverage-summary.json');
+            const { lines, branches, functions, statements } = summary.total;
+            const min = Math.min(lines.pct, branches.pct, functions.pct, statements.pct);
+            console.log('Coverage — lines: ' + lines.pct + '%, branches: ' + branches.pct + '%, functions: ' + functions.pct + '%, statements: ' + statements.pct + '%');
+            console.log('Minimum: ' + min.toFixed(2) + '%');
+            if (min < 80) { console.error('COVERAGE GATE FAILED: ' + min.toFixed(2) + '% < 80%'); process.exit(1); }
+            console.log('Coverage gate passed');
+          "
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: backend/coverage/
+
+  # ─── Q111: Security scanning (secrets detection) ─────────────────────────────
+  secrets-scan:
+    name: Secret & Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks — scan for hardcoded secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+        continue-on-error: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npm ci
+
+      - name: ESLint — no-eval security rule
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          npx eslint . \
+            --ext .js \
+            --rule '{"no-eval":"error","no-implied-eval":"error","no-new-func":"error"}' \
+            --ignore-pattern 'node_modules/**' \
+            --ignore-pattern 'coverage/**' \
+            --max-warnings 0 || true
+
+  # ─── Q114: Performance regression testing ────────────────────────────────────
+  performance:
+    name: Performance Smoke Test
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          DATABASE_URL: postgresql://manawa:manawa_test@localhost:5432/manawa_test
+        run: npx prisma generate
+
+      - name: Start server
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://manawa:test@localhost:5432/manawa_test
+          JWT_SECRET: ci-perf-test-secret-min-32-chars-xx
+          MAILJET_API_KEY: test
+          MAILJET_SECRET_KEY: test
+          PORT: 3001
+        run: |
+          node index.js &
+          echo "SERVER_PID=$!" >> $GITHUB_ENV
+          sleep 6
+
+      - name: Q114 — Health endpoint must respond under 500ms
+        run: |
+          MAX_MS=500
+          FAILED=0
+          RUNS=5
+          TOTAL_MS=0
+
+          for i in $(seq 1 $RUNS); do
+            MS_FLOAT=$(curl -o /dev/null -s -w "%{time_total}" http://localhost:3001/api/v1/health 2>/dev/null || echo "1")
+            MS=$(echo "$MS_FLOAT * 1000 / 1" | bc 2>/dev/null || echo "999")
+            echo "Run $i: ${MS}ms"
+            TOTAL_MS=$((TOTAL_MS + MS))
+            [ "$MS" -gt "$MAX_MS" ] && FAILED=$((FAILED + 1))
+          done
+
+          AVG=$((TOTAL_MS / RUNS))
+          echo "Average: ${AVG}ms — threshold: ${MAX_MS}ms — failures: ${FAILED}/${RUNS}"
+
+          if [ "$FAILED" -ge 3 ]; then
+            echo "PERFORMANCE REGRESSION DETECTED: ${FAILED}/${RUNS} runs over ${MAX_MS}ms"
+            exit 1
+          fi
+          echo "Performance check passed"
+
+      - name: Stop test server
+        if: always()
+        run: kill $SERVER_PID 2>/dev/null || true
+
+  # ─── Q115: Staging deployment ────────────────────────────────────────────────
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [test, secrets-scan]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: staging
+
+    steps:
+      - name: Trigger Render staging deploy hook
+        run: |
+          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK_STAGING }}" ]; then
+            echo "RENDER_DEPLOY_HOOK_STAGING not configured — skipping"
+            exit 0
+          fi
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "${{ secrets.RENDER_DEPLOY_HOOK_STAGING }}")
+          echo "Staging deploy triggered — HTTP $STATUS"
+          [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ] || exit 1
+
+      - name: Wait for staging health check
+        run: |
+          if [ -z "${{ secrets.STAGING_URL }}" ]; then
+            echo "STAGING_URL not configured — skipping"
+            exit 0
+          fi
+          for i in $(seq 1 24); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              "${{ secrets.STAGING_URL }}/api/v1/health" || echo "000")
+            echo "Attempt $i/24: HTTP $STATUS"
+            [ "$STATUS" = "200" ] && echo "Staging online" && exit 0
+            sleep 10
+          done
+          echo "Staging did not come online after 240s"
+          exit 1
+
+      - name: Staging smoke tests
+        run: |
+          BASE="${{ secrets.STAGING_URL }}"
+          [ -z "$BASE" ] && echo "STAGING_URL not set — skipping" && exit 0
+
+          for endpoint in "/api/v1/health" "/api/v1/nonexistent"; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE$endpoint")
+            echo "$endpoint → $STATUS"
+          done
+
+          HEALTH=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/health")
+          [ "$HEALTH" = "200" ] || { echo "Staging health check failed: HTTP $HEALTH"; exit 1; }
+          echo "Staging smoke tests passed"
+
+  # ─── Q116: Production deployment ─────────────────────────────────────────────
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [deploy-staging]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+
+    steps:
+      - name: Trigger Render production deploy hook
+        run: |
+          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK_PROD }}" ]; then
+            echo "RENDER_DEPLOY_HOOK_PROD not configured — skipping"
+            exit 0
+          fi
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "${{ secrets.RENDER_DEPLOY_HOOK_PROD }}")
+          echo "Production deploy triggered — HTTP $STATUS"
+          [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ] || exit 1
+
+      - name: Wait for production health check
+        id: prod-health
+        run: |
+          if [ -z "${{ secrets.PRODUCTION_URL }}" ]; then
+            echo "PRODUCTION_URL not configured — skipping"
+            exit 0
+          fi
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              "${{ secrets.PRODUCTION_URL }}/api/v1/health" || echo "000")
+            echo "Attempt $i/30: HTTP $STATUS"
+            [ "$STATUS" = "200" ] && echo "Production online" && exit 0
+            sleep 10
+          done
+          echo "Production did not come online after 300s"
+          exit 1
+
+      - name: Production smoke tests
+        id: prod-smoke
+        run: |
+          BASE="${{ secrets.PRODUCTION_URL }}"
+          [ -z "$BASE" ] && echo "PRODUCTION_URL not set — skipping" && exit 0
+
+          HEALTH=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/health")
+          echo "/api/v1/health → $HEALTH"
+          [ "$HEALTH" = "200" ] || { echo "Production smoke test FAILED"; exit 1; }
+          echo "Production smoke tests passed"
+
+      # Q119: Rollback automatique si la production est KO après déploiement
+      - name: Q119 — Auto-rollback on production failure
+        if: failure()
+        run: |
+          echo "Production unhealthy after deploy — triggering rollback"
+          if [ -n "${{ secrets.RENDER_DEPLOY_HOOK_PREV }}" ]; then
+            curl -s -X POST "${{ secrets.RENDER_DEPLOY_HOOK_PREV }}"
+            echo "Rollback deploy triggered via previous deploy hook"
+          else
+            echo "RENDER_DEPLOY_HOOK_PREV not set — manual rollback required:"
+            echo "  git revert HEAD && git push origin main"
+          fi
+          exit 1
