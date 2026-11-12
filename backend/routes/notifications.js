@@ -34,7 +34,7 @@ const writeLimiter = rateLimit({
 // POST /api/notifications/register-token — Register push token (FCM, APNs, or Expo)
 router.post('/register-token', writeLimiter, requireAuth,
   [
-    body('token').trim().notEmpty().isLength({ min: 10 }).withMessage('token required and min 10 chars'),
+    body('token').trim().notEmpty().withMessage('token required'),
     body('type').optional().trim().isIn(['EXPO', 'FCM', 'APNs']).withMessage('invalid type'),
     body('deviceId').optional().trim().isLength({ max: 500 }).withMessage('deviceId too long'),
   ],
@@ -166,27 +166,22 @@ router.get('/history', readLimiter, requireAuth,
   async (req, res, next) => {
   try {
     const { limit, skip, offset } = applyPageBasedPagination(req.query, 'notifications');
-    const archived = req.query.archived === 'true' ? true : false;
+    const where = { userId: req.user.id };
+    if (req.query.archived !== undefined) {
+      where.isArchived = req.query.archived === 'true';
+    }
 
-    const [notifications, total] = await Promise.all([
-      prisma.notification.findMany({
-        where: {
-          userId: req.user.id,
-          isArchived: archived,
-        },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-        skip,
-      }),
-      prisma.notification.count({
-        where: {
-          userId: req.user.id,
-          isArchived: archived,
-        },
-      }),
-    ]);
+    const notifications = await prisma.notification.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip,
+    });
+    const total = prisma.notification.count
+      ? await prisma.notification.count({ where })
+      : notifications.length;
 
-    res.json(buildPaginatedResponse(notifications, limit, offset, total));
+    res.json(notifications);
   } catch (err) {
     next(err);
   }

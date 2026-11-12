@@ -105,7 +105,8 @@ function validatePageBasedPaginationQuery() {
  * @returns {object} - { limit, offset, skip, take, page }
  */
 function applyPageBasedPagination(queryParams, endpoint) {
-  const limit = parseInt(queryParams.limit) || paginationConfig.DEFAULT_LIMIT;
+  const endpointDefault = endpoint ? paginationConfig.getLimitForEndpoint(endpoint) : paginationConfig.DEFAULT_LIMIT;
+  const limit = parseInt(queryParams.limit) || endpointDefault;
   const page = Math.max(1, parseInt(queryParams.page) || 1);
 
   // Enforce limits
