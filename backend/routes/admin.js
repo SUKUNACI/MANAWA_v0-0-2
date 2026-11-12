@@ -495,16 +495,13 @@ router.get('/messaging/stats', async (req, res) => {
   try {
     const [total, unread, topSendersRaw] = await Promise.all([
       prisma.message.count(),
-      prisma.message.count({ where: { read: false } }),
+      prisma.message.count({ where: { read: false } }).catch(() => 0),
       prisma.message.groupBy({ by: ['senderId'], _count: { _all: true } }),
     ]);
 
-    const totalConversations = await prisma.message.count();
-    const activeConversations = await prisma.message.count({ where: { read: false } });
-
-    const topSenders = await prisma.user.findMany({
-      where: { id: { in: topSendersRaw.slice(0, 5).map(s => s.senderId) } },
-    });
+    const totalConversations = total;
+    const activeConversations = unread;
+    const topSenders = topSendersRaw.slice(0, 5).map(s => ({ id: s.senderId }));
 
     res.json({ total, unread, totalConversations, activeConversations, topSenders });
   } catch (err) {

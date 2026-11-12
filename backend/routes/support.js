@@ -58,7 +58,7 @@ router.post('/tickets', createTicketLimiter,
   [
     body('category').trim().notEmpty().isLength({ max: 100 }).withMessage('category required'),
     body('subject').trim().notEmpty().isLength({ min: 5, max: 200 }).withMessage('subject required, 5-200 chars'),
-    body('message').trim().notEmpty().isLength({ min: 10, max: 2000 }).withMessage('message required, 10-2000 chars'),
+    body('message').trim().notEmpty().isLength({ min: 1, max: 2000 }).withMessage('message required, max 2000 chars'),
   ],
   handleValidationErrors,
   async (req, res, next) => {

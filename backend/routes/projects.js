@@ -357,7 +357,7 @@ router.get('/', readLimiter, requireAuth,
 
     res.json(projects.map(p => ({
       ...p,
-      quoteCount: p._count.quotes,
+      quoteCount: p._count?.quotes ?? p.quotes?.length ?? 0,
       _count: undefined,
       alreadyQuoted: alreadyQuotedIds.has(p.id),
     })));
