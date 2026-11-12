@@ -4,7 +4,7 @@ const { clientToken, proToken, adminToken } = require('../helpers');
 
 // ============ MOCK SETUP ============
 
-jest.mock('../../src/config/db', () => ({
+jest.mock('../../config/db', () => ({
   project: {
     findMany: jest.fn(),
     findUnique: jest.fn(),
@@ -34,15 +34,15 @@ jest.mock('../../src/config/db', () => ({
   },
 }));
 
-jest.mock('../../src/config/pushNotifications', () => ({
+jest.mock('../../config/pushNotifications', () => ({
   sendPushNotification: jest.fn().mockResolvedValue(true),
 }));
 
-jest.mock('../../src/config/cloudinary', () => ({
+jest.mock('../../config/cloudinary', () => ({
   uploadBuffer: jest.fn().mockResolvedValue('https://res.cloudinary.com/test/image.jpg'),
 }));
 
-jest.mock('../../src/middleware/auth', () => ({
+jest.mock('../../middleware/auth', () => ({
   requireAuth: (req, res, next) => {
     const token = req.headers.authorization?.split(' ')[1];
     if (token) {
@@ -67,24 +67,24 @@ jest.mock('../../src/middleware/auth', () => ({
   requireEmailVerified: (req, res, next) => next(),
 }));
 
-jest.mock('../../src/config/upload', () => ({
+jest.mock('../../config/upload', () => ({
   array: () => (req, res, next) => next(),
   verifyMagicBytes: (req, res, next) => next(),
 }));
 
-jest.mock('../../src/routes/subscriptions', () => ({
+jest.mock('../../routes/subscriptions', () => ({
   getActiveTier: () => 'ESSENTIEL',
   getTierConfig: () => ({ projectsDelayMs: 0 }),
 }));
 
-jest.mock('../../src/utils/badges', () => ({
+jest.mock('../../utils/badges', () => ({
   computeBadges: jest.fn().mockResolvedValue(true),
 }));
 
-const prisma = require('../../src/config/db');
-const { sendPushNotification } = require('../../src/config/pushNotifications');
-const { uploadBuffer } = require('../../src/config/cloudinary');
-const projectsRouter = require('../../src/routes/projects');
+const prisma = require('../../config/db');
+const { sendPushNotification } = require('../../config/pushNotifications');
+const { uploadBuffer } = require('../../config/cloudinary');
+const projectsRouter = require('../../routes/projects');
 
 const app = express();
 app.use(express.json());
