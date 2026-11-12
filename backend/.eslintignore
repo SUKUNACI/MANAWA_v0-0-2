@@ -1,0 +1,3 @@
+node_modules/
+coverage/
+tests/performance/k6-load-test.js
