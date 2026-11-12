@@ -1242,3 +1242,36 @@ model OnCallSchedule {
   @@index([endAt])
   @@index([userId])
 }
+
+// Q91/Q92: Data Retention & Archival
+model DataRetentionLog {
+  id           String   @id @default(uuid())
+  entityType   String   // "User" | "Message" | "Payment" | ...
+  entityId     String
+  action       String   // "archived" | "deleted" | "anonymized"
+  reason       String   // "retention_policy" | "gdpr_request" | "manual"
+  triggeredBy  String?  // admin userId or "cron"
+  createdAt    DateTime @default(now())
+
+  @@index([entityType])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// Q93: GDPR Right to Deletion
+model GdprDeletionRequest {
+  id            String    @id @default(uuid())
+  userId        String
+  requestedBy   String    // userId (self) or admin userId
+  status        String    @default("PENDING") // "PENDING" | "IN_PROGRESS" | "COMPLETED" | "REJECTED"
+  reason        String?
+  completedAt   DateTime?
+  rejectedAt    DateTime?
+  rejectionNote String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
