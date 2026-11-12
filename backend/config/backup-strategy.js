@@ -1,4 +1,6 @@
-const AWS = require('aws-sdk');
+// aws-sdk optionnel — backup S3 désactivé si le module est absent
+let AWS = null;
+try { AWS = require('aws-sdk'); } catch (_) {}
 const { PrismaClient } = require('@prisma/client');
 const fs = require('fs');
 const path = require('path');
@@ -30,6 +32,10 @@ class BackupStrategy {
    * Initialize S3 client
    */
   initializeS3() {
+    if (!AWS) {
+      logger.warn('[Backup] aws-sdk non disponible — backup S3 désactivé');
+      return false;
+    }
     try {
       this.s3Client = new AWS.S3({
         accessKeyId: process.env.AWS_ACCESS_KEY_ID,

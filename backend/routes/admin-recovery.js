@@ -7,15 +7,16 @@ const logger = require('../utils/logger');
 const { buildPaginationQuery } = require('../utils/sorting-helper');
 const { getSortableFields } = require('../config/sortable-fields');
 const prisma = require('../config/db');
-const AWS = require('aws-sdk');
 const { applyPagination, validatePaginationQuery, buildPaginatedResponse } = require('../utils/pagination-helper');
 
 const router = express.Router();
 
-// AWS S3 configuration
-const s3 = new AWS.S3({
-  region: process.env.AWS_REGION || 'eu-west-1',
-});
+// aws-sdk optionnel — backup S3 désactivé si absent
+let s3 = null;
+try {
+  const AWS = require('aws-sdk');
+  s3 = new AWS.S3({ region: process.env.AWS_REGION || 'eu-west-1' });
+} catch (_) {}
 
 // Rate limiters
 const readLimiter = rateLimit({
@@ -525,6 +526,7 @@ async function checkDatabaseHealth() {
  * Helper: Get last backup info from S3
  */
 async function getLastBackup() {
+  if (!s3) return { status: 'unavailable', reason: 'aws-sdk not installed' };
   try {
     const params = {
       Bucket: process.env.BACKUP_S3_BUCKET || 'manawa-prod-backups',
@@ -567,6 +569,7 @@ async function getLastRestoreTest() {
  * Helper: Get storage statistics
  */
 async function getStorageStatistics() {
+  if (!s3) return { s3_total_size_gb: '0', backup_count: 0, cost_estimate_monthly: 'N/A' };
   try {
     const params = {
       Bucket: process.env.BACKUP_S3_BUCKET || 'manawa-prod-backups',
