@@ -277,7 +277,7 @@ async function disconnect() {
 // Health check
 async function healthCheck() {
   if (useInMemory) {
-    return { status: 'ok', mode: 'in-memory', message: 'In-memory cache fallback active' };
+    return { status: 'ok', mode: 'in-memory-fallback', message: 'In-memory cache fallback active' };
   }
 
   try {

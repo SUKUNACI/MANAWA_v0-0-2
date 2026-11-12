@@ -494,6 +494,27 @@ function resetDailyMetrics() {
 }
 
 /**
+ * Reset all metrics — used in tests to avoid singleton state leakage between test cases
+ */
+function resetAllMetrics() {
+  metrics.requestCount = 0;
+  metrics.requestsByMethod = {};
+  metrics.requestsByRoute = {};
+  metrics.requestsByStatus = {};
+  metrics.totalResponseTime = 0;
+  metrics.responseTimeByRoute = {};
+  metrics.requestCountByRoute = {};
+  metrics.errorCount = 0;
+  metrics.errorsByType = {};
+  metrics.errorsByRoute = {};
+  metrics.dbQueryCount = 0;
+  metrics.dbErrorCount = 0;
+  metrics.dbConnectionPoolStatus = null;
+  resetDailyMetrics();
+  metrics.lastMetricsReset = new Date();
+}
+
+/**
  * Update alert thresholds
  */
 function updateAlertThresholds(newThresholds) {
@@ -521,6 +542,7 @@ module.exports = {
   getMetrics,
   getPrometheusMetrics,
   resetDailyMetrics,
+  resetAllMetrics,
   updateAlertThresholds,
   getAlertThresholds,
 };
