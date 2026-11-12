@@ -42,6 +42,7 @@ router.get('/', readLimiter, requireAuth,
   handleValidationErrors,
   async (req, res, next) => {
   try {
+    if (!req.user) return res.status(401).json({ error: 'Non authentifié' });
     const { status, professionalId, dateFrom, dateTo, search } = req.query;
     const { limit, skip, offset } = applyPageBasedPagination(req.query, 'bookings');
 
@@ -96,7 +97,16 @@ router.get('/', readLimiter, requireAuth,
       prisma.booking.count({ where }),
     ]);
 
-    res.json(buildPaginatedResponse(bookings, limit, offset, total));
+    const page = Math.floor(offset / limit) + 1;
+    res.json({
+      bookings,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -110,6 +120,7 @@ router.get('/:id', requireAuth,
   handleValidationErrors,
   async (req, res, next) => {
   try {
+    if (!req.user) return res.status(401).json({ error: 'Non authentifié' });
     const booking = await prisma.booking.findUnique({
       where: { id: req.params.id },
       include: {
@@ -142,6 +153,7 @@ router.patch('/:id/cancel', requireAuth,
   handleValidationErrors,
   async (req, res, next) => {
   try {
+    if (!req.user) return res.status(401).json({ error: 'Non authentifié' });
     const { reason, notifyByEmail } = req.body;
 
     const booking = await prisma.booking.update({
