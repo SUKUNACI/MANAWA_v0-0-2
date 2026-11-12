@@ -79,6 +79,8 @@ const paymentsRetryRoutes = require('./routes/payments-retry');
 const searchFacetsRoutes = require('./routes/search-facets');
 const analyticsDistributionRoutes = require('./routes/analytics-distribution');
 const configVersionsRoutes = require('./routes/config-versions');
+const adminFeatureFlagsRoutes = require('./routes/admin-feature-flags');
+const adminExperimentsRoutes = require('./routes/admin-experiments');
 
 // Firebase initialization
 const { initializeFirebase, getMessaging } = require('./config/firebase-admin');
@@ -327,6 +329,10 @@ apiV1Router.use('/admin/queues', injectAdminCookie, queuesAdminRoutes);
 apiV1Router.use('/admin/backups', injectAdminCookie, backupsAdminRoutes);
 // Q77 + Q78: Configuration versioning & rollback
 apiV1Router.use('/admin/config/versions', injectAdminCookie, configVersionsRoutes);
+// Q71: Feature flags management
+apiV1Router.use('/admin/feature-flags', injectAdminCookie, adminFeatureFlagsRoutes);
+// Q72: A/B testing experiments
+apiV1Router.use('/admin/experiments', injectAdminCookie, adminExperimentsRoutes);
 apiV1Router.use('/role-permissions', injectAdminCookie, rolePermissionsRoutes);
 apiV1Router.use('/support', supportRoutes);
 apiV1Router.use('/portfolio-projects', portfolioProjectsRoutes);
@@ -718,6 +724,22 @@ async function startServer() {
       console.log('✓ Queue webhook initialisée');
     } catch (err) {
       console.error('⚠️  Erreur initialisation webhook queue (non-bloquant):', err.message);
+    }
+
+    // Q71: Initialize default feature flags in DB
+    console.log('⏳ Initialisation des feature flags...');
+    try {
+      const { initializeDefaultFlags, subscribeToHotReload } = require('./config/feature-flags');
+      const prismaClient = require('./config/db');
+      await initializeDefaultFlags(prismaClient);
+      // Q76: Subscribe to hot reload channel (requires a separate Redis subscriber connection)
+      const redisSubscriber = redis.getSubscriberClient ? redis.getSubscriberClient() : null;
+      if (redisSubscriber) {
+        await subscribeToHotReload(redisSubscriber);
+      }
+      console.log('✓ Feature flags initialisés');
+    } catch (err) {
+      console.error('⚠️  Erreur initialisation feature flags (non-bloquant):', err.message);
     }
 
     // Q66: Initialize MeiliSearch
