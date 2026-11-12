@@ -31,13 +31,6 @@ const { getSortableFields } = require('../config/sortable-fields');
       filter: true,
       showExtensions: false,
       deepLinking: true,
-      presets: [
-        swaggerUi.presets.apis,
-        swaggerUi.SwaggerUIBundle.presets.SwaggerUIStandalonePreset,
-      ],
-      plugins: [
-        swaggerUi.SwaggerUIBundle.plugins.DownloadUrl,
-      ],
       layout: 'BaseLayout',
     },
     customCss: `
