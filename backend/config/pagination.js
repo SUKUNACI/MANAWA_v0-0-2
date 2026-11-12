@@ -48,7 +48,7 @@ module.exports = {
     'quotes': 20,
     'bookings': 20,
     'messages': 20,
-    'notifications': 20,
+    'notifications': 30,
 
     // User lists: smaller by default (privacy/performance)
     'users': 20,
