@@ -689,37 +689,28 @@ setTimeout(() => {
 // ERROR #20: Add admin log retention policy - cleanup logs older than 90 days
 const ADMIN_LOG_RETENTION_DAYS = parseInt(process.env.ADMIN_LOG_RETENTION_DAYS || '90', 10);
 async function cleanupOldAdminLogs() {
+  const logger = require('./utils/logger');
   try {
-    const logger = require('./utils/logger');
     const cutoffDate = new Date(Date.now() - ADMIN_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000);
     const { count } = await prisma.adminLog.deleteMany({
       where: { createdAt: { lt: cutoffDate } },
     });
     if (count > 0) logger.info('[CRON] Admin logs cleanup', { deletedCount: count, retentionDays: ADMIN_LOG_RETENTION_DAYS });
   } catch (err) {
-    const logger = require('./utils/logger');
-    logger.error('[CRON] Admin logs cleanup error', { error: err.message });
+    logger.error('[CRON] Admin logs cleanup error', { error: err?.message });
   }
 }
-setInterval(cleanupOldAdminLogs, 24 * 60 * 60 * 1000);
-cleanupOldAdminLogs();
-
 // Q54: Webhook retry scheduler - runs every 30 minutes
 const { webhookRetryScheduler } = require('./jobs/webhook-retry-scheduler');
 async function scheduleWebhookRetries() {
+  const logger = require('./utils/logger');
   try {
-    const logger = require('./utils/logger');
     const result = await webhookRetryScheduler();
     logger.debug('[CRON] Webhook retry scheduler completed', result);
   } catch (err) {
-    const logger = require('./utils/logger');
-    logger.error('[CRON] Webhook retry scheduler error', { error: err.message });
+    logger.error('[CRON] Webhook retry scheduler error', { error: err?.message });
   }
 }
-// Run immediately on startup (after a delay to ensure DB connection is ready)
-setTimeout(scheduleWebhookRetries, 10 * 1000);
-// Then run every 30 minutes (30 * 60 * 1000 ms)
-setInterval(scheduleWebhookRetries, 30 * 60 * 1000);
 
 // Q52: Schedule daily payment reconciliation (runs at 00:00 UTC)
 // Checks ALL pending payments and syncs with GeniusPay
@@ -846,6 +837,14 @@ async function startServer() {
           });
         }, 24 * 60 * 60 * 1000);
       }, 60 * 60 * 1000); // 1 hour after startup
+
+      // Admin log cleanup CRON (requires DB — runs only after server started)
+      setInterval(cleanupOldAdminLogs, 24 * 60 * 60 * 1000);
+      cleanupOldAdminLogs();
+
+      // Webhook retry scheduler (requires DB — runs only after server started)
+      setTimeout(scheduleWebhookRetries, 10 * 1000);
+      setInterval(scheduleWebhookRetries, 30 * 60 * 1000);
     });
 
     // Graceful shutdown
@@ -875,4 +874,4 @@ if (require.main === module) {
 }
 // Force rebuild v2
 
-module.exports = app;
+module.exports = server;
