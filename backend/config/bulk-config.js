@@ -48,7 +48,8 @@ module.exports = {
 
   // Field validation rules for projects
   PROJECT_FIELDS: {
-    CREATE: ['title', 'description', 'budget', 'city', 'category'],
+    CREATE: ['title', 'budget', 'city'],
+    UPDATE_REQUIRED: ['id'],
     UPDATE: ['id', 'title', 'description', 'budget', 'status', 'city', 'category'],
     DELETE: ['id'],
   },

@@ -114,7 +114,7 @@ function validateProjectBulkData(items, operation) {
 
   // Validate individual items
   items.forEach((item, index) => {
-    const requiredFields = bulkConfig.PROJECT_FIELDS[operation.toUpperCase()] || [];
+    const requiredFields = bulkConfig.PROJECT_FIELDS[operation.toUpperCase() + '_REQUIRED'] || bulkConfig.PROJECT_FIELDS[operation.toUpperCase()] || [];
 
     for (const field of requiredFields) {
       if (!item[field]) {
@@ -154,6 +154,9 @@ async function bulkRateLimitMiddleware(req, res, next) {
   if (!userId) {
     return res.status(401).json({ error: 'Non authentifié' });
   }
+  if (req.user.role !== 'ADMIN') {
+    return res.status(403).json({ error: 'Accès refusé — rôle administrateur requis' });
+  }
 
   const rateLimit = await checkBulkRateLimit(userId);
 
@@ -189,8 +192,6 @@ async function bulkRateLimitMiddleware(req, res, next) {
  */
 router.post(
   '/',
-  requireAuth,
-  requireRole('ADMIN'),
   bulkRateLimitMiddleware,
   body('*.title').notEmpty().withMessage('title requis'),
   body('*.description').optional().isString(),
@@ -296,8 +297,6 @@ router.post(
  */
 router.patch(
   '/',
-  requireAuth,
-  requireRole('ADMIN'),
   bulkRateLimitMiddleware,
   body('*.id').notEmpty().withMessage('id requis'),
   body('*.title').optional().isString(),
@@ -403,8 +402,6 @@ router.patch(
  */
 router.delete(
   '/',
-  requireAuth,
-  requireRole('ADMIN'),
   bulkRateLimitMiddleware,
   body('ids').isArray({ min: 1 }).withMessage('ids doit être un tableau non vide'),
   body('ids.*').isString().withMessage('Chaque id doit être une chaîne'),
@@ -413,7 +410,11 @@ router.delete(
 
     try {
       const { ids } = req.body;
-      const userId = req.user.id;
+      const userId = req.user?.id;
+
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ code: 'VALIDATION_FAILED', errors: ['ids must be a non-empty array'] });
+      }
 
       // Validate count
       if (ids.length > bulkConfig.MAX_ITEMS_PER_BULK_OP) {
