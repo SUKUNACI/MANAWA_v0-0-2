@@ -1,0 +1,43 @@
+{
+  "cli": {
+    "version": ">= 5.0.0",
+    "promptToConfigurePushNotifications": false
+  },
+  "build": {
+    "production": {
+      "node": "18.13.0",
+      "npm": "9.2.0",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.manawa.app"
+      }
+    },
+    "preview": {
+      "node": "18.13.0",
+      "npm": "9.2.0",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://staging-api.manawa.app"
+      },
+      "distribution": "internal"
+    },
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://localhost:3000"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleTeamId": "YOUR_APPLE_TEAM_ID",
+        "appleId": "YOUR_APPLE_ID",
+        "ascAppId": "YOUR_ASC_APP_ID"
+      },
+      "android": {
+        "serviceAccount": "./path/to/service-account-key.json",
+        "track": "production"
+      }
+    }
+  }
+}

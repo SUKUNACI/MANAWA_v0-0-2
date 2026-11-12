@@ -67,6 +67,7 @@ const healthRoutes = require('./routes/health');
 const webhooksAdminRoutes = require('./routes/webhooks-admin');
 const queuesAdminRoutes = require('./routes/queues-admin');
 const backupsAdminRoutes = require('./routes/admin-backups');
+const docsRoutes = require('./routes/docs');
 
 // Firebase initialization
 const { initializeFirebase, getMessaging } = require('./config/firebase-admin');
@@ -215,6 +216,9 @@ app.use((req, res, next) => {
   express.json({ limit: '1mb' })(req, res, next);
 });
 
+// Documentation routes (must be before /api routes)
+app.use('/docs', docsRoutes);
+
 // Routes REST
 app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
@@ -357,54 +361,9 @@ app.get('/p/:proId', (req, res) => {
 });
 
 // Messagerie temps réel (Socket.IO) — authentification par token JWT
-const onlineUsers = new Map();
-
-io.use((socket, next) => {
-  const token = socket.handshake.auth?.token;
-  if (!token) return next(new Error('Token requis'));
-  try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    socket.userId = payload.id;
-    next();
-  } catch (err) {
-    next(new Error('Token invalide'));
-  }
-});
-
-// ERROR #18: Simple Map-based rate limiting (replaces LRU for Socket.IO)
-const socketMessageCounts = new Map();
-
-function isSocketRateLimited(userId) {
-  const now = Date.now();
-  const entry = socketMessageCounts.get(userId) || { count: 0, resetAt: now + 60000 };
-  if (now > entry.resetAt) { entry.count = 0; entry.resetAt = now + 60000; }
-  entry.count++;
-  socketMessageCounts.set(userId, entry);
-  return entry.count > 60;
-}
-
-io.on('connection', (socket) => {
-  onlineUsers.set(socket.userId, socket.id);
-
-  socket.on('send_message', (message) => {
-    if (message.senderId !== socket.userId) return;
-    if (isSocketRateLimited(socket.userId)) {
-      socket.emit('error', { message: 'Trop de messages, réessayez dans une minute' });
-      return;
-    }
-    const receiverSocket = onlineUsers.get(message.receiverId);
-    if (receiverSocket) {
-      io.to(receiverSocket).emit('receive_message', message);
-    }
-  });
-
-  socket.on('disconnect', () => {
-    if (onlineUsers.get(socket.userId) === socket.id) {
-      onlineUsers.delete(socket.userId);
-      socketMessageCounts.delete(socket.userId); // Cleanup rate limit entry
-    }
-  });
-});
+// NEW: Initialize Socket.IO with complete handler system
+const { initializeSocket } = require('./socket/manager');
+initializeSocket(io);
 
 // Sentry error handler (doit être avant le handler custom)
 if (process.env.SENTRY_DSN) {

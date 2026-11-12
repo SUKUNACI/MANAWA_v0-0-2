@@ -1,0 +1,187 @@
+================================================================================
+  MANAWA BACKEND - PERFORMANCE TESTING SUITE
+  Quick Start Guide (2 minutes to your first load test)
+================================================================================
+
+📍 Location:
+   /c/Users/HP/Desktop/MANAWA_NEW/backend/tests/performance/
+
+🚀 IMMEDIATE START (Choose One):
+
+Option 1 - Fastest Start (K6)
+─────────────────────────────
+  1. Ensure backend is running: npm start
+  2. cd tests/performance
+  3. Run: k6 run --vus 100 --duration 5m k6-load-test.js
+  
+  ✅ Takes 5 minutes
+  ✅ See results in console
+
+Option 2 - Automated Suite (Recommended)
+─────────────────────────────────────────
+  1. Ensure backend is running: npm start
+  2. cd tests/performance
+  3. Run: ./run-tests.sh baseline
+  
+  ✅ Takes 5-10 minutes
+  ✅ Includes system monitoring
+  ✅ Generates detailed reports
+
+Option 3 - Full Test Suite
+──────────────────────────
+  1. Ensure backend is running: npm start
+  2. cd tests/performance
+  3. Run: ./run-tests.sh all
+  
+  ✅ Takes 30 minutes
+  ✅ Baseline + Peak + Stress tests
+  ✅ Complete analysis
+
+================================================================================
+
+📚 DOCUMENTATION (Read in This Order):
+
+  1. INDEX.md (2 min) ................. Overview & navigation
+  2. README.md (15 min) ............... Installation & usage
+  3. PERFORMANCE_BASELINE.md (20 min) . Metrics & targets
+  4. OPTIMIZATION_RECOMMENDATIONS.md .. Improvements
+
+================================================================================
+
+📊 WHAT GETS TESTED:
+
+  Scenario 1: Baseline (100 users, 5 min)
+  ├─ /api/health
+  ├─ /api/projects
+  ├─ /api/professionals
+  └─ /api/search
+  → Establishes normal performance baseline
+
+  Scenario 2: Peak (1000 users, 10 min)
+  ├─ All baseline endpoints
+  ├─ /api/projects/:id
+  ├─ /api/professionals/:id
+  ├─ /api/bookings
+  └─ /api/messages
+  → Validates scaling behavior
+
+  Scenario 3: Stress (5000 users, 4 min)
+  ├─ All endpoints
+  ├─ /api/admin/kpis
+  └─ Maximum concurrency
+  → Finds breaking point
+
+================================================================================
+
+✅ SUCCESS CRITERIA:
+
+  Baseline (100 VUs):
+  ✓ p95 response time <500ms
+  ✓ Error rate <1%
+  ✓ Throughput >1000 req/sec
+
+  Peak (1000 VUs):
+  ✓ p95 response time <1s
+  ✓ Error rate <1.5%
+  ✓ Graceful degradation
+
+  Stress (5000 VUs):
+  ✓ Clear breaking point
+  ✓ Error rate <10%
+  ✓ Full recovery after load
+
+================================================================================
+
+🛠️ TROUBLESHOOTING:
+
+  Problem: "K6 command not found"
+  → Install: brew install k6 (macOS) or apt-get install k6 (Linux)
+
+  Problem: "Backend not responding"
+  → Start backend: cd .. && npm start
+
+  Problem: "Permission denied on run-tests.sh"
+  → Fix: chmod +x run-tests.sh
+
+  Problem: "High error rate in tests"
+  → Check: tail -f ../logs/error.log
+
+================================================================================
+
+📈 EXPECTED RESULTS:
+
+  Baseline Response Times:
+  ├─ p50: ~100ms
+  ├─ p95: 300-500ms
+  ├─ p99: 650ms-1s
+  └─ Success rate: >99%
+
+  Peak Load Response Times:
+  ├─ p50: ~150-200ms
+  ├─ p95: 700ms-1s
+  ├─ p99: 1-2s
+  └─ Success rate: >98%
+
+  Stress Test Expected Behavior:
+  ├─ Breaking point: 3000-4000 VUs
+  ├─ Error rate increases: 5-10%
+  ├─ Response time spikes: 2-5s
+  └─ Recovery on load drop: Full within 5min
+
+================================================================================
+
+📊 ANALYZING RESULTS:
+
+  View results:
+  $ cat results/baseline_*.json | jq '.metrics'
+
+  Compare tests:
+  $ node analyze-results.js baseline.json peak.json
+
+  Format: Human-readable with recommendations
+
+================================================================================
+
+🎯 NEXT STEPS AFTER FIRST TEST:
+
+  1. Review results in console
+  2. Compare with PERFORMANCE_BASELINE.md
+  3. Identify any failures (if p95 > target)
+  4. Read OPTIMIZATION_RECOMMENDATIONS.md
+  5. Implement quick wins (1-2 hour changes)
+  6. Re-test to verify improvements
+
+================================================================================
+
+💡 IMPORTANT NOTES:
+
+  ✓ Always run on local/staging, never production
+  ✓ Ensure backend is healthy before testing
+  ✓ Monitor system resources during tests
+  ✓ Run baseline weekly to track trends
+  ✓ Run peak test monthly before releases
+  ✓ Run stress test after major changes
+
+================================================================================
+
+📞 SUPPORT:
+
+  Installation Issues → README.md
+  Understanding Results → PERFORMANCE_BASELINE.md
+  Performance Improvements → OPTIMIZATION_RECOMMENDATIONS.md
+  General Questions → INDEX.md
+  Project Overview → IMPLEMENTATION_SUMMARY.md
+
+================================================================================
+
+🎉 READY? START WITH:
+
+  $ cd /c/Users/HP/Desktop/MANAWA_NEW/backend/tests/performance
+  $ ./run-tests.sh baseline
+
+================================================================================
+
+Version: 1.0
+Created: 2026-11-12
+Status: Production Ready ✅
+

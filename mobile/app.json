@@ -1,0 +1,78 @@
+{
+  "expo": {
+    "name": "MANAWA",
+    "slug": "manawa-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTabletMode": true,
+      "bundleIdentifier": "com.manawa.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "MANAWA needs your location to find nearby rentals and show them on the map.",
+        "NSPhotoLibraryUsageDescription": "Allow MANAWA to access your photo library to upload property images.",
+        "NSCameraUsageDescription": "Allow MANAWA to access your camera to take property photos."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
+      "package": "com.manawa.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow MANAWA to access your camera to take property photos."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow MANAWA to access your location."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow MANAWA to access your photos.",
+          "cameraPermission": "Allow MANAWA to access your camera."
+        }
+      ]
+    ],
+    "updates": {
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/YOUR_PROJECT_ID"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "YOUR_PROJECT_ID"
+      }
+    },
+    "scheme": "manawa"
+  }
+}
