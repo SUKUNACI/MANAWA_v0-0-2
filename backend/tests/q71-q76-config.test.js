@@ -271,11 +271,11 @@ describe('Q75: Environment Parity', () => {
   const path = require('path');
 
   it('.env.dev template exists', () => {
-    expect(fs.existsSync(path.join(__dirname, '../.env.dev'))).toBe(true);
+    expect(fs.existsSync(path.join(__dirname, '../.env.dev.example'))).toBe(true);
   });
 
   it('.env.staging template exists', () => {
-    expect(fs.existsSync(path.join(__dirname, '../.env.staging'))).toBe(true);
+    expect(fs.existsSync(path.join(__dirname, '../.env.staging.example'))).toBe(true);
   });
 
   it('.env.dev contains required variables', () => {
