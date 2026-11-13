@@ -13,15 +13,18 @@ jest.mock('../config/firebase-admin', () => ({
   isInitialized: () => false,
 }), { virtual: true });
 
-// Mock push notifications
-jest.mock('../config/pushNotifications', () => ({
-  setMessaging: jest.fn(),
-  sendPushNotification: jest.fn().mockResolvedValue({ sent: false }),
-  sendPushToMultiple: jest.fn().mockResolvedValue({ sent: 0, total: 0 }),
-  sendViaFCM: jest.fn().mockResolvedValue(null),
-  sendViaExpo: jest.fn().mockResolvedValue(null),
-  detectTokenType: jest.fn().mockReturnValue('EXPO'),
-}), { virtual: true });
+// Mock push notifications - keep detectTokenType real (it's a pure function)
+jest.mock('../config/pushNotifications', () => {
+  const actual = jest.requireActual('../config/pushNotifications');
+  return {
+    setMessaging: jest.fn(),
+    sendPushNotification: jest.fn().mockResolvedValue({ sent: false }),
+    sendPushToMultiple: jest.fn().mockResolvedValue({ sent: 0, total: 0 }),
+    sendViaFCM: jest.fn().mockResolvedValue(null),
+    sendViaExpo: jest.fn().mockResolvedValue(null),
+    detectTokenType: actual.detectTokenType,
+  };
+}, { virtual: true });
 
 // Mock mailer
 jest.mock('../config/mailer', () => ({
