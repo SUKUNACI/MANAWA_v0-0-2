@@ -53,8 +53,6 @@ describe('Payment Reconciliation Daily - Q52', () => {
       data: {
         projectId: testProject.id,
         professionalId: testProfessional.id,
-        clientId: testClient.id,
-        title: 'Test Quote',
         description: 'Test',
         amount: 500,
         status: 'ACCEPTED',

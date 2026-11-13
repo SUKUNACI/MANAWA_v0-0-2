@@ -1,6 +1,13 @@
 module.exports = {
   testEnvironment: 'node',
   testMatch: ['**/tests/**/*.test.js'],
+  // smoke tests require a running server on :5000/:5555 and a pre-signed admin token;
+  // they are excluded from the standard CI run which does not start a background server.
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    'tests/reservations-smoke\\.test\\.js',
+    'tests/reservations-smoke-integration\\.test\\.js',
+  ],
   setupFiles: ['./tests/setup.js'],
   clearMocks: true,
   testTimeout: 10000,

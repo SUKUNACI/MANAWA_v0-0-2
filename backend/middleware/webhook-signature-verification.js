@@ -185,15 +185,29 @@ function webhookSignatureVerification(options = {}) {
  * app.use(express.json());
  */
 function captureRawBody(req, res, next) {
+  // Si le body a déjà été parsé (express.json en amont), reconstruire rawBody
+  if (req.body !== undefined) {
+    req.rawBody = req.rawBody || JSON.stringify(req.body);
+    return next();
+  }
+
   if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
-    let data = '';
+    const chunks = [];
     req.on('data', chunk => {
-      data += chunk;
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     });
     req.on('end', () => {
-      req.rawBody = data;
+      const rawBuffer = Buffer.concat(chunks);
+      req.rawBody = rawBuffer.toString('utf8');
+      // Parse body directly so downstream middleware (express.json) is not needed
+      try {
+        req.body = JSON.parse(req.rawBody);
+      } catch {
+        // Non-JSON body, leave undefined
+      }
       next();
     });
+    req.on('error', next);
   } else {
     next();
   }
