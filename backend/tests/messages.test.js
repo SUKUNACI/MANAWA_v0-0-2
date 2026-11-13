@@ -27,8 +27,8 @@ app.use((err, req, res, next) => res.status(500).json({ error: err.message }));
 
 const USER_A = 'user-a';
 const USER_B = 'user-b';
-const mockUserA = { id: USER_A, role: 'CLIENT',       suspended: false };
-const mockUserB = { id: USER_B, role: 'PROFESSIONAL', suspended: false };
+const mockUserA = { id: USER_A, role: 'CLIENT',       suspended: false, emailVerified: true };
+const mockUserB = { id: USER_B, role: 'PROFESSIONAL', suspended: false, emailVerified: true };
 
 function useA() { prisma.user.findUnique.mockResolvedValue(mockUserA); }
 function useB() { prisma.user.findUnique.mockResolvedValue(mockUserB); }
