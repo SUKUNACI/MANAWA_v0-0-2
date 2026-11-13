@@ -125,6 +125,20 @@ router.post('/', async (req, res) => {
             newStatus = 'failed';
             shouldNotify = true;
 
+            await prisma.payment.update({
+              where: { id: payment.id },
+              data: {
+                status: newStatus,
+                metadata: JSON.stringify({
+                  failureReason: 'amount_mismatch',
+                  expected: payment.amount,
+                  received: receivedAmount,
+                  geniuspayData: eventData,
+                  webhookReceivedAt: new Date().toISOString(),
+                }),
+              },
+            });
+
             await logPaymentStatus({
               paymentId: payment.id,
               fromStatus: oldStatus,
