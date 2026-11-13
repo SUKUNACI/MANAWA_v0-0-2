@@ -18,6 +18,35 @@ const crypto = require('crypto');
 const express = require('express');
 const request = require('supertest');
 
+// Mock Bull/Redis dependencies so Q56 tests run without a real Redis instance.
+// The mock preserves FIFO ordering and idempotency-key deduplication semantics.
+jest.mock('../config/webhook-queue-config', () => {
+  const jobs = [];
+  const jobsById = new Map();
+  const webhookQueue = {
+    empty: jest.fn(async () => { jobs.length = 0; jobsById.clear(); }),
+    add: jest.fn(async (data, opts = {}) => {
+      const jobId = opts.jobId || `job-${jobs.length + 1}`;
+      if (jobsById.has(jobId)) {
+        // Idempotency: return existing job (Bull behaviour with duplicate jobId)
+        return jobsById.get(jobId);
+      }
+      const job = { id: jobId, data };
+      jobs.push(job);
+      jobsById.set(jobId, job);
+      return job;
+    }),
+    getWaiting: jest.fn(async (from, to) => jobs.slice(from, to + 1)),
+    on: jest.fn(),
+    process: jest.fn(),
+  };
+  return { webhookQueue };
+});
+
+jest.mock('../config/db', () => ({
+  $queryRaw: jest.fn().mockResolvedValue([]),
+}));
+
 describe('Q55: Webhook Signature Verification', () => {
   let app;
   const webhookSecret = 'test-secret-key-12345';
@@ -186,7 +215,7 @@ describe('Q56: Webhook Ordering Guarantees', () => {
     expect(seq2 > seq1).toBe(true);
   });
 
-  test.skip('Q56: Webhooks ajoutés à la queue en ordre FIFO — nécessite Redis/Bull', async () => {
+  test('Q56: Webhooks ajoutés à la queue en ordre FIFO', async () => {
     const { webhookQueue } = require('../config/webhook-queue-config');
 
     // Nettoyer la queue
@@ -219,7 +248,7 @@ describe('Q56: Webhook Ordering Guarantees', () => {
     expect(jobs[0].data.sequence).toBeLessThanOrEqual(jobs[1].data.sequence);
   });
 
-  test.skip('Q56: Idempotency key prévient les doublons — nécessite Redis/Bull', async () => {
+  test('Q56: Idempotency key prévient les doublons', async () => {
     const { webhookQueue } = require('../config/webhook-queue-config');
 
     await webhookQueue.empty();
