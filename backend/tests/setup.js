@@ -32,11 +32,3 @@ jest.mock('../config/mailer', () => ({
 
 // Désactiver le rate limiter en test
 jest.mock('express-rate-limit', () => () => (req, res, next) => next(), { virtual: true });
-
-// Mock webhook queue config (requiert dans webhook-queue-manager)
-jest.mock('../config/webhook-queue-config', () => ({
-  initializeQueue: jest.fn().mockResolvedValue(null),
-  cleanOldWebhookJobs: jest.fn().mockResolvedValue(null),
-  enqueueWebhook: jest.fn().mockResolvedValue(null),
-  addRetry: jest.fn().mockResolvedValue(null),
-}), { virtual: true });

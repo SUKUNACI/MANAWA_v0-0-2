@@ -5,6 +5,7 @@ const logger = require('./logger');
 const {
   webhookQueue,
   setupWebhookQueueErrorHandlers,
+  cleanOldWebhookJobs,
 } = require('../config/webhook-queue-config');
 
 /**
@@ -53,7 +54,7 @@ async function initializeWebhookQueue() {
     // Nettoyer les vieux jobs au démarrage
     // (garder 1 jour par défaut)
     setTimeout(() => {
-      require('../config/webhook-queue-config').cleanOldWebhookJobs(1)
+      cleanOldWebhookJobs(1)
         .catch(err => logger.error('[Q56] Cleanup error:', err.message));
     }, 5000);
   } catch (err) {
