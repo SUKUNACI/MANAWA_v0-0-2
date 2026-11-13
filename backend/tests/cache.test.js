@@ -139,11 +139,12 @@ describe('cacheGet Middleware', () => {
   });
 
   test('should return cached response on HIT', async () => {
+    // Key = baseUrl + path = '/api' + '/professionals/123' = '/api/professionals/123'
     const cacheKey = '/api/professionals/123';
     const cachedData = { id: '123', name: 'John Pro' };
 
-    // Pre-populate cache with JSON string (matches how middleware stores it)
-    await redis.set(cacheKey, JSON.stringify(cachedData));
+    // Store an object — redis.js handles serialization; middleware passes it directly to res.json
+    await redis.set(cacheKey, cachedData);
 
     const mockReq = {
       method: 'GET',
@@ -166,13 +167,15 @@ describe('cacheGet Middleware', () => {
     const middleware = cacheGet();
     await middleware(mockReq, mockRes, jest.fn());
 
-    // Should serve from cache
-    expect(mockRes.json).toHaveBeenCalled();
+    expect(mockRes.json).toHaveBeenCalledWith(cachedData);
+    expect(mockRes.set).toHaveBeenCalledWith('X-Cache', 'HIT');
+    expect(capturedResponse).toEqual(cachedData);
   });
 
   test('should set X-Cache header correctly', async () => {
+    // Key = '/api' + '/api/test' = '/api/api/test' (baseUrl doubled — reflects current generateCacheKey output)
     const cacheKey = '/api/api/test';
-    await redis.set(cacheKey, JSON.stringify({ result: 'cached' }));
+    await redis.set(cacheKey, { result: 'cached' });
 
     const mockReq = {
       method: 'GET',
@@ -193,8 +196,50 @@ describe('cacheGet Middleware', () => {
     const middleware = cacheGet();
     await middleware(mockReq, mockRes, jest.fn());
 
-    // HIT path sets X-Cache header before calling res.json
     expect(mockRes.set).toHaveBeenCalledWith('X-Cache', 'HIT');
+  });
+
+  test('MISS should intercept res.json and store data for subsequent HIT', async () => {
+    const mockReq = {
+      method: 'GET',
+      path: '/professionals/999',
+      baseUrl: '/api',
+      query: {},
+      user: null
+    };
+    const responseData = { id: '999', name: 'Pro MISS→HIT' };
+
+    // res.json must be a function so the middleware can bind() it
+    const originalJsonFn = jest.fn();
+    const mockResMiss = {
+      statusCode: 200,
+      set: jest.fn(),
+      json: originalJsonFn,
+    };
+
+    const middleware = cacheGet();
+    const nextCalled = jest.fn();
+    await middleware(mockReq, mockResMiss, nextCalled);
+
+    // next() was called — confirms MISS path
+    expect(nextCalled).toHaveBeenCalled();
+
+    // The middleware replaced res.json with an interceptor
+    expect(mockResMiss.json).not.toBe(originalJsonFn);
+
+    // Simulate the route handler calling res.json(data) — triggers the interceptor which caches data
+    mockResMiss.json(responseData);
+
+    // Wait for the async redis.set inside the interceptor to complete
+    await new Promise(resolve => setImmediate(resolve));
+
+    // The original json fn should have been called through the interceptor
+    expect(originalJsonFn).toHaveBeenCalledWith(responseData);
+
+    // Cache should now hold the data under the generated key
+    const cacheKey = '/api/professionals/999';
+    const cached = await redis.get(cacheKey);
+    expect(cached).toEqual(responseData);
   });
 });
 
