@@ -1,8 +1,10 @@
 node_modules/
 
-# Variables d'environnement
+# Variables d'environnement (commit .example files only, never actual .env files)
 .env
 .env.local
+.env.dev
+.env.staging
 .env.*.local
 .env.production
 
