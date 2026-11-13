@@ -328,7 +328,7 @@ describe('Q99: PII Detection', () => {
   });
 
   it('detects JWT token', () => {
-    const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
+    const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0Iy1mb3ItdGVzdGluZy1vbmx5In0.test_mock_jwt_token_for_testing';
     expect(detectPii(jwt)).toContain('jwt');
   });
 
@@ -375,7 +375,7 @@ describe('Q100: Sensitive Data Masking in Logs', () => {
   });
 
   it('maskString masks JWT', () => {
-    const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
+    const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0Iy1mb3ItdGVzdGluZy1vbmx5In0.test_mock_jwt_token_for_testing';
     expect(maskString(jwt)).toContain('[JWT]');
   });
 

@@ -80,7 +80,7 @@ jobs:
           NODE_ENV: test
           DATABASE_URL: postgresql://manawa:manawa_test@localhost:5432/manawa_test
           REDIS_URL: redis://localhost:6379
-          JWT_SECRET: ci-test-secret-min-32-characters-long
+          JWT_SECRET: ${{ secrets.CI_JWT_SECRET || 'test-secret-min-32-characters-for-testing-only' }}
           MAILJET_API_KEY: test
           MAILJET_SECRET_KEY: test
         run: npm test -- --coverage --coverageReporters=json-summary --coverageReporters=text
