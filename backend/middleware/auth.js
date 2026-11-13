@@ -146,7 +146,7 @@ function requireRoleAccess(...allowedRoleSlugs) {
 
 async function requireEmailVerified(req, res, next) {
   const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { emailVerified: true } });
-  if (user?.emailVerified === false) {
+  if (!user || user.emailVerified !== true) {
     return res.status(403).json({ error: 'Veuillez vérifier votre adresse email avant de continuer.', code: 'EMAIL_NOT_VERIFIED' });
   }
   next();
