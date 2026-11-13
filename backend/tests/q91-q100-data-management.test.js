@@ -1,14 +1,14 @@
 'use strict';
 
-jest.mock('../../config/db', () => ({
+jest.mock('../config/db', () => ({
   professional: {
     findUnique: jest.fn(),
     update: jest.fn(),
   },
-}));
+}), { virtual: true });
 
-const prisma = require('../../config/db');
-const { detectPii, maskString } = require('../../utils/data-management');
+const prisma = require('../config/db');
+const { detectPii, maskString } = require('../utils/data-management');
 
 describe('Data Management — PII Detection & Masking', () => {
   describe('detectPii', () => {
