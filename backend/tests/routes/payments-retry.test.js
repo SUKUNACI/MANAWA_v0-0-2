@@ -263,7 +263,8 @@ describe('Q53: Payment Retry Routes', () => {
       expect(res.body.data.discountAmount).toBe(50); // 10% of 500
       expect(res.body.data.amount).toBe(450); // 500 - 50
 
-      // Cleanup
+      // Cleanup — audit logs must be deleted before the payment (FK constraint)
+      await prisma.paymentAuditLog.deleteMany({ where: { paymentId: paymentWithPromoId } });
       await prisma.payment.delete({ where: { id: paymentWithPromoId } });
       await prisma.promoCode.delete({ where: { id: promoCodeId } });
     });
