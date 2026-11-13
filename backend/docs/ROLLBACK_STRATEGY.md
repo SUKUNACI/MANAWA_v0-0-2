@@ -96,7 +96,7 @@ model ConfigVersion {
 ```bash
 # Save current configuration as v1.0.0
 curl -X POST http://localhost:4000/api/v1/admin/config/versions \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Authorization: Bearer <jwt_token>" \
   -H "Content-Type: application/json" \
   -d '{
     "version": "1.0.0",
@@ -127,7 +127,7 @@ Retrieve all versions with pagination:
 ```bash
 # Get last 20 versions
 curl "http://localhost:4000/api/v1/admin/config/versions?limit=20&offset=0" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+  -H "Authorization: Bearer <jwt_token>"
 ```
 
 Response:
@@ -222,7 +222,7 @@ module.exports = {
 ```bash
 # Restore to previous configuration version
 curl -X POST http://localhost:4000/api/v1/admin/config/versions/1.0.0/restore \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Authorization: Bearer <jwt_token>" \
   -H "Content-Type: application/json" \
   -d '{
     "reason": "Timeout values causing payment failures"
@@ -566,7 +566,7 @@ Before deploying configuration changes:
 ```bash
 # 1. Create version snapshot
 curl -X POST http://localhost:4000/api/v1/admin/config/versions \
-  -H "Authorization: Bearer $JWT" \
+  -H "Authorization: Bearer <jwt_token>" \
   -H "Content-Type: application/json" \
   -d '{
     "version": "1.1.0",
@@ -575,13 +575,13 @@ curl -X POST http://localhost:4000/api/v1/admin/config/versions \
 
 # 2. Mark as stable
 curl -X PATCH http://localhost:4000/api/v1/admin/config/versions/1.1.0/mark-stable \
-  -H "Authorization: Bearer $JWT"
+  -H "Authorization: Bearer <jwt_token>"
 
 # 3. Wait 24 hours for monitoring
 
 # 4. If problems arise, rollback
 curl -X POST http://localhost:4000/api/v1/admin/config/versions/1.0.0/restore \
-  -H "Authorization: Bearer $JWT" \
+  -H "Authorization: Bearer <jwt_token>" \
   -H "Content-Type: application/json" \
   -d '{"reason": "Increased support tickets for 2FA"}'
 ```
@@ -652,7 +652,7 @@ View results:
 ```bash
 # Query recent checks
 curl "http://localhost:4000/api/v1/admin/backup-integrity?limit=10" \
-  -H "Authorization: Bearer $JWT"
+  -H "Authorization: Bearer <jwt_token>"
 ```
 
 ---
