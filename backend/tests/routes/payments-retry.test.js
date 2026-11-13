@@ -17,6 +17,14 @@ jest.mock('../../config/queue', () => ({
 jest.mock('../../utils/notification-triggers', () => ({
   sendNotification: jest.fn().mockResolvedValue({}),
 }));
+// Mock entire geniuspay module so the destructured import in the route is replaced
+jest.mock('../../utils/geniuspay', () => ({
+  createPayment: jest.fn(),
+  getPayment: jest.fn(),
+  verifyWebhookSignature: jest.fn(),
+  verifyWebhookTimestamp: jest.fn(),
+}));
+const geniuspayMock = require('../../utils/geniuspay');
 
 // Mock middleware pour les tests
 const mockAuthMiddleware = (req, res, next) => {
@@ -188,9 +196,7 @@ describe('Q53: Payment Retry Routes', () => {
     });
 
     it('should successfully retry a failed payment', async () => {
-      // Mock geniuspay.createPayment
-      const geniuspay = require('../../utils/geniuspay');
-      jest.spyOn(geniuspay, 'createPayment').mockResolvedValue({
+      geniuspayMock.createPayment.mockResolvedValueOnce({
         reference: 'TEST_REF_123',
         payment_link: 'https://geniuspay.ci/pay/TEST_REF_123',
       });
@@ -213,8 +219,6 @@ describe('Q53: Payment Retry Routes', () => {
       });
       expect(updatedPayment.status).toBe('pending');
       expect(updatedPayment.geniuspayRef).toBe('TEST_REF_123');
-
-      geniuspay.createPayment.mockRestore();
     });
 
     it('should reapply promo code if it was used before', async () => {
@@ -243,9 +247,7 @@ describe('Q53: Payment Retry Routes', () => {
         },
       });
 
-      // Mock geniuspay
-      const geniuspay = require('../../utils/geniuspay');
-      jest.spyOn(geniuspay, 'createPayment').mockResolvedValue({
+      geniuspayMock.createPayment.mockResolvedValueOnce({
         reference: 'TEST_REF_PROMO',
         payment_link: 'https://geniuspay.ci/pay/TEST_REF_PROMO',
       });
@@ -264,7 +266,6 @@ describe('Q53: Payment Retry Routes', () => {
       // Cleanup
       await prisma.payment.delete({ where: { id: paymentWithPromoId } });
       await prisma.promoCode.delete({ where: { id: promoCodeId } });
-      geniuspay.createPayment.mockRestore();
     });
 
     it('should return 400 if max retry attempts exceeded', async () => {
