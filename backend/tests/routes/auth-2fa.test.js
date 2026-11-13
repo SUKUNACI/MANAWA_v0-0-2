@@ -207,7 +207,6 @@ describe('2FA Authentication Routes', () => {
       const totpCode = require('speakeasy').totp({
         secret: testUser.twoFASecret,
         encoding: 'base32',
-        time: Math.floor(Date.now() / 1000 / 30),
       });
 
       const response = await request(app)
@@ -339,7 +338,6 @@ describe('2FA Authentication Routes', () => {
       const totpCode = require('speakeasy').totp({
         secret: testUser.twoFASecret,
         encoding: 'base32',
-        time: Math.floor(Date.now() / 1000 / 30),
       });
 
       const response = await request(app)
@@ -427,7 +425,6 @@ describe('2FA Authentication Routes', () => {
       const totpCode = require('speakeasy').totp({
         secret: testUser.twoFASecret,
         encoding: 'base32',
-        time: Math.floor(Date.now() / 1000 / 30),
       });
 
       const response = await request(app)
@@ -452,7 +449,6 @@ describe('2FA Authentication Routes', () => {
       const totpCode = require('speakeasy').totp({
         secret: testUser.twoFASecret,
         encoding: 'base32',
-        time: Math.floor(Date.now() / 1000 / 30),
       });
 
       const response = await request(app)
@@ -543,7 +539,6 @@ describe('2FA Utilities', () => {
       const token = require('speakeasy').totp({
         secret,
         encoding: 'base32',
-        time: Math.floor(Date.now() / 1000 / 30),
       });
 
       const result = twoFAUtils.verify2FAToken(token, secret);
