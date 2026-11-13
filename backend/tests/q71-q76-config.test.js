@@ -279,7 +279,7 @@ describe('Q75: Environment Parity', () => {
   });
 
   it('.env.dev contains required variables', () => {
-    const content = fs.readFileSync(path.join(__dirname, '../.env.dev'), 'utf8');
+    const content = fs.readFileSync(path.join(__dirname, '../.env.dev.example'), 'utf8');
     expect(content).toMatch(/DATABASE_URL/);
     expect(content).toMatch(/JWT_SECRET/);
     expect(content).toMatch(/NODE_ENV/);
@@ -287,7 +287,7 @@ describe('Q75: Environment Parity', () => {
   });
 
   it('.env.staging contains required variables', () => {
-    const content = fs.readFileSync(path.join(__dirname, '../.env.staging'), 'utf8');
+    const content = fs.readFileSync(path.join(__dirname, '../.env.staging.example'), 'utf8');
     expect(content).toMatch(/DATABASE_URL/);
     expect(content).toMatch(/JWT_SECRET/);
     expect(content).toMatch(/NODE_ENV/);
