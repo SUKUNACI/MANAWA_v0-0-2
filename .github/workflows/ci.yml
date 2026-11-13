@@ -1,0 +1,118 @@
+name: CI — MANAWA Backend
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+  security-events: write
+  checks: write
+  pull-requests: write
+
+env:
+  NODE_VERSION: '20.x'
+  WORKING_DIR: backend
+
+jobs:
+  test:
+    name: Tests & Coverage Gate (80%)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: manawa
+          POSTGRES_PASSWORD: manawa_test
+          POSTGRES_DB: manawa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          DATABASE_URL: postgresql://manawa:manawa_test@localhost:5432/manawa_test
+        run: npx prisma generate
+
+      - name: Push database schema
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          DATABASE_URL: postgresql://manawa:manawa_test@localhost:5432/manawa_test
+        run: npx prisma db push --accept-data-loss
+
+      - name: Run tests with coverage
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://manawa:manawa_test@localhost:5432/manawa_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: ${{ secrets.CI_JWT_SECRET || 'test-secret-min-32-characters-for-ci-only' }}
+          MAILJET_API_KEY: test_mailjet_key_for_ci
+          MAILJET_SECRET_KEY: test_mailjet_secret_for_ci
+        run: npm test -- --coverage --coverageReporters=json-summary --coverageReporters=text
+
+      - name: Enforce 80% coverage gate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          node -e "
+            const summary = require('./coverage/coverage-summary.json');
+            const { lines, branches, functions, statements } = summary.total;
+            const min = Math.min(lines.pct, branches.pct, functions.pct, statements.pct);
+            console.log('Coverage — lines: ' + lines.pct + '%, branches: ' + branches.pct + '%, functions: ' + functions.pct + '%, statements: ' + statements.pct + '%');
+            if (min < 80) { console.error('COVERAGE GATE FAILED'); process.exit(1); }
+          "
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: backend/coverage/
+
+  secrets-scan:
+    name: Secret & Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
