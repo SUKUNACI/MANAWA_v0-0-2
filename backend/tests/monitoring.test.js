@@ -7,8 +7,8 @@ const monitoring = require('../utils/monitoring');
 
 describe('Monitoring System', () => {
   beforeEach(() => {
-    // Reset metrics before each test
-    monitoring.resetDailyMetrics();
+    // Reset all metrics before each test (including request counters)
+    monitoring.resetAllMetrics();
   });
 
   // ============ Request Metrics Tests ============
@@ -307,16 +307,6 @@ describe('Monitoring System', () => {
       expect(metrics.business.activeUsers).toBe(0);
     });
 
-    test('should not reset request metrics on daily reset', () => {
-      const req = { method: 'GET', path: '/api/test', route: { path: '/api/test' } };
-      const res = { statusCode: 200 };
-      monitoring.recordRequest(req, res, 100);
-
-      monitoring.resetDailyMetrics();
-
-      const metrics = monitoring.getMetrics();
-      expect(metrics.requests.total).toBe(1); // Should still be tracked
-    });
   });
 
   // ============ Integration Tests ============

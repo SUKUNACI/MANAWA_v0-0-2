@@ -139,11 +139,11 @@ describe('cacheGet Middleware', () => {
   });
 
   test('should return cached response on HIT', async () => {
-    const cacheKey = 'api/professionals/123';
+    const cacheKey = '/api/professionals/123';
     const cachedData = { id: '123', name: 'John Pro' };
 
-    // Pre-populate cache
-    await redis.set(cacheKey, cachedData);
+    // Pre-populate cache with JSON string (matches how middleware stores it)
+    await redis.set(cacheKey, JSON.stringify(cachedData));
 
     const mockReq = {
       method: 'GET',
@@ -171,6 +171,9 @@ describe('cacheGet Middleware', () => {
   });
 
   test('should set X-Cache header correctly', async () => {
+    const cacheKey = '/api/api/test';
+    await redis.set(cacheKey, JSON.stringify({ result: 'cached' }));
+
     const mockReq = {
       method: 'GET',
       path: '/api/test',
@@ -190,8 +193,8 @@ describe('cacheGet Middleware', () => {
     const middleware = cacheGet();
     await middleware(mockReq, mockRes, jest.fn());
 
-    // Should call res.set with X-Cache header
-    expect(mockRes.set).toHaveBeenCalled();
+    // HIT path sets X-Cache header before calling res.json
+    expect(mockRes.set).toHaveBeenCalledWith('X-Cache', 'HIT');
   });
 });
 
