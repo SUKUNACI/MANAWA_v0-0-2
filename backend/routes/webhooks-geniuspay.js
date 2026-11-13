@@ -21,9 +21,11 @@ const router = express.Router();
  * Verifies HMAC-SHA256 signature and updates payment status
  */
 
-// Middleware to capture raw body for webhook signature verification
+// Middleware to capture raw body for webhook signature verification.
+// When express.json() runs first (e.g., in tests), the stream is already consumed
+// and req.body is populated; skip rawBody in that case.
 router.use((req, res, next) => {
-  if (req.originalUrl.endsWith('/webhooks/geniuspay')) {
+  if (req.originalUrl.endsWith('/webhooks/geniuspay') && req.readable) {
     rawBody(req, { encoding: 'utf-8' }, (err, body) => {
       if (err) {
         logger.error('[Webhook GeniusPay] Raw body parse error', { error: err.message });

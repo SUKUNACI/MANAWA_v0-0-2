@@ -23,11 +23,12 @@ describe('2FA Authentication Routes', () => {
   });
 
   beforeEach(async () => {
-    // Create test user
+    // Create test user with unique email to avoid P2002 on reruns
+    const uniqueEmail = `test2fa-${uuidv4()}@example.com`;
     testUser = await prisma.user.create({
       data: {
         id: uuidv4(),
-        email: 'test2fa@example.com',
+        email: uniqueEmail,
         passwordHash: await require('bcryptjs').hash('TestPassword123!', 10),
         firstName: 'Test',
         lastName: 'User',
@@ -48,10 +49,12 @@ describe('2FA Authentication Routes', () => {
   });
 
   afterEach(async () => {
-    // Cleanup
-    await prisma.user.deleteMany({
-      where: { email: 'test2fa@example.com' },
-    });
+    // Cleanup by id to avoid touching unrelated rows
+    if (testUser?.id) {
+      await prisma.user.deleteMany({
+        where: { id: testUser.id },
+      });
+    }
   });
 
   describe('POST /api/v1/auth/2fa/setup', () => {
@@ -364,8 +367,8 @@ describe('2FA Authentication Routes', () => {
     test('should fail without 2FA enabled', async () => {
       const user = await prisma.user.create({
         data: {
-          id: 'test-user-no-2fa-2',
-          email: 'test-no-2fa-2@example.com',
+          id: uuidv4(),
+          email: `test-no-2fa-2-${uuidv4()}@example.com`,
           passwordHash: 'hash',
           firstName: 'Test',
           lastName: 'User',
