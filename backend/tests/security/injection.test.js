@@ -93,16 +93,37 @@ describe('Security: Injection Vulnerabilities (A01)', () => {
   });
 
   describe('Path Traversal', () => {
+    test('should accept valid numeric id', async () => {
+      const res = await request(app).get('/api/user/42');
+      expect(res.status).toBe(200);
+      expect(res.body.id).toBe('42');
+    });
+
+    test('should accept valid UUID', async () => {
+      const uuid = '550e8400-e29b-41d4-a716-446655440000';
+      const res = await request(app).get(`/api/user/${uuid}`);
+      expect(res.status).toBe(200);
+      expect(res.body.id).toBe(uuid);
+    });
+
     test('should reject path traversal attempt', async () => {
+      // Express normalises ../../etc/passwd before routing — no route matches → 404
       const res = await request(app)
         .get('/api/user/../../etc/passwd');
       expect(res.status).toBeGreaterThanOrEqual(400);
     });
 
     test('should reject encoded path traversal', async () => {
+      // Express decodes %2F and normalises the path — returns 400 Bad Request
       const res = await request(app)
         .get('/api/user/..%2F..%2Fetc%2Fpasswd');
       expect(res.status).toBeGreaterThanOrEqual(400);
+    });
+
+    test('should reject id containing dot-dot segments', async () => {
+      // Handler-level validation — rejects ids with '..' decoded in the segment
+      const res = await request(app).get('/api/user/..dangerous..');
+      expect(res.status).toBe(400);
     });
   });
 

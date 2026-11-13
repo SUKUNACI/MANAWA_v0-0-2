@@ -9,6 +9,16 @@ describe('Monitoring System', () => {
   beforeEach(() => {
     // Reset all metrics before each test (including request counters)
     monitoring.resetAllMetrics();
+    // Reset alert thresholds to defaults so tests are independent
+    monitoring.updateAlertThresholds({
+      errorRate: 5,
+      apiResponseTime: 2000,
+      dbConnectionPoolUsage: 80,
+      paymentFailureRate: 10,
+      queueDepth: 1000,
+      memoryUsage: 80,
+      cpuUsage: 90,
+    });
   });
 
   // ============ Request Metrics Tests ============
@@ -305,6 +315,19 @@ describe('Monitoring System', () => {
       expect(metrics.business.payments.processed).toBe(0);
       expect(metrics.business.bookings).toBe(0);
       expect(metrics.business.activeUsers).toBe(0);
+    });
+
+    test('resetDailyMetrics should preserve request and error counters', () => {
+      // resetDailyMetrics is for the nightly cron — it must NOT wipe HTTP or error metrics
+      const req = { method: 'GET', path: '/api/test', route: { path: '/api/test' } };
+      monitoring.recordRequest(req, { statusCode: 200 }, 100);
+      monitoring.recordError('SERVER_ERROR', { route: '/api/test' });
+
+      monitoring.resetDailyMetrics();
+
+      const metrics = monitoring.getMetrics();
+      expect(metrics.requests.total).toBe(1);
+      expect(metrics.errors.total).toBe(1);
     });
 
   });
