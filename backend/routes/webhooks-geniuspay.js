@@ -52,10 +52,13 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Missing signature or timestamp' });
     }
 
-    // Parse payload from raw body
+    // Parse payload — raw body for signature verification, fallback to req.body
     let payload;
     try {
-      payload = JSON.parse(req.rawBody || '{}');
+      payload = req.rawBody ? JSON.parse(req.rawBody) : req.body;
+      if (!payload || typeof payload !== 'object') {
+        payload = {};
+      }
     } catch (err) {
       logger.error('[Webhook GeniusPay] JSON parse error', { error: err.message });
       return res.status(400).json({ error: 'Invalid JSON payload' });
