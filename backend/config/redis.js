@@ -3,7 +3,7 @@ const { CircuitBreaker } = require('../utils/circuit-breaker');
 const { getConfig } = require('./third-party-api-config');
 
 let redisClient = null;
-let inMemoryCache = new Map();
+let inMemoryCache = null;
 let useInMemory = false;
 
 // Get configuration
@@ -73,6 +73,9 @@ class InMemoryCache {
     this.timers.clear();
   }
 }
+
+// Initialize with InMemoryCache immediately so module-level calls work before initializeRedis()
+inMemoryCache = new InMemoryCache();
 
 // Initialize Redis (attempt to use Redis, fallback to in-memory)
 async function initializeRedis() {

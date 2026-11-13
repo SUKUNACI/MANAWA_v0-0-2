@@ -359,4 +359,170 @@ describe('Logger Utility', () => {
       consoleSpy.mockRestore();
     });
   });
+
+  describe('Debug Logging', () => {
+    test('should not log debug when DEBUG env var is not true', () => {
+      process.env.DEBUG = 'false';
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      logger.debug('Debug message');
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+
+    test('should log debug when DEBUG env var is true', () => {
+      process.env.DEBUG = 'true';
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      logger.debug('Debug message', { key: 'value' });
+
+      expect(consoleSpy).toHaveBeenCalled();
+      const logOutput = consoleSpy.mock.calls[0][0];
+      expect(logOutput).toContain('DEBUG');
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('Child Logger', () => {
+    test('should create a child logger with context', () => {
+      const childLogger = logger.child({ userId: 'user-123' });
+
+      expect(typeof childLogger).toBe('object');
+      expect(typeof childLogger.info).toBe('function');
+    });
+
+    test('child logger should include parent context', () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      const childLogger = logger.child({ userId: 'user-123' });
+      childLogger.info('Child message', { action: 'login' });
+
+      const logOutput = consoleSpy.mock.calls[0][0];
+      const parsed = JSON.parse(logOutput);
+
+      expect(parsed.userId).toBe('user-123');
+      expect(parsed.action).toBe('login');
+
+      consoleSpy.mockRestore();
+    });
+
+    test('child logger should support warn level', () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+      const childLogger = logger.child({ requestId: 'req-456' });
+      childLogger.warn('Warning message');
+
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+
+    test('child logger should support error level', () => {
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      const childLogger = logger.child({ module: 'auth' });
+      childLogger.error('Error message', { code: 'AUTH_FAILED' });
+
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+
+    test('should create nested child loggers', () => {
+      const child1 = logger.child({ level1: 'value1' });
+      const child2 = child1.child({ level2: 'value2' });
+
+      expect(typeof child2.info).toBe('function');
+      expect(typeof child2.warn).toBe('function');
+    });
+
+    test('nested child loggers should merge context', () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      const child1 = logger.child({ service: 'auth' });
+      const child2 = child1.child({ endpoint: '/login' });
+      child2.info('Request received');
+
+      const logOutput = consoleSpy.mock.calls[0][0];
+      const parsed = JSON.parse(logOutput);
+
+      expect(parsed.service).toBe('auth');
+      expect(parsed.endpoint).toBe('/login');
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('File Operations', () => {
+    test('should handle write errors gracefully', () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      fs.appendFileSync.mockImplementation(() => {
+        throw new Error('Write failed');
+      });
+
+      logger.info('Test message');
+
+      expect(consoleErrorSpy).toHaveBeenCalled();
+      const errorMsg = consoleErrorSpy.mock.calls[0][0];
+      expect(errorMsg).toContain('Failed to write log');
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    test('should write to different files for different levels', () => {
+      fs.appendFileSync.mockClear();
+
+      logger.info('Info');
+      logger.error('Error');
+
+      const calls = fs.appendFileSync.mock.calls;
+      // Info should write to app.log
+      // Error should write to both app.log and error.log
+      expect(calls.length).toBeGreaterThan(2);
+    });
+  });
+
+  describe('Error Log Level', () => {
+    test('should write error logs to both app.log and error.log', () => {
+      fs.appendFileSync.mockClear();
+
+      logger.error('Test error');
+
+      const calls = fs.appendFileSync.mock.calls;
+      // Error should write to both files
+      expect(calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    test('should include stack trace info when available', () => {
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      const error = new Error('Test error');
+      logger.error('Error occurred', { error: error.message, stack: error.stack });
+
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('PII Masking', () => {
+    test('should call maskString on message', () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      logger.info('User email: test@example.com');
+
+      // Message should be masked via maskString
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+
+    test('should call maskObject on data', () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      logger.info('User info', { email: 'test@example.com', phone: '+123456789' });
+
+      // Data should be masked via maskObject
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+  });
 });

@@ -2,6 +2,7 @@ const axios = require('axios');
 const prisma = require('./db');
 const dedup = require('../utils/notification-deduplication');
 const fallback = require('./push-notification-fallback');
+const logger = require('../utils/logger');
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 

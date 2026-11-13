@@ -21,9 +21,11 @@ const router = express.Router();
  * Verifies HMAC-SHA256 signature and updates payment status
  */
 
-// Middleware to capture raw body for webhook signature verification
+// Middleware to capture raw body for webhook signature verification.
+// When express.json() runs first (e.g., in tests), the stream is already consumed
+// and req.body is populated; skip rawBody in that case.
 router.use((req, res, next) => {
-  if (req.originalUrl === '/api/v1/webhooks/geniuspay') {
+  if (req.originalUrl.endsWith('/webhooks/geniuspay') && req.readable) {
     rawBody(req, { encoding: 'utf-8' }, (err, body) => {
       if (err) {
         logger.error('[Webhook GeniusPay] Raw body parse error', { error: err.message });
@@ -52,10 +54,13 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Missing signature or timestamp' });
     }
 
-    // Parse payload from raw body
+    // Parse payload — raw body for signature verification, fallback to req.body
     let payload;
     try {
-      payload = JSON.parse(req.rawBody || '{}');
+      payload = req.rawBody ? JSON.parse(req.rawBody) : req.body;
+      if (!payload || typeof payload !== 'object') {
+        payload = {};
+      }
     } catch (err) {
       logger.error('[Webhook GeniusPay] JSON parse error', { error: err.message });
       return res.status(400).json({ error: 'Invalid JSON payload' });
@@ -89,7 +94,7 @@ router.post('/', async (req, res) => {
     // 3. Find payment by GeniusPay reference
     const payment = await prisma.payment.findFirst({
       where: { geniuspayRef: eventData.reference },
-      include: { quote: { include: { client: true, professional: true } } },
+      include: { quote: { include: { project: { include: { client: true } }, professional: true } } },
     });
 
     if (!payment) {
@@ -119,6 +124,20 @@ router.post('/', async (req, res) => {
             });
             newStatus = 'failed';
             shouldNotify = true;
+
+            await prisma.payment.update({
+              where: { id: payment.id },
+              data: {
+                status: newStatus,
+                metadata: JSON.stringify({
+                  failureReason: 'amount_mismatch',
+                  expected: payment.amount,
+                  received: receivedAmount,
+                  geniuspayData: eventData,
+                  webhookReceivedAt: new Date().toISOString(),
+                }),
+              },
+            });
 
             await logPaymentStatus({
               paymentId: payment.id,
@@ -237,21 +256,22 @@ router.post('/', async (req, res) => {
     }
 
     // 5. Trigger user notification if status changed
-    if (shouldNotify && payment.quote?.client) {
+    const client = payment.quote?.project?.client;
+    if (shouldNotify && client) {
       try {
         const notificationData = {
-          userId: payment.quote.client.id,
+          userId: client.id,
           type: newStatus === 'succeeded' ? 'PAYMENT_RECEIVED' : 'PAYMENT_FAILED',
           title: newStatus === 'succeeded' ? 'Paiement confirmé' : 'Paiement échoué',
           message: newStatus === 'succeeded'
             ? `Votre paiement de ${payment.amount} XOF a été confirmé.`
             : `Votre paiement de ${payment.amount} XOF a échoué. Veuillez réessayer.`,
-          metadata: JSON.stringify({
+          data: {
             paymentId: payment.id,
             quoteId: payment.quoteId,
             amount: payment.amount,
             status: newStatus,
-          }),
+          },
         };
 
         // Create notification in database
@@ -260,7 +280,7 @@ router.post('/', async (req, res) => {
         });
 
         logger.info('[Webhook GeniusPay] Notification created', {
-          userId: payment.quote.client.id,
+          userId: client.id,
           type: notificationData.type,
           paymentId: payment.id,
         });

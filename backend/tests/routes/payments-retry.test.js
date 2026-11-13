@@ -6,6 +6,26 @@ const prisma = require('../../config/db');
 const { requireAuth } = require('../../middleware/auth');
 const jwt = require('jsonwebtoken');
 
+// Mock Bull queue and notification-triggers to avoid Redis/network calls in tests
+jest.mock('../../config/queue', () => ({
+  emailQueue: { add: jest.fn().mockResolvedValue({}) },
+  notificationQueue: { add: jest.fn().mockResolvedValue({}) },
+  smsQueue: { add: jest.fn().mockResolvedValue({}) },
+  analyticsQueue: { add: jest.fn().mockResolvedValue({}) },
+  pdfQueue: { add: jest.fn().mockResolvedValue({}) },
+}));
+jest.mock('../../utils/notification-triggers', () => ({
+  sendNotification: jest.fn().mockResolvedValue({}),
+}));
+// Mock entire geniuspay module so the destructured import in the route is replaced
+jest.mock('../../utils/geniuspay', () => ({
+  createPayment: jest.fn(),
+  getPayment: jest.fn(),
+  verifyWebhookSignature: jest.fn(),
+  verifyWebhookTimestamp: jest.fn(),
+}));
+const geniuspayMock = require('../../utils/geniuspay');
+
 // Mock middleware pour les tests
 const mockAuthMiddleware = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -118,7 +138,10 @@ describe('Q53: Payment Retry Routes', () => {
   });
 
   afterAll(async () => {
-    // Cleanup
+    // Delete audit logs before payments to satisfy FK constraint
+    await prisma.paymentAuditLog.deleteMany({
+      where: { payment: { quoteId: testQuoteId } },
+    });
     await prisma.payment.deleteMany({ where: { quoteId: testQuoteId } });
     await prisma.quote.deleteMany({ where: { projectId: testProjectId } });
     await prisma.project.deleteMany({ where: { id: testProjectId } });
@@ -173,9 +196,7 @@ describe('Q53: Payment Retry Routes', () => {
     });
 
     it('should successfully retry a failed payment', async () => {
-      // Mock geniuspay.createPayment
-      const geniuspay = require('../../utils/geniuspay');
-      jest.spyOn(geniuspay, 'createPayment').mockResolvedValue({
+      geniuspayMock.createPayment.mockResolvedValueOnce({
         reference: 'TEST_REF_123',
         payment_link: 'https://geniuspay.ci/pay/TEST_REF_123',
       });
@@ -198,8 +219,6 @@ describe('Q53: Payment Retry Routes', () => {
       });
       expect(updatedPayment.status).toBe('pending');
       expect(updatedPayment.geniuspayRef).toBe('TEST_REF_123');
-
-      geniuspay.createPayment.mockRestore();
     });
 
     it('should reapply promo code if it was used before', async () => {
@@ -228,9 +247,7 @@ describe('Q53: Payment Retry Routes', () => {
         },
       });
 
-      // Mock geniuspay
-      const geniuspay = require('../../utils/geniuspay');
-      jest.spyOn(geniuspay, 'createPayment').mockResolvedValue({
+      geniuspayMock.createPayment.mockResolvedValueOnce({
         reference: 'TEST_REF_PROMO',
         payment_link: 'https://geniuspay.ci/pay/TEST_REF_PROMO',
       });
@@ -246,10 +263,10 @@ describe('Q53: Payment Retry Routes', () => {
       expect(res.body.data.discountAmount).toBe(50); // 10% of 500
       expect(res.body.data.amount).toBe(450); // 500 - 50
 
-      // Cleanup
+      // Cleanup — audit logs must be deleted before the payment (FK constraint)
+      await prisma.paymentAuditLog.deleteMany({ where: { paymentId: paymentWithPromoId } });
       await prisma.payment.delete({ where: { id: paymentWithPromoId } });
       await prisma.promoCode.delete({ where: { id: promoCodeId } });
-      geniuspay.createPayment.mockRestore();
     });
 
     it('should return 400 if max retry attempts exceeded', async () => {

@@ -202,6 +202,9 @@ function captureRawBody(req, res, next) {
       // Parse body directly so downstream middleware (express.json) is not needed
       try {
         req.body = JSON.parse(req.rawBody);
+        // Signal to body-parser that the body has already been read,
+        // preventing it from attempting to re-read the consumed stream.
+        req._body = true;
       } catch {
         // Non-JSON body, leave undefined
       }

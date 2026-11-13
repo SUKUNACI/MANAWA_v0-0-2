@@ -5,6 +5,7 @@
 
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
+const { v4: uuidv4 } = require('uuid');
 const prisma = require('../../config/db');
 const twoFAUtils = require('../../utils/2fa');
 const twoFAConfig = require('../../config/2fa');
@@ -22,11 +23,12 @@ describe('2FA Authentication Routes', () => {
   });
 
   beforeEach(async () => {
-    // Create test user
+    // Create test user with unique email to avoid P2002 on reruns
+    const uniqueEmail = `test2fa-${uuidv4()}@example.com`;
     testUser = await prisma.user.create({
       data: {
-        id: 'test-user-2fa',
-        email: 'test2fa@example.com',
+        id: uuidv4(),
+        email: uniqueEmail,
         passwordHash: await require('bcryptjs').hash('TestPassword123!', 10),
         firstName: 'Test',
         lastName: 'User',
@@ -47,10 +49,12 @@ describe('2FA Authentication Routes', () => {
   });
 
   afterEach(async () => {
-    // Cleanup
-    await prisma.user.deleteMany({
-      where: { email: 'test2fa@example.com' },
-    });
+    // Cleanup by id to avoid touching unrelated rows
+    if (testUser?.id) {
+      await prisma.user.deleteMany({
+        where: { id: testUser.id },
+      });
+    }
   });
 
   describe('POST /api/v1/auth/2fa/setup', () => {
@@ -121,7 +125,6 @@ describe('2FA Authentication Routes', () => {
         ? require('speakeasy').totp({
             secret,
             encoding: 'base32',
-            time: Math.floor(Date.now() / 1000 / 30),
           })
         : '000000'; // Fallback
 
@@ -207,7 +210,6 @@ describe('2FA Authentication Routes', () => {
       const totpCode = require('speakeasy').totp({
         secret: testUser.twoFASecret,
         encoding: 'base32',
-        time: Math.floor(Date.now() / 1000 / 30),
       });
 
       const response = await request(app)
@@ -286,8 +288,8 @@ describe('2FA Authentication Routes', () => {
     test('should fail if 2FA not enabled', async () => {
       const user = await prisma.user.create({
         data: {
-          id: 'test-user-no-2fa',
-          email: 'test-no-2fa@example.com',
+          id: uuidv4(),
+          email: `test-no-2fa-${Date.now()}@example.com`,
           passwordHash: 'hash',
           firstName: 'Test',
           lastName: 'User',
@@ -339,7 +341,6 @@ describe('2FA Authentication Routes', () => {
       const totpCode = require('speakeasy').totp({
         secret: testUser.twoFASecret,
         encoding: 'base32',
-        time: Math.floor(Date.now() / 1000 / 30),
       });
 
       const response = await request(app)
@@ -366,8 +367,8 @@ describe('2FA Authentication Routes', () => {
     test('should fail without 2FA enabled', async () => {
       const user = await prisma.user.create({
         data: {
-          id: 'test-user-no-2fa-2',
-          email: 'test-no-2fa-2@example.com',
+          id: uuidv4(),
+          email: `test-no-2fa-2-${uuidv4()}@example.com`,
           passwordHash: 'hash',
           firstName: 'Test',
           lastName: 'User',
@@ -427,7 +428,6 @@ describe('2FA Authentication Routes', () => {
       const totpCode = require('speakeasy').totp({
         secret: testUser.twoFASecret,
         encoding: 'base32',
-        time: Math.floor(Date.now() / 1000 / 30),
       });
 
       const response = await request(app)
@@ -452,7 +452,6 @@ describe('2FA Authentication Routes', () => {
       const totpCode = require('speakeasy').totp({
         secret: testUser.twoFASecret,
         encoding: 'base32',
-        time: Math.floor(Date.now() / 1000 / 30),
       });
 
       const response = await request(app)
@@ -543,7 +542,6 @@ describe('2FA Utilities', () => {
       const token = require('speakeasy').totp({
         secret,
         encoding: 'base32',
-        time: Math.floor(Date.now() / 1000 / 30),
       });
 
       const result = twoFAUtils.verify2FAToken(token, secret);

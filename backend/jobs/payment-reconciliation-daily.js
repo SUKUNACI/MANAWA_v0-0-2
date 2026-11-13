@@ -29,8 +29,8 @@ async function reconcilePaymentsDaily() {
     const pendingPayments = await prisma.payment.findMany({
       where: { status: 'pending' },
       include: {
-        quote: { include: { client: true } },
-        auditLogs: { orderBy: { createdAt: 'desc' }, take: 1 },
+        quote: { include: { project: { include: { client: true } } } },
+        auditLogs: { orderBy: { createdAt: 'desc' } },
       },
     });
 
@@ -180,7 +180,7 @@ async function reconcilePaymentsDaily() {
               amount: payment.amount,
               createdAt: payment.createdAt,
               daysStuck: Math.floor((Date.now() - payment.createdAt.getTime()) / (24 * 60 * 60 * 1000)),
-              clientEmail: payment.quote?.client?.email,
+              clientEmail: payment.quote?.project?.client?.email,
               reference: payment.geniuspayRef,
             });
           }
@@ -225,14 +225,14 @@ async function reconcilePaymentsDaily() {
               type: 'SYSTEM_ALERT',
               title: 'Alerte: Paiements bloqués',
               message: `${stuckPayments.length} paiements sont bloqués depuis plus de 7 jours. Vérification nécessaire.`,
-              metadata: JSON.stringify({
+              data: {
                 stuckCount: stuckPayments.length,
                 samples: stuckPayments.slice(0, 5).map(p => ({
                   paymentId: p.paymentId,
                   amount: p.amount,
                   daysStuck: p.daysStuck,
                 })),
-              }),
+              },
             },
           });
         }
@@ -288,7 +288,7 @@ async function reconcilePaymentsDaily() {
             type: 'SYSTEM_ALERT',
             title: 'Erreur: Réconciliation paiements échouée',
             message: `La tâche de réconciliation quotidienne a échoué: ${err.message}`,
-            metadata: JSON.stringify({ error: err.message }),
+            data: { error: err.message },
           },
         });
       }
