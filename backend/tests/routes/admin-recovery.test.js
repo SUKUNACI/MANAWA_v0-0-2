@@ -292,5 +292,104 @@ describe('Admin Recovery Routes', () => {
       expect(res.body.success).toBe(true);
       expect(Array.isArray(res.body.data)).toBe(true);
     });
+
+    it('should handle pagination with limit and offset', async () => {
+      const prisma = require('../../config/db');
+      prisma.auditLog.findMany.mockResolvedValueOnce([]);
+      prisma.auditLog.count.mockResolvedValueOnce(50);
+      const res = await request(app)
+        .get('/recovery/audit-log?limit=25&offset=25')
+        .set('Authorization', `Bearer ${adminToken()}`);
+      expect(res.status).toBe(200);
+      expect(res.body.pagination).toBeDefined();
+    });
+  });
+
+  describe('Additional error handling branches', () => {
+    it('should handle quarterly DR test', async () => {
+      const prisma = require('../../config/db');
+      prisma.auditLog.create.mockResolvedValueOnce({ id: 'log-7' });
+      const res = await request(app)
+        .post('/recovery/test')
+        .set('Authorization', `Bearer ${adminToken()}`)
+        .send({ type: 'quarterly' });
+      expect(res.status).toBe(200);
+      expect(res.body.data.estimatedDuration).toMatch(/120-240 minutes/);
+    });
+
+    it('should handle GET /recovery/status with database health check', async () => {
+      const prisma = require('../../config/db');
+      prisma.$queryRaw.mockResolvedValueOnce([{ 1: 1 }]);
+      const res = await request(app)
+        .get('/recovery/status')
+        .set('Authorization', `Bearer ${adminToken()}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data.database.status).toBe('connected');
+    });
+
+    it('should handle restore with timestamp parameter', async () => {
+      const prisma = require('../../config/db');
+      prisma.auditLog.create.mockResolvedValueOnce({ id: 'log-8' });
+      const res = await request(app)
+        .post('/recovery/restore')
+        .set('Authorization', `Bearer ${adminToken()}`)
+        .send({ timestamp: '2026-11-10T10:00:00Z', targetEnvironment: 'staging', dryRun: true });
+      expect(res.status).toBe(200);
+      expect(res.body.data.targetTimestamp).toBeDefined();
+    });
+
+    it('should handle production restore with dryRun true', async () => {
+      const prisma = require('../../config/db');
+      prisma.auditLog.create.mockResolvedValueOnce({ id: 'log-9' });
+      const res = await request(app)
+        .post('/recovery/restore')
+        .set('Authorization', `Bearer ${adminToken()}`)
+        .send({ targetEnvironment: 'production', dryRun: true });
+      expect(res.status).toBe(200);
+      expect(res.body.data.approvalRequired).toBe(false);
+    });
+
+    it('should return 403 for non-admin user on all recovery endpoints', async () => {
+      const endpoints = [
+        { method: 'get', path: '/recovery/status' },
+        { method: 'get', path: '/recovery/test' },
+        { method: 'get', path: '/recovery/compliance' },
+        { method: 'post', path: '/recovery/backup', body: { type: 'full' } },
+        { method: 'post', path: '/recovery/restore', body: {} },
+      ];
+
+      for (const ep of endpoints) {
+        let req = request(app)[ep.method](ep.path).set('Authorization', `Bearer ${clientToken()}`);
+        if (ep.body) req = req.send(ep.body);
+        const res = await req;
+        expect(res.status).toBe(403);
+      }
+    });
+
+    it('should handle GET /recovery/restore/:restoreId for non-admin', async () => {
+      const res = await request(app)
+        .get('/recovery/restore/restore-1')
+        .set('Authorization', `Bearer ${clientToken()}`);
+      expect(res.status).toBe(403);
+    });
+
+    it('should handle backup with high priority', async () => {
+      const prisma = require('../../config/db');
+      prisma.auditLog.create.mockResolvedValueOnce({ id: 'log-10' });
+      const res = await request(app)
+        .post('/recovery/backup')
+        .set('Authorization', `Bearer ${adminToken()}`)
+        .send({ type: 'incremental', priority: 'high', description: 'High priority backup' });
+      expect(res.status).toBe(200);
+      expect(res.body.data.priority).toBe('high');
+    });
+
+    it('should handle restore/confirm with missing body parameters', async () => {
+      const res = await request(app)
+        .post('/recovery/restore/confirm')
+        .set('Authorization', `Bearer ${adminToken()}`)
+        .send({});
+      expect(res.status).toBe(400);
+    });
   });
 });
