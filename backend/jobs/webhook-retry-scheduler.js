@@ -330,7 +330,7 @@ async function sendAdminAlert(alertData) {
           type: 'ALERT',
           title: `Échec de webhooks (${alertData.failedCount} erreur${alertData.failedCount > 1 ? 's' : ''})`,
           body: `${alertData.failedCount} webhook(s) ont échoué après le maximum de tentatives`,
-          metadata: JSON.stringify({
+          data: {
             type: 'WEBHOOK_FAILURES',
             failedCount: alertData.failedCount,
             failedWebhooks: alertData.webhooks.map(w => ({
@@ -338,7 +338,7 @@ async function sendAdminAlert(alertData) {
               url: w.webhookUrl,
             })),
             timestamp: alertData.timestamp,
-          }),
+          },
         },
       }).catch(err => {
         logger.error('[WebhookRetryScheduler] Failed to create notification', {

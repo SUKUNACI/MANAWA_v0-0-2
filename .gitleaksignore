@@ -1,0 +1,15 @@
+# Gitleaks ignore file — false positives for documentation and test mocks
+# Format: fingerprint (commit:file:rule:line)
+
+# Mock JWT tokens in tests (not real secrets)
+3c890d47a6c2ad1f7e522768ed4b725e9dc8fb8e:backend/tests/q91-q100-data-management.test.js:jwt:331
+3c890d47a6c2ad1f7e522768ed4b725e9dc8fb8e:backend/tests/q91-q100-data-management.test.js:jwt:378
+
+# Documentation examples with placeholder headers (not real secrets)
+92718e2f6d1ed8956eefa105ec4c4736813d5880:backend/docs/ROLLBACK_STRATEGY.md:curl-auth-header:98
+92718e2f6d1ed8956eefa105ec4c4736813d5880:backend/docs/ROLLBACK_STRATEGY.md:curl-auth-header:129
+92718e2f6d1ed8956eefa105ec4c4736813d5880:backend/docs/ROLLBACK_STRATEGY.md:curl-auth-header:224
+
+# CI test environment variables (not production secrets)
+2d3609dd51ed7718efdb71366c8fb72dd3fdecb8:.github/workflows/ci.yml:generic-api-key:77
+2d3609dd51ed7718efdb71366c8fb72dd3fdecb8:.github/workflows/ci.yml:generic-api-key:174

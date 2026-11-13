@@ -511,9 +511,9 @@ git revert HEAD
 git push origin main
 
 # 3. Render auto-redeploys (or manual trigger)
-# Or manual rollback:
+# Or manual rollback (⚠️ DESTRUCTIVE - rewrites shared history):
 git reset --hard <commit-hash>
-git push origin main --force
+git push origin main --force  # ⚠️ WARNING: Irreversibly rewrites history. Only in emergency.
 
 # 4. Verify rollback
 curl https://api.manawa.app/api/health

@@ -7,6 +7,7 @@ const bcrypt = require('bcryptjs');
 const prisma = require('../config/db');
 const bruteForceMiddleware = require('../middleware/bruteForceMiddleware');
 const redisCache = require('../config/redis');
+const { accountLimiter } = require('../routes/auth');
 
 describe('Brute Force Protection - Login Integration', () => {
   let server;
@@ -37,8 +38,14 @@ describe('Brute Force Protection - Login Integration', () => {
   });
 
   beforeEach(async () => {
-    // Clear brute force cache before each test
+    // Clear brute force state (Redis/in-memory) before each test
     await redisCache.clear();
+    await bruteForceMiddleware.clearFailedAttempts(testEmail);
+    await bruteForceMiddleware.clearLockout(testEmail);
+    // Also reset express-rate-limit MemoryStore if available (mocked in tests → no-op)
+    if (accountLimiter && accountLimiter.resetKey) {
+      await accountLimiter.resetKey(`account:${testEmail.toLowerCase()}`);
+    }
   });
 
   afterAll(async () => {
@@ -49,10 +56,10 @@ describe('Brute Force Protection - Login Integration', () => {
     await redisCache.disconnect();
   });
 
-  describe('POST /api/auth/login', () => {
+  describe('POST /api/v1/auth/login', () => {
     it('should allow login with correct credentials', async () => {
       const response = await request(server)
-        .post('/api/auth/login')
+        .post('/api/v1/auth/login')
         .send({
           email: testEmail,
           password: testPassword,
@@ -66,7 +73,7 @@ describe('Brute Force Protection - Login Integration', () => {
 
     it('should reject login with incorrect password', async () => {
       const response = await request(server)
-        .post('/api/auth/login')
+        .post('/api/v1/auth/login')
         .send({
           email: testEmail,
           password: 'WrongPassword123!',
@@ -78,7 +85,7 @@ describe('Brute Force Protection - Login Integration', () => {
 
     it('should return X-Attempts-Remaining header on failed login', async () => {
       const response = await request(server)
-        .post('/api/auth/login')
+        .post('/api/v1/auth/login')
         .send({
           email: testEmail,
           password: 'WrongPassword123!',
@@ -91,7 +98,7 @@ describe('Brute Force Protection - Login Integration', () => {
     it('should increment failed attempts with each wrong password', async () => {
       for (let i = 1; i < 5; i++) {
         const response = await request(server)
-          .post('/api/auth/login')
+          .post('/api/v1/auth/login')
           .send({
             email: testEmail,
             password: 'WrongPassword123!',
@@ -106,7 +113,7 @@ describe('Brute Force Protection - Login Integration', () => {
       // Make 5 failed attempts
       for (let i = 0; i < 5; i++) {
         await request(server)
-          .post('/api/auth/login')
+          .post('/api/v1/auth/login')
           .send({
             email: testEmail,
             password: 'WrongPassword123!',
@@ -115,7 +122,7 @@ describe('Brute Force Protection - Login Integration', () => {
 
       // 6th attempt should be blocked
       const response = await request(server)
-        .post('/api/auth/login')
+        .post('/api/v1/auth/login')
         .send({
           email: testEmail,
           password: testPassword, // Even correct password won't work
@@ -130,7 +137,7 @@ describe('Brute Force Protection - Login Integration', () => {
       await bruteForceMiddleware.lockAccount(testEmail);
 
       const response = await request(server)
-        .post('/api/auth/login')
+        .post('/api/v1/auth/login')
         .send({
           email: testEmail,
           password: testPassword,
@@ -144,7 +151,7 @@ describe('Brute Force Protection - Login Integration', () => {
       await bruteForceMiddleware.lockAccount(testEmail);
 
       const response = await request(server)
-        .post('/api/auth/login')
+        .post('/api/v1/auth/login')
         .send({
           email: testEmail,
           password: testPassword,
@@ -157,13 +164,13 @@ describe('Brute Force Protection - Login Integration', () => {
     it('should clear failed attempts on successful login', async () => {
       // Make 2 failed attempts
       await request(server)
-        .post('/api/auth/login')
+        .post('/api/v1/auth/login')
         .send({
           email: testEmail,
           password: 'WrongPassword123!',
         });
       await request(server)
-        .post('/api/auth/login')
+        .post('/api/v1/auth/login')
         .send({
           email: testEmail,
           password: 'WrongPassword123!',
@@ -175,7 +182,7 @@ describe('Brute Force Protection - Login Integration', () => {
 
       // Successful login should clear attempts
       const response = await request(server)
-        .post('/api/auth/login')
+        .post('/api/v1/auth/login')
         .send({
           email: testEmail,
           password: testPassword,
@@ -193,7 +200,7 @@ describe('Brute Force Protection - Login Integration', () => {
 
       // Make attempt with uppercase email
       await request(server)
-        .post('/api/auth/login')
+        .post('/api/v1/auth/login')
         .send({
           email: upperEmail,
           password: 'WrongPassword123!',
@@ -205,7 +212,7 @@ describe('Brute Force Protection - Login Integration', () => {
     });
   });
 
-  describe('POST /api/auth/unlock', () => {
+  describe('POST /api/v1/auth/unlock', () => {
     it('should unlock account when called by admin', async () => {
       // First, lock account
       await bruteForceMiddleware.lockAccount(testEmail);
@@ -227,7 +234,7 @@ describe('Brute Force Protection - Login Integration', () => {
 
         // Unlock the account
         const response = await request(server)
-          .post('/api/auth/unlock')
+          .post('/api/v1/auth/unlock')
           .set('Authorization', `Bearer ${token}`)
           .send({
             email: testEmail,
@@ -243,11 +250,11 @@ describe('Brute Force Protection - Login Integration', () => {
     });
   });
 
-  describe('GET /api/auth/login-history', () => {
+  describe('GET /api/v1/auth/login-history', () => {
     it('should return login history for authenticated user', async () => {
       // Login user
       const loginResponse = await request(server)
-        .post('/api/auth/login')
+        .post('/api/v1/auth/login')
         .send({
           email: testEmail,
           password: testPassword,
@@ -258,7 +265,7 @@ describe('Brute Force Protection - Login Integration', () => {
 
         // Get history
         const response = await request(server)
-          .get('/api/auth/login-history')
+          .get('/api/v1/auth/login-history')
           .set('Authorization', `Bearer ${token}`);
 
         expect(response.status).toBe(200);
@@ -267,7 +274,7 @@ describe('Brute Force Protection - Login Integration', () => {
     });
 
     it('should reject unauthenticated requests', async () => {
-      const response = await request(server).get('/api/auth/login-history');
+      const response = await request(server).get('/api/v1/auth/login-history');
 
       expect(response.status).toBe(401);
     });
@@ -289,7 +296,7 @@ describe('Brute Force Protection - Login Integration', () => {
 
         // Get security status
         const response = await request(server)
-          .get(`/api/admin/user/${testUser.id}/security`)
+          .get(`/api/v1/admin/user/${testUser.id}/security`)
           .set('Authorization', `Bearer ${token}`);
 
         if (response.status === 200) {
@@ -305,7 +312,7 @@ describe('Brute Force Protection - Login Integration', () => {
     it('should reject non-admin requests', async () => {
       // Login as regular user
       const loginResponse = await request(server)
-        .post('/api/auth/login')
+        .post('/api/v1/auth/login')
         .send({
           email: testEmail,
           password: testPassword,
@@ -316,7 +323,7 @@ describe('Brute Force Protection - Login Integration', () => {
 
         // Try to access security endpoint
         const response = await request(server)
-          .get(`/api/admin/user/${testUser.id}/security`)
+          .get(`/api/v1/admin/user/${testUser.id}/security`)
           .set('Authorization', `Bearer ${token}`);
 
         expect(response.status).toBe(403);

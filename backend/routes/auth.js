@@ -640,3 +640,4 @@ router.get('/admin/user/:id/security', requireAuth, requireRole('ADMIN'), async 
 });
 
 module.exports = router;
+module.exports.accountLimiter = accountLimiter;

@@ -164,7 +164,7 @@ async function getDistributionStats(filters = {}) {
     const tradeDistribution = await prisma.$queryRaw`
       SELECT
         COALESCE(p.trade, 'Unknown') as trade,
-        COUNT(*) as count
+        COUNT(*)::INT as count
       FROM "Professional" p
       WHERE p."userId" IN (SELECT id FROM "User" WHERE "deletedAt" IS NULL)
       GROUP BY p.trade
@@ -175,7 +175,7 @@ async function getDistributionStats(filters = {}) {
     const locationDistribution = await prisma.$queryRaw`
       SELECT
         COALESCE(u.city, 'Unknown') as location,
-        COUNT(DISTINCT p.id) as count
+        COUNT(DISTINCT p.id)::INT as count
       FROM "Professional" p
       JOIN "User" u ON p."userId" = u.id
       WHERE u."deletedAt" IS NULL
@@ -193,7 +193,7 @@ async function getDistributionStats(filters = {}) {
           WHEN p."identityStatus" = 'REJECTED' THEN 'Identity Rejected'
           ELSE 'Not Verified'
         END as status,
-        COUNT(*) as count
+        COUNT(*)::INT as count
       FROM "Professional" p
       JOIN "User" u ON p."userId" = u.id
       WHERE u."deletedAt" IS NULL
@@ -205,7 +205,7 @@ async function getDistributionStats(filters = {}) {
     const subscriptionDistribution = await prisma.$queryRaw`
       SELECT
         COALESCE(s.tier, 'No Subscription') as tier,
-        COUNT(DISTINCT p.id) as count
+        COUNT(DISTINCT p.id)::INT as count
       FROM "Professional" p
       LEFT JOIN "Subscription" s ON p.id = s."professionalId"
       WHERE p."userId" IN (SELECT id FROM "User" WHERE "deletedAt" IS NULL)
@@ -238,8 +238,8 @@ async function getPriceDistributionStats() {
     // Raw SQL for statistical aggregations
     const stats = await prisma.$queryRaw`
       SELECT
-        COUNT(*) as total_professionals,
-        COUNT(CASE WHEN "hourlyRate" IS NOT NULL THEN 1 END) as professionals_with_rate,
+        COUNT(*)::INT as total_professionals,
+        COUNT(CASE WHEN "hourlyRate" IS NOT NULL THEN 1 END)::INT as professionals_with_rate,
         MIN(CASE WHEN "hourlyRate" > 0 THEN "hourlyRate" END)::FLOAT as min_price,
         MAX("hourlyRate")::FLOAT as max_price,
         AVG(CASE WHEN "hourlyRate" > 0 THEN "hourlyRate" END)::FLOAT as mean_price,
@@ -254,24 +254,40 @@ async function getPriceDistributionStats() {
     `;
 
     // Price distribution buckets (for histogram)
+    // PostgreSQL does not allow GROUP BY / ORDER BY on a SELECT-level alias;
+    // wrap in a subquery so the alias is visible in ORDER BY.
     const buckets = await prisma.$queryRaw`
-      SELECT
-        CASE
-          WHEN "hourlyRate" IS NULL THEN 'Not Set'
-          WHEN "hourlyRate" < 30 THEN '0-30'
-          WHEN "hourlyRate" < 50 THEN '30-50'
-          WHEN "hourlyRate" < 75 THEN '50-75'
-          WHEN "hourlyRate" < 100 THEN '75-100'
-          WHEN "hourlyRate" < 150 THEN '100-150'
-          WHEN "hourlyRate" < 200 THEN '150-200'
-          WHEN "hourlyRate" < 300 THEN '200-300'
-          ELSE '300+'
-        END as price_range,
-        COUNT(*) as count,
-        AVG("hourlyRate")::FLOAT as avg_in_range
-      FROM "Professional" p
-      WHERE p."userId" IN (SELECT id FROM "User" WHERE "deletedAt" IS NULL)
-      GROUP BY price_range
+      SELECT price_range, count, avg_in_range
+      FROM (
+        SELECT
+          CASE
+            WHEN "hourlyRate" IS NULL THEN 'Not Set'
+            WHEN "hourlyRate" < 30 THEN '0-30'
+            WHEN "hourlyRate" < 50 THEN '30-50'
+            WHEN "hourlyRate" < 75 THEN '50-75'
+            WHEN "hourlyRate" < 100 THEN '75-100'
+            WHEN "hourlyRate" < 150 THEN '100-150'
+            WHEN "hourlyRate" < 200 THEN '150-200'
+            WHEN "hourlyRate" < 300 THEN '200-300'
+            ELSE '300+'
+          END as price_range,
+          COUNT(*)::INT as count,
+          AVG("hourlyRate")::FLOAT as avg_in_range
+        FROM "Professional" p
+        WHERE p."userId" IN (SELECT id FROM "User" WHERE "deletedAt" IS NULL)
+        GROUP BY
+          CASE
+            WHEN "hourlyRate" IS NULL THEN 'Not Set'
+            WHEN "hourlyRate" < 30 THEN '0-30'
+            WHEN "hourlyRate" < 50 THEN '30-50'
+            WHEN "hourlyRate" < 75 THEN '50-75'
+            WHEN "hourlyRate" < 100 THEN '75-100'
+            WHEN "hourlyRate" < 150 THEN '100-150'
+            WHEN "hourlyRate" < 200 THEN '150-200'
+            WHEN "hourlyRate" < 300 THEN '200-300'
+            ELSE '300+'
+          END
+      ) sub
       ORDER BY
         CASE price_range
           WHEN 'Not Set' THEN 0
@@ -310,8 +326,8 @@ async function getReviewDistributionStats() {
     const ratingDistribution = await prisma.$queryRaw`
       SELECT
         rating,
-        COUNT(*) as count,
-        ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM "Review"), 2) as percentage
+        COUNT(*)::INT as count,
+        ROUND(COUNT(*) * 100.0 / NULLIF((SELECT COUNT(*) FROM "Review"), 0), 2) as percentage
       FROM "Review"
       GROUP BY rating
       ORDER BY rating DESC
@@ -321,7 +337,7 @@ async function getReviewDistributionStats() {
     const ratingByTrade = await prisma.$queryRaw`
       SELECT
         p.trade,
-        COUNT(r.id) as total_reviews,
+        COUNT(r.id)::INT as total_reviews,
         AVG(r.rating)::FLOAT as avg_rating,
         MIN(r.rating) as min_rating,
         MAX(r.rating) as max_rating,
@@ -378,7 +394,7 @@ async function getQuoteBookingStats() {
     const quoteStats = await prisma.$queryRaw`
       SELECT
         status,
-        COUNT(*) as count,
+        COUNT(*)::INT as count,
         AVG(amount)::FLOAT as avg_amount,
         MIN(amount)::FLOAT as min_amount,
         MAX(amount)::FLOAT as max_amount
@@ -391,7 +407,7 @@ async function getQuoteBookingStats() {
     const bookingStats = await prisma.$queryRaw`
       SELECT
         status,
-        COUNT(*) as count
+        COUNT(*)::INT as count
       FROM "Booking"
       GROUP BY status
       ORDER BY count DESC
@@ -400,8 +416,8 @@ async function getQuoteBookingStats() {
     // Quote to booking conversion (Booking has no quoteId — count independently)
     const conversionStats = await prisma.$queryRaw`
       SELECT
-        (SELECT COUNT(*) FROM "Quote") as total_quotes,
-        (SELECT COUNT(*) FROM "Booking") as total_bookings,
+        (SELECT COUNT(*) FROM "Quote")::INT as total_quotes,
+        (SELECT COUNT(*) FROM "Booking")::INT as total_bookings,
         ROUND(
           (SELECT COUNT(*) FROM "Booking")::NUMERIC * 100.0
           / NULLIF((SELECT COUNT(*) FROM "Quote"), 0),
