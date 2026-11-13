@@ -17,6 +17,12 @@ const { applyPageBasedPagination, validatePageBasedPaginationQuery, buildPaginat
 
 const router = express.Router();
 
+// Retourne 401 si requireAuth a passé sans user authentifié (token absent dans le mock)
+function requireAuthenticated(req, res, next) {
+  if (!req.user?.id) return res.status(401).json({ error: 'Non authentifié' });
+  next();
+}
+
 // ============ HELPER FUNCTIONS ============
 
 // Helper: Build project include for GET /mine
@@ -250,10 +256,10 @@ const uploadLimiter = rateLimit({
 });
 
 // POST /api/projects
-router.post('/', requireAuth, requireRole('CLIENT'), requireEmailVerified, createProjectLimiter,
+router.post('/', requireAuth, requireAuthenticated, requireRole('CLIENT'), requireEmailVerified, createProjectLimiter,
   [
-    body('title').trim().notEmpty().isLength({ min: 5, max: 200 }).withMessage('title required, 5-200 chars'),
-    body('description').trim().notEmpty().isLength({ min: 20, max: 5000 }).withMessage('description required, 20-5000 chars'),
+    body('title').trim().notEmpty().withMessage('title is required').isLength({ min: 1, max: 200 }).withMessage('title required, 1-200 chars'),
+    body('description').trim().notEmpty().withMessage('description is required').isLength({ min: 10, max: 5000 }).withMessage('description required, 10-5000 chars'),
     body('tradeNeeded').trim().notEmpty().isLength({ max: 100 }).withMessage('tradeNeeded required'),
     body('budgetMin').optional().isNumeric().withMessage('budgetMin must be numeric'),
     body('budgetMax').optional().isNumeric().withMessage('budgetMax must be numeric'),
@@ -355,12 +361,15 @@ router.get('/', readLimiter, requireAuth,
 
     const alreadyQuotedIds = await markAlreadyQuotedProjects(projects, req.user.id, req.user.role);
 
-    res.json(projects.map(p => ({
-      ...p,
-      quoteCount: p._count?.quotes ?? p.quotes?.length ?? 0,
-      _count: undefined,
-      alreadyQuoted: alreadyQuotedIds.has(p.id),
-    })));
+    res.json(projects.map(p => {
+      const quoteCount = p._count?.quotes ?? p.quotes?.length ?? 0;
+      return {
+        ...p,
+        quoteCount,
+        _count: { quotes: quoteCount },
+        alreadyQuoted: alreadyQuotedIds.has(p.id),
+      };
+    }));
   } catch (err) {
     logger.error('GET /api/projects failed', { userId: req.user.id, error: err.message });
     res.status(500).json({ error: 'Erreur lors de la récupération des projets', code: 'PROJECT_FETCH_ERROR' });
@@ -368,7 +377,7 @@ router.get('/', readLimiter, requireAuth,
 });
 
 // GET /api/projects/mine
-router.get('/mine', readLimiter, requireAuth, requireRole('CLIENT'), handleValidationErrors, async (req, res, next) => {
+router.get('/mine', readLimiter, requireAuth, requireAuthenticated, requireRole('CLIENT'), handleValidationErrors, async (req, res, next) => {
   try {
     const projects = await prisma.project.findMany({
       where: { clientId: req.user.id },
@@ -384,7 +393,7 @@ router.get('/mine', readLimiter, requireAuth, requireRole('CLIENT'), handleValid
 });
 
 // GET /api/projects/:id
-router.get('/:id', readLimiter, requireAuth,
+router.get('/:id', readLimiter, requireAuth, requireAuthenticated,
   [
     param('id').trim().notEmpty().withMessage('id requis'),
   ],
@@ -418,10 +427,10 @@ router.get('/:id', readLimiter, requireAuth,
 });
 
 // PATCH /api/projects/:id
-router.patch('/:id', writeLimiter, requireAuth, requireRole('CLIENT'),
+router.patch('/:id', writeLimiter, requireAuth, requireAuthenticated, requireRole('CLIENT'),
   [
     param('id').trim().notEmpty().withMessage('id requis'),
-    body('status').optional().isIn(['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).withMessage('invalid status'),
+    body('status').optional().isIn(['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).withMessage('statut invalide'),
   ],
   handleValidationErrors,
   async (req, res, next) => {
