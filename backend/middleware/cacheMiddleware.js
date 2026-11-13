@@ -47,7 +47,9 @@ function generateCacheKey(req) {
   const pathSegments = req.path.split('/').filter(Boolean);
   const resourceId = pathSegments[pathSegments.length - 1];
 
-  return `${req.baseUrl}:${req.path}${user}${query}`;
+  const base = req.baseUrl || '';
+  const path = req.path || '';
+  return `${base}${path}${user}${query}`;
 }
 
 // Determine TTL based on request path
