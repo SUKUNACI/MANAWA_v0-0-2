@@ -74,9 +74,15 @@ describe('Payment Reconciliation Daily - Q52', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    // Remove any payments from prior test to avoid @@unique([quoteId, isDeposit]) violations
-    await prisma.paymentAuditLog.deleteMany({ where: { payment: { quoteId: testQuote.id } } });
-    await prisma.payment.deleteMany({ where: { quoteId: testQuote.id } });
+    // Purge ALL payments/audit logs/quotes created by prior tests that could
+    // pollute reconcilePaymentsDaily() (which scans ALL pending payments globally).
+    await prisma.paymentAuditLog.deleteMany({});
+    await prisma.notification.deleteMany({});
+    await prisma.payment.deleteMany({});
+    // Delete quotes that are NOT the main testQuote (created by stuck-payments test)
+    await prisma.quote.deleteMany({
+      where: { id: { not: testQuote.id } },
+    });
   });
 
   describe('reconcilePaymentsDaily()', () => {
@@ -211,10 +217,20 @@ describe('Payment Reconciliation Daily - Q52', () => {
     });
 
     it('should detect stuck payments > 7 days', async () => {
+      // Create an admin user so the job can send notifications
+      const adminUser = await prisma.user.create({
+        data: {
+          email: `admin-stuck-test-${Date.now()}@example.com`,
+          firstName: 'Admin',
+          lastName: 'Test',
+          passwordHash: 'hashed',
+          role: 'ADMIN',
+        },
+      });
+
       // Create multiple stuck payments
       const sevenDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
 
-      const stuckPayments = [];
       for (let i = 0; i < 12; i++) {
         const quote = await prisma.quote.create({
           data: {
@@ -226,7 +242,7 @@ describe('Payment Reconciliation Daily - Q52', () => {
           },
         });
 
-        const payment = await prisma.payment.create({
+        await prisma.payment.create({
           data: {
             quoteId: quote.id,
             amount: 500,
@@ -236,8 +252,6 @@ describe('Payment Reconciliation Daily - Q52', () => {
             createdAt: sevenDaysAgo,
           },
         });
-
-        stuckPayments.push(payment);
 
         // Mock still pending on GeniusPay
         geniuspay.getPayment.mockResolvedValueOnce({
@@ -252,9 +266,10 @@ describe('Payment Reconciliation Daily - Q52', () => {
 
       expect(result.stuckPayments.length).toBeGreaterThan(10);
 
-      // Verify admin notification was created
+      // Verify admin notification was created for the admin user
       const adminNotifications = await prisma.notification.findMany({
         where: {
+          userId: adminUser.id,
           type: 'SYSTEM_ALERT',
           title: { contains: 'bloqués' },
         },
@@ -262,11 +277,8 @@ describe('Payment Reconciliation Daily - Q52', () => {
 
       expect(adminNotifications.length).toBeGreaterThan(0);
 
-      // Cleanup stuck payments and quotes
-      for (const p of stuckPayments) {
-        const quote = await prisma.quote.findUnique({ where: { id: p.quoteId } });
-        if (quote) await prisma.quote.delete({ where: { id: quote.id } });
-      }
+      // Cleanup: beforeEach will handle payments/quotes; delete admin user here
+      await prisma.user.delete({ where: { id: adminUser.id } });
     });
 
     it('should skip payments without geniuspayRef', async () => {
