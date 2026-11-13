@@ -64,7 +64,7 @@ describe('createVideoRoom', () => {
         }),
         expect.objectContaining({
           headers: expect.objectContaining({
-            Authorization: 'Bearer test-daily-api-key-123',
+            Authorization: 'Bearer test_mock_api_key_for_testing',
           }),
         })
       );
