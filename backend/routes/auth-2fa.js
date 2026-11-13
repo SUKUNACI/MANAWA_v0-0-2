@@ -381,7 +381,7 @@ router.post(
       const bcrypt = require('bcryptjs');
       const passwordValid = await bcrypt.compare(password, user.passwordHash);
       if (!passwordValid) {
-        return res.status(401).json({ error: 'Mot de passe incorrect' });
+        return res.status(401).json({ error: 'mot de passe incorrect' });
       }
 
       // Verify TOTP code

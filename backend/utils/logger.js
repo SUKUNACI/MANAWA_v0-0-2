@@ -56,6 +56,16 @@ const logger = {
       writeLog(logFile, entry);
     }
   },
+
+  child(context = {}) {
+    return {
+      info: (msg, d = {}) => logger.info(msg, { ...context, ...d }),
+      warn: (msg, d = {}) => logger.warn(msg, { ...context, ...d }),
+      error: (msg, d = {}) => logger.error(msg, { ...context, ...d }),
+      debug: (msg, d = {}) => logger.debug(msg, { ...context, ...d }),
+      child: (ctx2 = {}) => logger.child({ ...context, ...ctx2 }),
+    };
+  },
 };
 
 module.exports = logger;

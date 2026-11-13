@@ -1180,3 +1180,576 @@ describe('Project Edge Cases', () => {
     expect([200, 201]).toContain(res.status);
   });
 });
+
+// ============ TESTS: POST /api/projects/:id/photos ============
+
+describe('POST /api/projects/:id/photos - Upload photos', () => {
+  beforeEach(() => {
+    resetAllMocks();
+    prisma.project.findUnique.mockResolvedValue(mockProject);
+    prisma.projectPhoto.create.mockResolvedValue(mockPhoto);
+    uploadBuffer.mockResolvedValue('https://res.cloudinary.com/test/image.jpg');
+  });
+
+  test('should return 403 if project not found', async () => {
+    prisma.project.findUnique.mockResolvedValue(null);
+
+    const res = await request(app)
+      .post(`/api/projects/${mockProject.id}/photos`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({});
+
+    expect(res.status).toBe(403);
+  });
+
+  test('should return 403 if user is not project owner', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${mockProject.id}/photos`)
+      .set('Authorization', `Bearer ${clientToken('other-client-id')}`)
+      .send({});
+
+    expect(res.status).toBe(403);
+  });
+
+  test('should return 403 if professional tries to upload photos', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${mockProject.id}/photos`)
+      .set('Authorization', `Bearer ${proToken(PRO_USER_ID)}`)
+      .send({});
+
+    expect(res.status).toBe(403);
+  });
+
+  test('should return 400 when no files provided to upload', async () => {
+    // The mock upload middleware allows pass-through (no files attached)
+    // req.files will be undefined/empty
+    const res = await request(app)
+      .post(`/api/projects/${mockProject.id}/photos`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({});
+
+    expect([400, 403, 500]).toContain(res.status);
+  });
+
+  test('should return 401 without authentication on photos endpoint', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${mockProject.id}/photos`)
+      .send({});
+
+    expect(res.status).toBe(401);
+  });
+});
+
+// ============ TESTS: Professional marks project complete ============
+
+describe('PATCH /api/projects/:id/confirm-completion - additional scenarios', () => {
+  beforeEach(() => {
+    resetAllMocks();
+  });
+
+  test('should return 404 if professional profile not found', async () => {
+    prisma.professional.findUnique.mockResolvedValue(null);
+
+    const res = await request(app)
+      .patch(`/api/projects/${mockProjectWithQuote.id}/confirm-completion`)
+      .set('Authorization', `Bearer ${proToken(PRO_USER_ID)}`)
+      .send({});
+
+    expect(res.status).toBe(404);
+  });
+
+  test('should return 403 when professional has no accepted quote on project', async () => {
+    prisma.professional.findUnique.mockResolvedValue(mockProfessional);
+    prisma.project.findUnique.mockResolvedValue({
+      ...mockProjectWithQuote,
+      quotes: [], // no matching quotes
+    });
+
+    const res = await request(app)
+      .patch(`/api/projects/${mockProjectWithQuote.id}/confirm-completion`)
+      .set('Authorization', `Bearer ${proToken(PRO_USER_ID)}`)
+      .send({});
+
+    expect(res.status).toBe(403);
+  });
+
+  test('should return 400 if project is not IN_PROGRESS', async () => {
+    prisma.professional.findUnique.mockResolvedValue(mockProfessional);
+    prisma.project.findUnique.mockResolvedValue({
+      ...mockProjectWithQuote,
+      status: 'COMPLETED',
+      quotes: [{ id: 'quote-1', professionalId: PRO_ID, status: 'ACCEPTED' }],
+    });
+
+    const res = await request(app)
+      .patch(`/api/projects/${mockProjectWithQuote.id}/confirm-completion`)
+      .set('Authorization', `Bearer ${proToken(PRO_USER_ID)}`)
+      .send({});
+
+    expect(res.status).toBe(400);
+  });
+});
+
+// ============ TESTS: Client completes project ============
+
+describe('PATCH /api/projects/:id/complete - additional scenarios', () => {
+  beforeEach(() => {
+    resetAllMocks();
+  });
+
+  test('should return 403 if project not found', async () => {
+    prisma.project.findUnique.mockResolvedValue(null);
+
+    const res = await request(app)
+      .patch(`/api/projects/nonexistent-id/complete`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({});
+
+    expect(res.status).toBe(403);
+  });
+
+  test('should return 400 if project status is not IN_PROGRESS', async () => {
+    prisma.project.findUnique.mockResolvedValue({
+      ...mockProject,
+      status: 'OPEN',
+      quotes: [],
+    });
+
+    const res = await request(app)
+      .patch(`/api/projects/${mockProject.id}/complete`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({});
+
+    expect(res.status).toBe(400);
+  });
+
+  test('should return 403 if user is not project owner on complete', async () => {
+    prisma.project.findUnique.mockResolvedValue(mockProject);
+
+    const res = await request(app)
+      .patch(`/api/projects/${mockProject.id}/complete`)
+      .set('Authorization', `Bearer ${clientToken('other-client')}`)
+      .send({});
+
+    expect(res.status).toBe(403);
+  });
+
+  test('should handle both parties confirming completion', async () => {
+    const inProgressProject = {
+      ...mockProjectWithQuote,
+      status: 'IN_PROGRESS',
+      proConfirmedCompletion: true, // pro already confirmed
+      clientConfirmedCompletion: false,
+      quotes: [{ id: 'quote-1', professionalId: PRO_ID, status: 'ACCEPTED' }],
+    };
+
+    prisma.project.findUnique.mockResolvedValue(inProgressProject);
+    prisma.project.update.mockResolvedValue({ ...inProgressProject, clientConfirmedCompletion: true, status: 'COMPLETED' });
+    prisma.professional.findUnique.mockResolvedValue(mockProfessional);
+    prisma.professional.update.mockResolvedValue({ ...mockProfessional, completedMissionsCount: 11 });
+
+    const res = await request(app)
+      .patch(`/api/projects/${inProgressProject.id}/complete`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.completed).toBe(true);
+  });
+});
+
+// ============ TESTS: Cancel project ============
+
+describe('PATCH /api/projects/:id/cancel - additional scenarios', () => {
+  beforeEach(() => {
+    resetAllMocks();
+  });
+
+  test('should return 403 if project not found on cancel', async () => {
+    prisma.project.findUnique.mockResolvedValue(null);
+
+    const res = await request(app)
+      .patch(`/api/projects/nonexistent-id/cancel`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({});
+
+    expect(res.status).toBe(403);
+  });
+
+  test('should handle cancelling a project that is IN_PROGRESS with accepted quote', async () => {
+    prisma.project.findUnique.mockResolvedValue({
+      ...mockProjectWithQuote,
+      status: 'IN_PROGRESS',
+      quotes: [{ id: 'quote-1', professionalId: PRO_ID, status: 'ACCEPTED' }],
+    });
+    prisma.project.update.mockResolvedValue({ ...mockProjectWithQuote, status: 'CANCELLED' });
+    prisma.professional.update.mockResolvedValue({ ...mockProfessional, cancelledMissionsCount: 2 });
+
+    const res = await request(app)
+      .patch(`/api/projects/${mockProjectWithQuote.id}/cancel`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.cancelled).toBe(true);
+  });
+
+  test('should handle cancelling an OPEN project without quote', async () => {
+    prisma.project.findUnique.mockResolvedValue({
+      ...mockProject,
+      status: 'OPEN',
+      quotes: [],
+    });
+    prisma.project.update.mockResolvedValue({ ...mockProject, status: 'CANCELLED' });
+
+    const res = await request(app)
+      .patch(`/api/projects/${mockProject.id}/cancel`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.cancelled).toBe(true);
+  });
+});
+
+// ============ TESTS: Error handling on write operations ============
+
+describe('Error handling on write operations', () => {
+  beforeEach(() => {
+    resetAllMocks();
+  });
+
+  test('POST /api/projects should handle DB error gracefully', async () => {
+    prisma.project.create.mockRejectedValue(new Error('DB error'));
+
+    const res = await request(app)
+      .post('/api/projects')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({
+        title: 'Test',
+        description: 'Test project description',
+        tradeNeeded: 'Plombier',
+        city: 'Antananarivo',
+      });
+
+    expect(res.status).toBe(500);
+  });
+
+  test('PATCH /api/projects/:id should handle DB update error', async () => {
+    prisma.project.findUnique.mockResolvedValue(mockProject);
+    prisma.project.update.mockRejectedValue(new Error('DB error'));
+
+    const res = await request(app)
+      .patch(`/api/projects/${mockProject.id}`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({ status: 'IN_PROGRESS' });
+
+    expect(res.status).toBe(500);
+  });
+
+  test('GET /api/projects/:id should handle DB error gracefully', async () => {
+    prisma.project.findUnique.mockRejectedValue(new Error('DB error'));
+
+    const res = await request(app)
+      .get(`/api/projects/${mockProject.id}`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`);
+
+    expect(res.status).toBe(500);
+  });
+
+  test('GET /api/projects/mine should handle DB error gracefully', async () => {
+    prisma.project.findMany.mockRejectedValue(new Error('DB error'));
+
+    const res = await request(app)
+      .get('/api/projects/mine')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`);
+
+    expect(res.status).toBe(500);
+  });
+
+  test('POST /api/projects should handle missing authentication', async () => {
+    const res = await request(app)
+      .post('/api/projects')
+      .send({
+        title: 'Test',
+        description: 'Test project description',
+        tradeNeeded: 'Plombier',
+        city: 'Antananarivo',
+      });
+
+    expect(res.status).toBe(401);
+  });
+
+  test('GET /api/projects/:id should handle subscription delay error gracefully', async () => {
+    prisma.professional.findUnique.mockRejectedValue(new Error('Subscription lookup failed'));
+    prisma.project.findUnique.mockResolvedValue(mockProjectWithQuote);
+
+    const res = await request(app)
+      .get(`/api/projects/${mockProjectWithQuote.id}`)
+      .set('Authorization', `Bearer ${proToken(PRO_USER_ID)}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  test('PATCH /api/projects/:id/complete should handle DB error gracefully', async () => {
+    prisma.project.findUnique.mockRejectedValue(new Error('DB error'));
+
+    const res = await request(app)
+      .patch(`/api/projects/${mockProjectWithQuote.id}/complete`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`);
+
+    expect(res.status).toBe(500);
+  });
+
+  test('PATCH /api/projects/:id/confirm-completion should handle DB error gracefully', async () => {
+    prisma.professional.findUnique.mockRejectedValue(new Error('DB error'));
+
+    const res = await request(app)
+      .patch(`/api/projects/${mockProjectWithQuote.id}/confirm-completion`)
+      .set('Authorization', `Bearer ${proToken(PRO_USER_ID)}`);
+
+    expect(res.status).toBe(500);
+  });
+
+  test('PATCH /api/projects/:id/cancel should handle DB error gracefully', async () => {
+    prisma.project.findUnique.mockRejectedValue(new Error('DB error'));
+
+    const res = await request(app)
+      .patch(`/api/projects/${mockProjectWithQuote.id}/cancel`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`);
+
+    expect(res.status).toBe(500);
+  });
+});
+
+// ============ ADDITIONAL BRANCHES COVERAGE ============
+
+describe('Additional branches coverage for better coverage%', () => {
+  beforeEach(() => {
+    resetAllMocks();
+  });
+
+  test('should handle professional without subscription delay', async () => {
+    resetAllMocks();
+    prisma.professional.findUnique.mockResolvedValue({ id: PRO_ID, userId: PRO_USER_ID });
+    prisma.project.findMany.mockResolvedValue([mockProject]);
+    prisma.quote.findMany.mockResolvedValue([]);
+
+    const res = await request(app)
+      .get('/api/projects')
+      .set('Authorization', `Bearer ${proToken(PRO_USER_ID)}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  test('verifyPendingPayment returns null when payment not pending', async () => {
+    const successProject = {
+      ...mockProjectWithQuote,
+      quotes: [{
+        ...mockProjectWithQuote.quotes[0],
+        payments: [{
+          id: 'payment-1',
+          status: 'succeeded',
+          amount: 100,
+          geniuspayRef: 'ref-123',
+        }],
+      }],
+    };
+
+    prisma.project.findUnique.mockResolvedValue(successProject);
+
+    const res = await request(app)
+      .get(`/api/projects/${successProject.id}`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  test('should handle payment verification with no geniuspayRef', async () => {
+    const projectWithPaymentNoRef = {
+      ...mockProjectWithQuote,
+      quotes: [{
+        ...mockProjectWithQuote.quotes[0],
+        payments: [{
+          id: 'payment-1',
+          status: 'pending',
+          amount: 100,
+          geniuspayRef: null,
+        }],
+      }],
+    };
+
+    prisma.project.findUnique.mockResolvedValue(projectWithPaymentNoRef);
+
+    const res = await request(app)
+      .get(`/api/projects/${projectWithPaymentNoRef.id}`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  test('GET /api/projects with trade filter', async () => {
+    prisma.project.findMany.mockResolvedValue([mockProject]);
+
+    const res = await request(app)
+      .get('/api/projects?trade=Plombier');
+
+    expect(res.status).toBe(200);
+  });
+
+  test('GET /api/projects with city filter', async () => {
+    prisma.project.findMany.mockResolvedValue([mockProject]);
+
+    const res = await request(app)
+      .get('/api/projects?city=Antananarivo');
+
+    expect(res.status).toBe(200);
+  });
+
+  test('should handle alreadyQuotedIds correctly', async () => {
+    prisma.project.findMany.mockResolvedValue([mockProject]);
+    prisma.professional.findUnique.mockResolvedValue(mockProfessional);
+    prisma.quote.findMany.mockResolvedValue([]);
+
+    const res = await request(app)
+      .get('/api/projects')
+      .set('Authorization', `Bearer ${proToken(PRO_USER_ID)}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  test('should handle GET /projects with sorting', async () => {
+    prisma.project.findMany.mockResolvedValue([mockProject]);
+
+    const res = await request(app)
+      .get('/api/projects?sort=createdAt&order=desc');
+
+    expect(res.status).toBe(200);
+  });
+
+  test('PATCH /api/projects/:id with no status parameter', async () => {
+    prisma.project.findUnique.mockResolvedValue(mockProject);
+    prisma.project.update.mockResolvedValue(mockProject);
+
+    const res = await request(app)
+      .patch(`/api/projects/${mockProject.id}`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({});
+
+    expect(res.status).toBe(200);
+  });
+
+  test('should handle complete when pro already confirmed but not client', async () => {
+    const projectWithProConfirmed = {
+      ...mockProjectWithQuote,
+      status: 'IN_PROGRESS',
+      proConfirmedCompletion: true,
+      clientConfirmedCompletion: false,
+      quotes: [{ id: 'quote-1', professionalId: PRO_ID, status: 'ACCEPTED' }],
+    };
+
+    prisma.project.findUnique.mockResolvedValue(projectWithProConfirmed);
+    prisma.project.update.mockResolvedValue({ ...projectWithProConfirmed, clientConfirmedCompletion: true });
+    prisma.professional.findUnique.mockResolvedValue(mockProfessional);
+    prisma.professional.update.mockResolvedValue({ ...mockProfessional, completedMissionsCount: 11 });
+
+    const res = await request(app)
+      .patch(`/api/projects/${projectWithProConfirmed.id}/complete`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.completed).toBe(true);
+  });
+
+  test('should handle complete when neither party confirmed', async () => {
+    const inProgressNoConfirm = {
+      ...mockProjectWithQuote,
+      status: 'IN_PROGRESS',
+      proConfirmedCompletion: false,
+      clientConfirmedCompletion: false,
+      quotes: [{ id: 'quote-1', professionalId: PRO_ID, status: 'ACCEPTED' }],
+    };
+
+    prisma.project.findUnique.mockResolvedValue(inProgressNoConfirm);
+    prisma.project.update.mockResolvedValue({ ...inProgressNoConfirm, clientConfirmedCompletion: true });
+    prisma.professional.findUnique.mockResolvedValue(mockProfessional);
+
+    const res = await request(app)
+      .patch(`/api/projects/${inProgressNoConfirm.id}/complete`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.waitingForOtherParty).toBe(true);
+  });
+
+  test('should handle confirm-completion when client already confirmed', async () => {
+    const projectClientConfirmed = {
+      ...mockProjectWithQuote,
+      status: 'IN_PROGRESS',
+      proConfirmedCompletion: false,
+      clientConfirmedCompletion: true,
+      quotes: [{ id: 'quote-1', professionalId: PRO_ID, status: 'ACCEPTED' }],
+    };
+
+    prisma.professional.findUnique.mockResolvedValue(mockProfessional);
+    prisma.project.findUnique.mockResolvedValue(projectClientConfirmed);
+    prisma.project.update.mockResolvedValue({ ...projectClientConfirmed, proConfirmedCompletion: true, status: 'COMPLETED' });
+    prisma.professional.update.mockResolvedValue({ ...mockProfessional, completedMissionsCount: 11 });
+
+    const res = await request(app)
+      .patch(`/api/projects/${projectClientConfirmed.id}/confirm-completion`)
+      .set('Authorization', `Bearer ${proToken(PRO_USER_ID)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.completed).toBe(true);
+  });
+
+  test('should handle post photos without files', async () => {
+    prisma.project.findUnique.mockResolvedValue(mockProject);
+
+    const res = await request(app)
+      .post(`/api/projects/${mockProject.id}/photos`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`);
+
+    expect([400, 403, 500]).toContain(res.status);
+  });
+
+  test('POST /api/projects with invalid budget values', async () => {
+    const res = await request(app)
+      .post('/api/projects')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({
+        title: 'Test',
+        description: 'Test project description',
+        tradeNeeded: 'Plombier',
+        city: 'Antananarivo',
+        budgetMin: 'invalid',
+        budgetMax: 'invalid',
+      });
+
+    expect(res.status).toBe(400);
+  });
+
+  test('GET /api/projects with professional role shows no owned filter', async () => {
+    prisma.project.findMany.mockResolvedValue([mockProject]);
+    prisma.professional.findUnique.mockResolvedValue(mockProfessional);
+
+    const res = await request(app)
+      .get('/api/projects')
+      .set('Authorization', `Bearer ${proToken(PRO_USER_ID)}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  test('should handle cancel when project not in progress', async () => {
+    const openProject = { ...mockProject, status: 'OPEN', quotes: [] };
+    prisma.project.findUnique.mockResolvedValue(openProject);
+    prisma.project.update.mockResolvedValue({ ...openProject, status: 'CANCELLED' });
+
+    const res = await request(app)
+      .patch(`/api/projects/${openProject.id}/cancel`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`);
+
+    expect(res.status).toBe(200);
+  });
+});

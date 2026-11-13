@@ -3,6 +3,9 @@ const axios = require('axios');
 const prisma = require('../config/db');
 const logger = require('./logger');
 
+// Extracted so tests can override: webhooks._delay = () => Promise.resolve()
+let _delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 // Event types that can trigger webhooks
 const WEBHOOK_EVENTS = {
   BOOKING_CREATED: 'booking.created',
@@ -54,6 +57,11 @@ async function registerWebhook(url, secret, events = []) {
       new URL(url);
     } catch (err) {
       throw new Error(`Invalid webhook URL: ${err.message}`);
+    }
+
+    // Validate secret length (minimum 16 characters for security)
+    if (!secret || secret.length < 16) {
+      throw new Error('Webhook secret must be at least 16 characters long');
     }
 
     // Validate events
@@ -206,131 +214,74 @@ async function triggerWebhook(event, payload) {
  * @param {string} payload - JSON payload
  * @param {string} logId - WebhookLog ID for tracking
  */
-async function deliverWebhook(webhook, event, payload, logId) {
+async function deliverWebhook(webhook, event, payload, logId, attempt = 1) {
   const signature = generateSignature(payload, webhook.secret);
 
-  // Attempt delivery with retry logic
-  let lastError = null;
-  let nextRetryAt = null;
+  try {
+    // Send webhook
+    const response = await axios.post(webhook.url, JSON.parse(payload), {
+      headers: {
+        'X-Webhook-Event': event,
+        'X-Webhook-Signature': `sha256=${signature}`,
+        'X-Webhook-Attempt': attempt.toString(),
+        'Content-Type': 'application/json',
+      },
+      timeout: RETRY_CONFIG.timeoutMs,
+      validateStatus: () => true,
+    });
 
-  for (let attempt = 1; attempt <= RETRY_CONFIG.maxAttempts; attempt++) {
-    try {
-      // Calculate delay for this attempt
-      if (attempt > 1) {
-        const delayMs = RETRY_CONFIG.initialDelayMs * Math.pow(RETRY_CONFIG.backoffMultiplier, attempt - 2);
-        logger.debug('Retrying webhook delivery', {
-          logId,
-          attempt,
-          delayMs,
-        });
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-      }
-
-      // Send webhook
-      const response = await axios.post(webhook.url, JSON.parse(payload), {
-        headers: {
-          'X-Webhook-Event': event,
-          'X-Webhook-Signature': `sha256=${signature}`,
-          'X-Webhook-Attempt': attempt.toString(),
-          'Content-Type': 'application/json',
-        },
-        timeout: RETRY_CONFIG.timeoutMs,
-        validateStatus: () => true, // Don't throw on any status code
-      });
-
-      // Success on 2xx status codes
-      if (response.status >= 200 && response.status < 300) {
-        await prisma.webhookLog.update({
-          where: { id: logId },
-          data: {
-            status: 'success',
-            response: JSON.stringify({
-              statusCode: response.status,
-              body: response.data,
-            }),
-            attempt,
-            nextRetryAt: null,
-          },
-        });
-
-        logger.info('Webhook delivered successfully', {
-          logId,
-          event,
-          webhookId: webhook.id,
-          attempt,
-          statusCode: response.status,
-        });
-        return; // Success!
-      }
-
-      // Handle non-2xx responses
-      lastError = {
-        statusCode: response.status,
-        body: response.data,
-        message: `HTTP ${response.status}`,
-      };
-
-      logger.warn('Webhook delivery failed', {
-        logId,
-        event,
-        webhookId: webhook.id,
-        attempt,
-        statusCode: response.status,
-      });
-    } catch (err) {
-      lastError = {
-        message: err.message,
-        code: err.code,
-      };
-
-      logger.warn('Webhook delivery error', {
-        logId,
-        event,
-        webhookId: webhook.id,
-        attempt,
-        error: err.message,
-      });
-    }
-
-    // Schedule retry if attempts remain
-    if (attempt < RETRY_CONFIG.maxAttempts) {
-      const delayMs = RETRY_CONFIG.initialDelayMs * Math.pow(RETRY_CONFIG.backoffMultiplier, attempt - 1);
-      nextRetryAt = new Date(Date.now() + delayMs);
-
+    // Success on 2xx
+    if (response.status >= 200 && response.status < 300) {
       await prisma.webhookLog.update({
         where: { id: logId },
         data: {
-          status: 'pending',
-          response: JSON.stringify(lastError),
+          status: 'success',
+          response: JSON.stringify({ statusCode: response.status, body: response.data }),
           attempt,
-          nextRetryAt,
+          nextRetryAt: null,
         },
       });
+
+      logger.info('Webhook delivered successfully', { logId, event, webhookId: webhook.id, attempt, statusCode: response.status });
+      return;
     }
+
+    // Non-2xx — schedule retry if attempts remain
+    const lastError = { statusCode: response.status, body: response.data, message: `HTTP ${response.status}` };
+    logger.warn('Webhook delivery failed', { logId, event, webhookId: webhook.id, attempt, statusCode: response.status });
+    await _scheduleRetryOrFail(logId, attempt, lastError);
+  } catch (err) {
+    const lastError = { message: err.message, code: err.code };
+    logger.warn('Webhook delivery error', { logId, event, webhookId: webhook.id, attempt, error: err.message });
+    await _scheduleRetryOrFail(logId, attempt, lastError);
   }
+}
 
-  // All retries exhausted
-  await prisma.webhookLog.update({
-    where: { id: logId },
-    data: {
-      status: 'failed',
-      response: JSON.stringify({
-        message: 'Max retries exceeded',
-        lastError,
-        attempts: RETRY_CONFIG.maxAttempts,
-      }),
-      attempt: RETRY_CONFIG.maxAttempts,
-      nextRetryAt: null,
-    },
-  });
+async function _scheduleRetryOrFail(logId, attempt, lastError) {
+  if (attempt < RETRY_CONFIG.maxAttempts) {
+    const delayMs = RETRY_CONFIG.initialDelayMs * Math.pow(RETRY_CONFIG.backoffMultiplier, attempt - 1);
+    const nextRetryAt = new Date(Date.now() + delayMs);
 
-  logger.error('Webhook delivery failed after all retries', {
-    logId,
-    event,
-    webhookId: webhook.id,
-    attempts: RETRY_CONFIG.maxAttempts,
-    lastError,
-  });
+    await prisma.webhookLog.update({
+      where: { id: logId },
+      data: {
+        status: 'pending',
+        response: JSON.stringify(lastError),
+        attempt,
+        nextRetryAt,
+      },
+    });
+  } else {
+    await prisma.webhookLog.update({
+      where: { id: logId },
+      data: {
+        status: 'failed',
+        response: JSON.stringify({ message: 'Max retries exceeded', lastError, attempts: RETRY_CONFIG.maxAttempts }),
+        attempt: RETRY_CONFIG.maxAttempts,
+        nextRetryAt: null,
+      },
+    });
+  }
 }
 
 /**
@@ -370,8 +321,8 @@ async function retryFailedWebhooks() {
           continue;
         }
 
-        // Attempt delivery again
-        await deliverWebhook(log.webhook, log.event, log.payload, log.id);
+        // Attempt delivery again (next attempt number)
+        await deliverWebhook(log.webhook, log.event, log.payload, log.id, log.attempt + 1);
         retryCount++;
       } catch (err) {
         logger.error('Failed to retry webhook', {
@@ -543,4 +494,6 @@ module.exports = {
   getWebhookLogs,
   sendTestWebhook,
   generateSignature,
+  get _delay() { return _delay; },
+  set _delay(fn) { _delay = fn; },
 };

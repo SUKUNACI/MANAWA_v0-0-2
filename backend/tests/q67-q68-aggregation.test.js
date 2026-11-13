@@ -13,9 +13,13 @@ describe('Q67 + Q68: Faceted Search & Aggregations', () => {
   let testUsers = [];
 
   beforeAll(async () => {
-    // Clear existing data
-    await prisma.professional.deleteMany({});
-    await prisma.user.deleteMany({});
+    // Clear only test data (avoid destroying data from parallel test suites)
+    await prisma.professional.deleteMany({
+      where: { user: { email: { endsWith: '@test.com' } } },
+    });
+    await prisma.user.deleteMany({
+      where: { email: { endsWith: '@test.com' } },
+    });
 
     // Create test users
     for (let i = 1; i <= 10; i++) {
@@ -50,9 +54,13 @@ describe('Q67 + Q68: Faceted Search & Aggregations', () => {
   });
 
   afterAll(async () => {
-    // Cleanup
-    await prisma.professional.deleteMany({});
-    await prisma.user.deleteMany({});
+    // Cleanup only test data
+    await prisma.professional.deleteMany({
+      where: { user: { email: { endsWith: '@test.com' } } },
+    });
+    await prisma.user.deleteMany({
+      where: { email: { endsWith: '@test.com' } },
+    });
     await prisma.$disconnect();
   });
 

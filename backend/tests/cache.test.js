@@ -267,10 +267,9 @@ describe('cacheInvalidate Middleware', () => {
     await middleware(mockReq, mockRes, nextCalled);
     expect(nextCalled).toHaveBeenCalled();
 
-    // Simulate successful response
+    // Simulate successful response — interceptor is async, must await
     const responseData = { success: true };
-    const jsonFn = mockRes.json;
-    jsonFn(responseData);
+    await mockRes.json(responseData);
 
     // Cache should be cleared
     const cached = await redis.get('professional:123:data');
@@ -339,7 +338,8 @@ describe('cacheInvalidate Middleware', () => {
     const middleware = cacheInvalidate(['professional:*', 'projects:search:*']);
     await middleware(mockReq, mockRes, jest.fn());
 
-    mockRes.json({ success: true });
+    // Interceptor is async — must await to ensure deletePattern completes
+    await mockRes.json({ success: true });
 
     expect(await redis.get('professional:123:data')).toBeNull();
     expect(await redis.get('projects:search:plumber')).toBeNull();

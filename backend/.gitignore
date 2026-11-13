@@ -1,0 +1,2 @@
+backend/coverage/
+# Gitleaks: ignore coverage files (generated, no secrets)

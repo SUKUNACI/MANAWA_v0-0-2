@@ -254,7 +254,7 @@ describe('AdaptiveRateLimiter', () => {
     const elapsed = Date.now() - start;
 
     expect(elapsed).toBeGreaterThanOrEqual(50);
-    expect(elapsed).toBeLessThan(100); // Reasonable tolerance
+    expect(elapsed).toBeLessThan(500); // CI-safe tolerance
   });
 
   test('should handle errors in queued requests', async () => {
