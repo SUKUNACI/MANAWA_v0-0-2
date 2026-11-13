@@ -3,7 +3,17 @@
  * Tests app config defaults, retrieval, and super admin management
  */
 
-jest.mock('../../config/db');
+jest.mock('../config/db', () => ({
+  user: {
+    findUnique: jest.fn(),
+    update: jest.fn(),
+  },
+  appConfig: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    upsert: jest.fn(),
+  },
+}), { virtual: true });
 
 describe('Application Configuration', () => {
   let appConfig;
@@ -12,7 +22,7 @@ describe('Application Configuration', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    prisma = require('../../config/db');
+    prisma = require('../config/db');
     appConfig = require('../../utils/appConfig');
   });
 
