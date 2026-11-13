@@ -67,14 +67,14 @@ describe('Q69: Response Size Limits', () => {
     });
 
     sizeLimitApp.get('/medium', (req, res) => {
-      // Create ~1MB response (should trigger warning)
-      const largeData = new Array(100000).fill('x').join('');
+      // Create ~1.1MB response (should trigger warning) — 1,100,000 chars + JSON overhead
+      const largeData = new Array(1100000).fill('x').join('');
       res.json({ data: largeData, size: 'medium' });
     });
 
     sizeLimitApp.get('/huge', (req, res) => {
-      // Create ~6MB response (should be rejected)
-      const hugeData = new Array(1000000).fill('x').join('');
+      // Create ~5.5MB response (should be rejected — exceeds 5MB limit)
+      const hugeData = new Array(5500000).fill('x').join('');
       res.json({ data: hugeData, size: 'huge' });
     });
   });
