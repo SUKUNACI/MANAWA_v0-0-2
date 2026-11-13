@@ -5,6 +5,7 @@
 
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
+const { v4: uuidv4 } = require('uuid');
 const prisma = require('../../config/db');
 const twoFAUtils = require('../../utils/2fa');
 const twoFAConfig = require('../../config/2fa');
@@ -25,7 +26,7 @@ describe('2FA Authentication Routes', () => {
     // Create test user
     testUser = await prisma.user.create({
       data: {
-        id: 'test-user-2fa',
+        id: uuidv4(),
         email: 'test2fa@example.com',
         passwordHash: await require('bcryptjs').hash('TestPassword123!', 10),
         firstName: 'Test',
@@ -121,7 +122,6 @@ describe('2FA Authentication Routes', () => {
         ? require('speakeasy').totp({
             secret,
             encoding: 'base32',
-            time: Math.floor(Date.now() / 1000 / 30),
           })
         : '000000'; // Fallback
 

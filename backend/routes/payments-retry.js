@@ -92,7 +92,7 @@ router.post(
           },
           auditLogs: {
             orderBy: { createdAt: 'desc' },
-            take: 1,
+            where: { reason: 'retry' },
           },
         },
       });
@@ -138,9 +138,7 @@ router.post(
       }
 
       // 5. Count retry attempts (check audit logs)
-      const retryAttempts = payment.auditLogs.filter(
-        log => log.reason === 'retry'
-      ).length;
+      const retryAttempts = payment.auditLogs.length;
 
       const MAX_RETRY_ATTEMPTS = 3;
       if (retryAttempts >= MAX_RETRY_ATTEMPTS) {

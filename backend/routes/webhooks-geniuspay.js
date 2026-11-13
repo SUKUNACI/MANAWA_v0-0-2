@@ -23,7 +23,7 @@ const router = express.Router();
 
 // Middleware to capture raw body for webhook signature verification
 router.use((req, res, next) => {
-  if (req.originalUrl === '/api/v1/webhooks/geniuspay') {
+  if (req.originalUrl.endsWith('/webhooks/geniuspay')) {
     rawBody(req, { encoding: 'utf-8' }, (err, body) => {
       if (err) {
         logger.error('[Webhook GeniusPay] Raw body parse error', { error: err.message });
@@ -89,7 +89,7 @@ router.post('/', async (req, res) => {
     // 3. Find payment by GeniusPay reference
     const payment = await prisma.payment.findFirst({
       where: { geniuspayRef: eventData.reference },
-      include: { quote: { include: { client: true, professional: true } } },
+      include: { quote: { include: { project: { include: { client: true } }, professional: true } } },
     });
 
     if (!payment) {
@@ -237,21 +237,22 @@ router.post('/', async (req, res) => {
     }
 
     // 5. Trigger user notification if status changed
-    if (shouldNotify && payment.quote?.client) {
+    const client = payment.quote?.project?.client;
+    if (shouldNotify && client) {
       try {
         const notificationData = {
-          userId: payment.quote.client.id,
+          userId: client.id,
           type: newStatus === 'succeeded' ? 'PAYMENT_RECEIVED' : 'PAYMENT_FAILED',
           title: newStatus === 'succeeded' ? 'Paiement confirmé' : 'Paiement échoué',
           message: newStatus === 'succeeded'
             ? `Votre paiement de ${payment.amount} XOF a été confirmé.`
             : `Votre paiement de ${payment.amount} XOF a échoué. Veuillez réessayer.`,
-          metadata: JSON.stringify({
+          data: {
             paymentId: payment.id,
             quoteId: payment.quoteId,
             amount: payment.amount,
             status: newStatus,
-          }),
+          },
         };
 
         // Create notification in database
@@ -260,7 +261,7 @@ router.post('/', async (req, res) => {
         });
 
         logger.info('[Webhook GeniusPay] Notification created', {
-          userId: payment.quote.client.id,
+          userId: client.id,
           type: notificationData.type,
           paymentId: payment.id,
         });

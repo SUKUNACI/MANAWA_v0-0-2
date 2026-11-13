@@ -73,6 +73,9 @@ describe('Payment Reconciliation Daily - Q52', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    // Remove any payments from prior test to avoid @@unique([quoteId, isDeposit]) violations
+    await prisma.paymentAuditLog.deleteMany({ where: { payment: { quoteId: testQuote.id } } });
+    await prisma.payment.deleteMany({ where: { quoteId: testQuote.id } });
   });
 
   describe('reconcilePaymentsDaily()', () => {

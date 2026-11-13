@@ -7,6 +7,7 @@ const bcrypt = require('bcryptjs');
 const prisma = require('../config/db');
 const bruteForceMiddleware = require('../middleware/bruteForceMiddleware');
 const redisCache = require('../config/redis');
+const { accountLimiter } = require('../routes/auth');
 
 describe('Brute Force Protection - Login Integration', () => {
   let server;
@@ -37,8 +38,12 @@ describe('Brute Force Protection - Login Integration', () => {
   });
 
   beforeEach(async () => {
-    // Clear brute force cache before each test
+    // Clear brute force cache (Redis) before each test
     await redisCache.clear();
+    // Also reset express-rate-limit MemoryStore for the test email key
+    if (accountLimiter && accountLimiter.resetKey) {
+      await accountLimiter.resetKey(`account:${testEmail.toLowerCase()}`);
+    }
   });
 
   afterAll(async () => {
