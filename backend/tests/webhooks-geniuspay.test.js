@@ -56,8 +56,8 @@ describe('GeniusPay Webhooks - Q51', () => {
         title: 'Test Project',
         description: 'Test',
         clientId: testClient.id,
-        budget: 1000,
-        status: 'ACTIVE',
+        tradeNeeded: 'Electrician',
+        city: 'Paris',
       },
     });
 
@@ -65,8 +65,6 @@ describe('GeniusPay Webhooks - Q51', () => {
       data: {
         projectId: testProject.id,
         professionalId: testProfessional.id,
-        clientId: testClient.id,
-        title: 'Test Quote',
         description: 'Test',
         amount: 500,
         status: 'ACCEPTED',

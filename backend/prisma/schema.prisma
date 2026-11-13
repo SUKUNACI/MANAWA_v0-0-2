@@ -8,68 +8,68 @@ datasource db {
 }
 
 model User {
-  id                    String                 @id @default(uuid())
-  email                 String                 @unique
-  passwordHash          String
-  firstName             String
-  lastName              String
-  phone                 String?
-  role                  UserRole
-  avatarUrl             String?
-  city                  String?
-  latitude              Float?
-  longitude             Float?
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
-  emailVerified         Boolean                @default(false)
-  emailVerifyCode       String?
-  emailVerifyExpiry     DateTime?
-  passwordResetCode     String?
-  passwordResetExpiry   DateTime?
-  phoneOtpCode          String?
-  phoneOtpExpiry        DateTime?
-  phoneVerified         Boolean                @default(false)
-  suspended             Boolean                @default(false)
-  adminLevel            String?
-  adminPermissions      String? // JSON : tableau de sections autorisées, null = accès total
-  adminRoleTypeId       String? // Référence à AdminRoleType (null = ADMIN/SUPER_ADMIN)
-  adminRoleType         AdminRoleType? @relation("AdminRoleTypeUsers", fields: [adminRoleTypeId], references: [id])
-  adminTeamId           String?
-  lastLoginAt           DateTime?
-  securityQuestion      String?
-  securityAnswerHash    String?
-  expoPushToken         String?
-  deletedAt             DateTime?
-  twoFAEnabled          Boolean                @default(false)
-  twoFASecret           String?
-  twoFABackupCodes      Json?
-  twoFAEnabledAt        DateTime?
-  follows               Follow[]
-  receivedMessages      Message[]              @relation("ReceivedMessages")
-  sentMessages          Message[]              @relation("SentMessages")
-  referralsMade         Referral[]             @relation("ReferralsMade")
-  referralsReceived     Referral[]             @relation("ReferralsReceived")
-  portfolioLikes        PortfolioLike[]
-  portfolioProjectLikes PortfolioProjectLike[]
-  portfolioComments     PortfolioComment[]
-  professional          Professional?
-  profileViews          ProfileView[]
-  projects              Project[]              @relation("ClientProjects")
-  reviewsWritten        Review[]               @relation("ReviewAuthor")
-  clientBookings        Booking[]              @relation("ClientBookings")
-  contentReports        ContentReport[]
-  supportTickets        SupportTicket[]
-  pushTokens            PushToken[]
-  notifications         Notification[]
-  disputes              Dispute[]
-  refreshTokens         RefreshToken[]
-  clientPackageOrders   PackageOrder[]         @relation("ClientPackageOrders")
-  initiatedCalls        VideoCall[]            @relation("InitiatedCalls")
-  receivedCalls         VideoCall[]            @relation("ReceivedCalls")
-  packageSuspensionLogs PackageSuspensionLog[]
+  id                     String                  @id @default(uuid())
+  email                  String                  @unique
+  passwordHash           String
+  firstName              String
+  lastName               String
+  phone                  String?
+  role                   UserRole
+  avatarUrl              String?
+  city                   String?
+  latitude               Float?
+  longitude              Float?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  emailVerified          Boolean                 @default(false)
+  emailVerifyCode        String?
+  emailVerifyExpiry      DateTime?
+  passwordResetCode      String?
+  passwordResetExpiry    DateTime?
+  phoneOtpCode           String?
+  phoneOtpExpiry         DateTime?
+  phoneVerified          Boolean                 @default(false)
+  suspended              Boolean                 @default(false)
+  adminLevel             String?
+  adminPermissions       String? // JSON : tableau de sections autorisées, null = accès total
+  adminRoleTypeId        String? // Référence à AdminRoleType (null = ADMIN/SUPER_ADMIN)
+  adminRoleType          AdminRoleType?          @relation("AdminRoleTypeUsers", fields: [adminRoleTypeId], references: [id])
+  adminTeamId            String?
+  lastLoginAt            DateTime?
+  securityQuestion       String?
+  securityAnswerHash     String?
+  expoPushToken          String?
+  deletedAt              DateTime?
+  twoFAEnabled           Boolean                 @default(false)
+  twoFASecret            String?
+  twoFABackupCodes       Json?
+  twoFAEnabledAt         DateTime?
+  follows                Follow[]
+  receivedMessages       Message[]               @relation("ReceivedMessages")
+  sentMessages           Message[]               @relation("SentMessages")
+  referralsMade          Referral[]              @relation("ReferralsMade")
+  referralsReceived      Referral[]              @relation("ReferralsReceived")
+  portfolioLikes         PortfolioLike[]
+  portfolioProjectLikes  PortfolioProjectLike[]
+  portfolioComments      PortfolioComment[]
+  professional           Professional?
+  profileViews           ProfileView[]
+  projects               Project[]               @relation("ClientProjects")
+  reviewsWritten         Review[]                @relation("ReviewAuthor")
+  clientBookings         Booking[]               @relation("ClientBookings")
+  contentReports         ContentReport[]
+  supportTickets         SupportTicket[]
+  pushTokens             PushToken[]
+  notifications          Notification[]
+  disputes               Dispute[]
+  refreshTokens          RefreshToken[]
+  clientPackageOrders    PackageOrder[]          @relation("ClientPackageOrders")
+  initiatedCalls         VideoCall[]             @relation("InitiatedCalls")
+  receivedCalls          VideoCall[]             @relation("ReceivedCalls")
+  packageSuspensionLogs  PackageSuspensionLog[]
   notificationPreference NotificationPreference?
-  locale                String                 @default("fr") // fr, en, es, de
-  onCallSchedules       OnCallSchedule[]
+  locale                 String                  @default("fr") // fr, en, es, de
+  onCallSchedules        OnCallSchedule[]
 }
 
 model RefreshToken {
@@ -99,48 +99,48 @@ model LoginAttempt {
 }
 
 model Professional {
-  id                      String             @id @default(uuid())
-  userId                  String             @unique
+  id                      String              @id @default(uuid())
+  userId                  String              @unique
   trade                   String
   companyName             String?
   siret                   String?
   description             String?
   yearsExperience         Int?
   hourlyRate              Float?
-  decennaleVerified       Boolean            @default(false)
+  decennaleVerified       Boolean             @default(false)
   decennaleDocUrl         String?
-  rgeLabel                Boolean            @default(false)
+  rgeLabel                Boolean             @default(false)
   qualibatNumber          String?
-  verifiedByAdmin         Boolean            @default(false)
-  interventionRadiusKm    Int                @default(30)
-  averageRating           Float              @default(0)
-  reviewCount             Int                @default(0)
-  createdAt               DateTime           @default(now())
-  updatedAt               DateTime           @updatedAt
+  verifiedByAdmin         Boolean             @default(false)
+  interventionRadiusKm    Int                 @default(30)
+  averageRating           Float               @default(0)
+  reviewCount             Int                 @default(0)
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
   idDocumentUrl           String?
-  identityStatus          String             @default("NOT_SUBMITTED")
+  identityStatus          String              @default("NOT_SUBMITTED")
   selfieUrl               String?
-  accountType             AccountType        @default(INDEPENDENT)
-  cancelledMissionsCount  Int                @default(0)
-  completedMissionsCount  Int                @default(0)
-  complaintsCount         Int                @default(0)
+  accountType             AccountType         @default(INDEPENDENT)
+  cancelledMissionsCount  Int                 @default(0)
+  completedMissionsCount  Int                 @default(0)
+  complaintsCount         Int                 @default(0)
   employeeCount           Int?
   lastExperienceUpdate    DateTime?
   idDocumentVersoUrl      String?
-  trades                  String[]           @default([])
+  trades                  String[]            @default([])
   identityRejectionReason String?
   trialEndsAt             DateTime?
-  companyCode             String?            @unique
-  companyMembers          CompanyMember[]    @relation("CompanyMembers")
-  memberOf                CompanyMember?     @relation("MemberOf")
+  companyCode             String?             @unique
+  companyMembers          CompanyMember[]     @relation("CompanyMembers")
+  memberOf                CompanyMember?      @relation("MemberOf")
   promoUsages             PromoUsage[]
   followers               Follow[]
   portfolio               PortfolioItem[]
-  portfolioProjects       PortfolioProject[] @relation("PortfolioProjects")
-  user                    User               @relation(fields: [userId], references: [id])
+  portfolioProjects       PortfolioProject[]  @relation("PortfolioProjects")
+  user                    User                @relation(fields: [userId], references: [id])
   profileViews            ProfileView[]
   quotes                  Quote[]
-  reviews                 Review[]           @relation("ReviewedProfessional")
+  reviews                 Review[]            @relation("ReviewedProfessional")
   subscription            Subscription?
   availabilitySlots       AvailabilitySlot[]
   bookings                Booking[]
@@ -445,7 +445,7 @@ model AdminRoleType {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  users       User[]   @relation("AdminRoleTypeUsers")
+  users       User[]           @relation("AdminRoleTypeUsers")
   permissions RolePermission[] @relation("RolePermissions")
 }
 
@@ -669,19 +669,19 @@ model Dispute {
 }
 
 model AvailabilitySlot {
-  id             String       @id @default(uuid())
+  id             String    @id @default(uuid())
   professionalId String
-  type           String       // 'RECURRING' | 'EXCEPTION'
+  type           String // 'RECURRING' | 'EXCEPTION'
   // Recurring fields
-  dayOfWeek      Int?         // 0=Dimanche … 6=Samedi
-  startTime      String?      // "08:00"
-  endTime        String?      // "17:00"
+  dayOfWeek      Int? // 0=Dimanche … 6=Samedi
+  startTime      String? // "08:00"
+  endTime        String? // "17:00"
   // Exception fields (indisponibilité ou plage spéciale)
   date           DateTime?
-  available      Boolean      @default(true) // false = indispo ce jour
+  available      Boolean   @default(true) // false = indispo ce jour
   note           String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
 
@@ -690,19 +690,19 @@ model AvailabilitySlot {
 }
 
 model Booking {
-  id             String       @id @default(uuid())
+  id             String   @id @default(uuid())
   professionalId String
   clientId       String
-  date           DateTime     // Jour de la réservation (à minuit UTC)
-  startTime      String       // "09:00"
-  endTime        String       // "11:00"
-  status         String       @default("PENDING") // PENDING | CONFIRMED | CANCELLED | COMPLETED
+  date           DateTime // Jour de la réservation (à minuit UTC)
+  startTime      String // "09:00"
+  endTime        String // "11:00"
+  status         String   @default("PENDING") // PENDING | CONFIRMED | CANCELLED | COMPLETED
   note           String?
   projectId      String?
   cancelReason   String?
-  cancelledBy    String?      // userId qui a annulé
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  cancelledBy    String? // userId qui a annulé
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   professional Professional @relation(fields: [professionalId], references: [id])
   client       User         @relation("ClientBookings", fields: [clientId], references: [id])
@@ -719,8 +719,8 @@ model ServicePackage {
   title          String
   description    String?
   price          Float
-  duration       String?  // "1 jour", "2-3 jours"
-  category       String?  // même liste que les trades
+  duration       String? // "1 jour", "2-3 jours"
+  category       String? // même liste que les trades
   included       String[] @default([]) // liste de ce qui est inclus
   images         String[] @default([]) // URLs Cloudinary
   active         Boolean  @default(true)
@@ -728,8 +728,8 @@ model ServicePackage {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  professional Professional  @relation(fields: [professionalId], references: [id], onDelete: Cascade)
-  orders       PackageOrder[]
+  professional   Professional           @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  orders         PackageOrder[]
   suspensionLogs PackageSuspensionLog[]
 
   @@index([professionalId])
@@ -749,18 +749,18 @@ model ProfessionalBadge {
 }
 
 model PackageOrder {
-  id               String   @id @default(uuid())
-  packageId        String
-  clientId         String
-  professionalId   String
-  amount           Float
-  status           String   @default("PENDING_PAYMENT") // PENDING_PAYMENT | PAID | IN_PROGRESS | COMPLETED | CANCELLED | REFUNDED
-  transactionId    String?
-  paymentUrl       String?
-  projectId        String?
-  note             String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id             String   @id @default(uuid())
+  packageId      String
+  clientId       String
+  professionalId String
+  amount         Float
+  status         String   @default("PENDING_PAYMENT") // PENDING_PAYMENT | PAID | IN_PROGRESS | COMPLETED | CANCELLED | REFUNDED
+  transactionId  String?
+  paymentUrl     String?
+  projectId      String?
+  note           String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   package      ServicePackage @relation(fields: [packageId], references: [id])
   client       User           @relation("ClientPackageOrders", fields: [clientId], references: [id])
@@ -773,12 +773,12 @@ model PackageOrder {
 }
 
 model PackageSuspensionLog {
-  id          String    @id @default(uuid())
-  packageId   String
-  adminId     String
-  action      String    // SUSPEND | REACTIVATE
-  reason      String?   // Raison de suspension
-  createdAt   DateTime  @default(now())
+  id        String   @id @default(uuid())
+  packageId String
+  adminId   String
+  action    String // SUSPEND | REACTIVATE
+  reason    String? // Raison de suspension
+  createdAt DateTime @default(now())
 
   package ServicePackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
   admin   User           @relation(fields: [adminId], references: [id])
@@ -790,11 +790,11 @@ model PackageSuspensionLog {
 
 model PackageSuspensionThreshold {
   id                    String   @id @default(uuid())
-  category              String   @unique  // électricité, plomberie, etc. ou "*" pour défaut global
-  maxDisputeRatePercent Float    @default(20)      // Taux de litiges max (%)
+  category              String   @unique // électricité, plomberie, etc. ou "*" pour défaut global
+  maxDisputeRatePercent Float    @default(20) // Taux de litiges max (%)
   maxPrice              Float    @default(5000000) // Prix max (FCFA)
-  minPrice              Float    @default(1000)    // Prix min (FCFA)
-  inactiveDaysThreshold Int      @default(180)     // Jours avant flag inactif
+  minPrice              Float    @default(1000) // Prix min (FCFA)
+  inactiveDaysThreshold Int      @default(180) // Jours avant flag inactif
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
@@ -802,16 +802,16 @@ model PackageSuspensionThreshold {
 }
 
 model Referral {
-  id           String    @id @default(uuid())
-  referrerId   String    // pro qui parraine (userId)
-  referredId   String    // pro parrainé (userId)
-  code         String    // code utilisé
-  status       String    @default("PENDING") // PENDING | QUALIFIED | REWARDED
-  rewardType   String?   // 'SUBSCRIPTION_MONTH' | 'PROMO_CREDIT'
-  rewardValue  Float?
-  qualifiedAt  DateTime? // date où le filleul a complété sa 1ère mission
-  rewardedAt   DateTime?
-  createdAt    DateTime  @default(now())
+  id          String    @id @default(uuid())
+  referrerId  String // pro qui parraine (userId)
+  referredId  String // pro parrainé (userId)
+  code        String // code utilisé
+  status      String    @default("PENDING") // PENDING | QUALIFIED | REWARDED
+  rewardType  String? // 'SUBSCRIPTION_MONTH' | 'PROMO_CREDIT'
+  rewardValue Float?
+  qualifiedAt DateTime? // date où le filleul a complété sa 1ère mission
+  rewardedAt  DateTime?
+  createdAt   DateTime  @default(now())
 
   referrer User @relation("ReferralsMade", fields: [referrerId], references: [id])
   referred User @relation("ReferralsReceived", fields: [referredId], references: [id])
@@ -843,36 +843,36 @@ model VideoCall {
 }
 
 model RolePermission {
-  id              String   @id @default(uuid())
+  id              String        @id @default(uuid())
   adminRoleTypeId String
   adminRoleType   AdminRoleType @relation("RolePermissions", fields: [adminRoleTypeId], references: [id], onDelete: Cascade)
 
-  section         String   // "reviews", "disputes", "payments", etc.
-  canCreate       Boolean  @default(false)
-  canRead         Boolean  @default(false)
-  canUpdate       Boolean  @default(false)
-  canDelete       Boolean  @default(false)
+  section   String // "reviews", "disputes", "payments", etc.
+  canCreate Boolean @default(false)
+  canRead   Boolean @default(false)
+  canUpdate Boolean @default(false)
+  canDelete Boolean @default(false)
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([adminRoleTypeId, section])
   @@index([adminRoleTypeId])
 }
 
 model RolePermissionHistory {
-  id                  String   @id @default(uuid())
-  adminRoleTypeId     String
-  changedByAdminId    String
+  id               String @id @default(uuid())
+  adminRoleTypeId  String
+  changedByAdminId String
 
   section             String
-  previousPermissions String   // JSON: {"canCreate": false, "canRead": true, ...}
-  newPermissions      String   // JSON: {"canCreate": true, "canRead": true, ...}
+  previousPermissions String // JSON: {"canCreate": false, "canRead": true, ...}
+  newPermissions      String // JSON: {"canCreate": true, "canRead": true, ...}
 
-  action              String   // "GRANT" | "REVOKE" | "ROLLBACK"
-  reason              String?  // optional notes
+  action String // "GRANT" | "REVOKE" | "ROLLBACK"
+  reason String? // optional notes
 
-  createdAt           DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([adminRoleTypeId])
   @@index([changedByAdminId])
@@ -880,13 +880,13 @@ model RolePermissionHistory {
 }
 
 model Webhook {
-  id          String   @id @default(uuid())
-  url         String
-  secret      String
-  events      String[] @default([]) // ["booking.created", "payment.completed", ...]
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid())
+  url       String
+  secret    String
+  events    String[] @default([]) // ["booking.created", "payment.completed", ...]
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   logs WebhookLog[]
 
@@ -895,17 +895,17 @@ model Webhook {
 }
 
 model WebhookLog {
-  id               String   @id @default(uuid())
-  webhookId        String
-  event            String
-  payload          String   // JSON payload
-  status           String   // "success" | "failed" | "pending"
-  response         String?  // Response from endpoint
-  attempt          Int      @default(1)
-  nextRetryAt      DateTime?
-  sequence         Int      @default(0) // Q56: Sequence number pour ordre FIFO
-  idempotencyKey   String?  // Q56: Clé d'idempotence pour déduplication
-  createdAt        DateTime @default(now())
+  id             String    @id @default(uuid())
+  webhookId      String
+  event          String
+  payload        String // JSON payload
+  status         String // "success" | "failed" | "pending"
+  response       String? // Response from endpoint
+  attempt        Int       @default(1)
+  nextRetryAt    DateTime?
+  sequence       Int       @default(0) // Q56: Sequence number pour ordre FIFO
+  idempotencyKey String? // Q56: Clé d'idempotence pour déduplication
+  createdAt      DateTime  @default(now())
 
   webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
 
@@ -920,12 +920,12 @@ model WebhookLog {
 // Notification Templates with versioning
 model NotificationTemplate {
   id        String   @id @default(uuid())
-  name      String   // e.g., "ORDER_CONFIRMED"
-  type      String   // e.g., "order", "payment", "message"
-  language  String   // "fr", "en", "es", "de"
+  name      String // e.g., "ORDER_CONFIRMED"
+  type      String // e.g., "order", "payment", "message"
+  language  String // "fr", "en", "es", "de"
   title     String   @db.VarChar(200)
   body      String   @db.Text
-  variables Json     // Array of variable names
+  variables Json // Array of variable names
   version   Int      @default(1)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -941,7 +941,7 @@ model NotificationPreference {
   id          String   @id @default(uuid())
   userId      String   @unique
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  preferences Json     // Nested structure: { TYPE: { email: bool, push: bool, sms: bool } }
+  preferences Json // Nested structure: { TYPE: { email: bool, push: bool, sms: bool } }
   updatedAt   DateTime @updatedAt
 
   @@index([userId])
@@ -951,11 +951,11 @@ model NotificationPreference {
 model ConfigVersion {
   id        String   @id @default(uuid())
   version   String   @unique // e.g., "1.0.0", "1.0.1"
-  snapshot  Json     // Configuration snapshot JSON
+  snapshot  Json // Configuration snapshot JSON
   createdAt DateTime @default(now())
-  createdBy String?  // Admin user ID who created this version
-  tag       String?  // Git tag associated with this version
-  changelog String?  // Changelog text describing changes
+  createdBy String? // Admin user ID who created this version
+  tag       String? // Git tag associated with this version
+  changelog String? // Changelog text describing changes
   isStable  Boolean  @default(false) // Marked as production stable version
 
   @@index([version])
@@ -965,18 +965,18 @@ model ConfigVersion {
 
 // Q78: Rollback events tracking
 model RollbackEvent {
-  id              String   @id @default(uuid())
-  fromVersion     String   // Previous version
-  toVersion       String   // Target version for rollback
-  trigger         String   // "manual" | "auto_error_spike" | "auto_latency" | "auto_memory"
-  reason          String?  // Detailed reason
-  metrics         Json?    // Error rate, latency, memory at time of rollback
-  status          String   @default("INITIATED") // INITIATED | IN_PROGRESS | COMPLETED | FAILED
-  completedAt     DateTime?
-  triggeredBy     String?  // Admin user ID or "system"
-  databaseRollback Boolean @default(false) // If true, database was also rolled back
-  backupUsed      String?  // Backup ID used if applicable
-  createdAt       DateTime @default(now())
+  id               String    @id @default(uuid())
+  fromVersion      String // Previous version
+  toVersion        String // Target version for rollback
+  trigger          String // "manual" | "auto_error_spike" | "auto_latency" | "auto_memory"
+  reason           String? // Detailed reason
+  metrics          Json? // Error rate, latency, memory at time of rollback
+  status           String    @default("INITIATED") // INITIATED | IN_PROGRESS | COMPLETED | FAILED
+  completedAt      DateTime?
+  triggeredBy      String? // Admin user ID or "system"
+  databaseRollback Boolean   @default(false) // If true, database was also rolled back
+  backupUsed       String? // Backup ID used if applicable
+  createdAt        DateTime  @default(now())
 
   @@index([createdAt])
   @@index([status])
@@ -985,15 +985,15 @@ model RollbackEvent {
 
 // Q78: Hourly backup integrity check results
 model BackupIntegrityCheck {
-  id              String   @id @default(uuid())
-  backupId        String   // Reference to backup
-  checkType       String   // "FULL_BACKUP" | "INCREMENTAL" | "DATABASE" | "FILESYSTEM"
-  status          String   @default("PENDING") // PENDING | SUCCESS | FAILED
-  errorMessage    String?
-  checksPerformed Int      @default(0) // Number of integrity checks performed
-  checksSuccessful Int     @default(0) // Number that passed
-  duration        Int?     // Check duration in milliseconds
-  createdAt       DateTime @default(now())
+  id               String   @id @default(uuid())
+  backupId         String // Reference to backup
+  checkType        String // "FULL_BACKUP" | "INCREMENTAL" | "DATABASE" | "FILESYSTEM"
+  status           String   @default("PENDING") // PENDING | SUCCESS | FAILED
+  errorMessage     String?
+  checksPerformed  Int      @default(0) // Number of integrity checks performed
+  checksSuccessful Int      @default(0) // Number that passed
+  duration         Int? // Check duration in milliseconds
+  createdAt        DateTime @default(now())
 
   @@index([backupId])
   @@index([checkType])
@@ -1003,16 +1003,16 @@ model BackupIntegrityCheck {
 
 // Q78: System health metrics for rollback decisions
 model SystemHealthMetric {
-  id           String   @id @default(uuid())
-  timestamp    DateTime @default(now())
-  errorRate    Float    @default(0) // Percentage 0-100
-  latencyP95   Int      @default(0) // Milliseconds
-  latencyP99   Int      @default(0)
-  memoryUsage  Float    @default(0) // Percentage 0-100
-  cpuUsage     Float    @default(0) // Percentage 0-100
-  activeUsers  Int      @default(0)
-  dbConnections Int     @default(0)
-  cacheHitRate Float    @default(0) // Percentage 0-100
+  id            String   @id @default(uuid())
+  timestamp     DateTime @default(now())
+  errorRate     Float    @default(0) // Percentage 0-100
+  latencyP95    Int      @default(0) // Milliseconds
+  latencyP99    Int      @default(0)
+  memoryUsage   Float    @default(0) // Percentage 0-100
+  cpuUsage      Float    @default(0) // Percentage 0-100
+  activeUsers   Int      @default(0)
+  dbConnections Int      @default(0)
+  cacheHitRate  Float    @default(0) // Percentage 0-100
 
   @@index([timestamp])
   @@index([errorRate])
@@ -1020,13 +1020,13 @@ model SystemHealthMetric {
 
 // Q71: Feature Flags System
 model FeatureFlag {
-  id                 String   @id @default(uuid())
-  name               String   @unique
-  description        String?
-  enabled            Boolean  @default(false)
-  rolloutPercentage  Int      @default(0)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                String   @id @default(uuid())
+  name              String   @unique
+  description       String?
+  enabled           Boolean  @default(false)
+  rolloutPercentage Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([name])
   @@index([enabled])
@@ -1034,15 +1034,15 @@ model FeatureFlag {
 
 // Q72: A/B Testing Framework
 model Experiment {
-  id                String              @id @default(uuid())
-  name              String              @unique
+  id                String                 @id @default(uuid())
+  name              String                 @unique
   description       String?
-  status            String              @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED
-  trafficPercentage Int                 @default(100) // % of users included
+  status            String                 @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED
+  trafficPercentage Int                    @default(100) // % of users included
   startedAt         DateTime?
   endedAt           DateTime?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
   variants          ExperimentVariant[]
   assignments       ExperimentAssignment[]
 
@@ -1051,11 +1051,11 @@ model Experiment {
 }
 
 model ExperimentVariant {
-  id           String               @id @default(uuid())
+  id           String                 @id @default(uuid())
   experimentId String
-  name         String               // "control" | "variant_a" | "variant_b"
-  weight       Int                  @default(50) // Traffic weight (% out of total)
-  experiment   Experiment           @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  name         String // "control" | "variant_a" | "variant_b"
+  weight       Int                    @default(50) // Traffic weight (% out of total)
+  experiment   Experiment             @relation(fields: [experimentId], references: [id], onDelete: Cascade)
   assignments  ExperimentAssignment[]
   metrics      ExperimentMetric[]
 
@@ -1093,13 +1093,13 @@ model ExperimentMetric {
 
 // Q79: Custom Metrics
 model CustomMetric {
-  id          String   @id @default(uuid())
-  name        String
-  category    String   // "professional" | "platform" | "payment" | "search"
-  value       Float
-  unit        String?  // "ms" | "%" | "count" | "EUR"
-  dimensions  Json?    // {professionalId, city, tier, ...}
-  recordedAt  DateTime @default(now())
+  id         String   @id @default(uuid())
+  name       String
+  category   String // "professional" | "platform" | "payment" | "search"
+  value      Float
+  unit       String? // "ms" | "%" | "count" | "EUR"
+  dimensions Json? // {professionalId, city, tier, ...}
+  recordedAt DateTime @default(now())
 
   @@index([name])
   @@index([category])
@@ -1108,15 +1108,15 @@ model CustomMetric {
 
 // Q80: Event Tracking
 model UserEvent {
-  id         String   @id @default(uuid())
-  userId     String?
-  sessionId  String?
-  type       String   // "search" | "profile_view" | "quote_sent" | "booking_created" | "payment" | "login" | ...
-  page       String?
-  metadata   Json?    // {query, professionalId, amount, ...}
-  ipAddress  String?
-  userAgent  String?
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  userId    String?
+  sessionId String?
+  type      String // "search" | "profile_view" | "quote_sent" | "booking_created" | "payment" | "login" | ...
+  page      String?
+  metadata  Json? // {query, professionalId, amount, ...}
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
 
   @@index([userId])
   @@index([type])
@@ -1127,12 +1127,12 @@ model UserEvent {
 // Q83: Cohort Analysis snapshots
 model CohortSnapshot {
   id           String   @id @default(uuid())
-  cohortMonth  String   // "2026-10" — month of user registration
-  periodMonth  String   // "2026-11" — month being measured
-  periodOffset Int      // 0=registration month, 1=month+1, etc.
+  cohortMonth  String // "2026-10" — month of user registration
+  periodMonth  String // "2026-11" — month being measured
+  periodOffset Int // 0=registration month, 1=month+1, etc.
   userCount    Int
   activeCount  Int
-  retainedRate Float    // activeCount / userCount
+  retainedRate Float // activeCount / userCount
   revenue      Float    @default(0)
   createdAt    DateTime @default(now())
 
@@ -1142,15 +1142,15 @@ model CohortSnapshot {
 
 // Q84/Q85: Retention & Churn daily snapshots
 model RetentionSnapshot {
-  id           String   @id @default(uuid())
-  date         String   // "2026-11-12"
-  dau          Int      @default(0)  // Daily Active Users
-  wau          Int      @default(0)  // Weekly Active Users
-  mau          Int      @default(0)  // Monthly Active Users
-  newUsers     Int      @default(0)
-  churned      Int      @default(0)  // users inactive > 30 days
-  reactivated  Int      @default(0)  // churned users who returned
-  createdAt    DateTime @default(now())
+  id          String   @id @default(uuid())
+  date        String // "2026-11-12"
+  dau         Int      @default(0) // Daily Active Users
+  wau         Int      @default(0) // Weekly Active Users
+  mau         Int      @default(0) // Monthly Active Users
+  newUsers    Int      @default(0)
+  churned     Int      @default(0) // users inactive > 30 days
+  reactivated Int      @default(0) // churned users who returned
+  createdAt   DateTime @default(now())
 
   @@unique([date])
   @@index([date])
@@ -1158,16 +1158,16 @@ model RetentionSnapshot {
 
 // Q87: Cost Tracking
 model InfraCost {
-  id          String   @id @default(uuid())
-  service     String   // "render" | "supabase" | "redis" | "cloudinary" | "mailjet" | "twilio" | "meilisearch" | "other"
-  month       String   // "2026-11" — billing month
-  amountEur   Float    // actual billed amount in EUR
-  budgetEur   Float?   // planned budget for comparison
-  unit        String?  // "GB", "emails", "SMS", "req" — for unit cost calc
-  quantity    Float?   // actual usage quantity
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid())
+  service   String // "render" | "supabase" | "redis" | "cloudinary" | "mailjet" | "twilio" | "meilisearch" | "other"
+  month     String // "2026-11" — billing month
+  amountEur Float // actual billed amount in EUR
+  budgetEur Float? // planned budget for comparison
+  unit      String? // "GB", "emails", "SMS", "req" — for unit cost calc
+  quantity  Float? // actual usage quantity
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([service, month])
   @@index([month])
@@ -1176,29 +1176,29 @@ model InfraCost {
 
 // Q88: SLA Targets
 model SlaTarget {
-  id              String   @id @default(uuid())
-  name            String   @unique  // "api_p95_latency" | "uptime" | "error_rate"
-  category        String   // "latency" | "availability" | "error_rate" | "throughput"
-  targetValue     Float    // e.g. 500 (ms), 99.9 (%), 0.1 (%)
-  unit            String   // "ms" | "%" | "req/s"
-  windowHours     Int      @default(24) // evaluation window
-  enabled         Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  breaches        SlaBreach[]
+  id          String      @id @default(uuid())
+  name        String      @unique // "api_p95_latency" | "uptime" | "error_rate"
+  category    String // "latency" | "availability" | "error_rate" | "throughput"
+  targetValue Float // e.g. 500 (ms), 99.9 (%), 0.1 (%)
+  unit        String // "ms" | "%" | "req/s"
+  windowHours Int         @default(24) // evaluation window
+  enabled     Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  breaches    SlaBreach[]
 
   @@index([category])
   @@index([enabled])
 }
 
 model SlaBreach {
-  id           String    @id @default(uuid())
-  slaTargetId  String
-  measuredValue Float    // actual value that breached
-  breachedAt   DateTime @default(now())
-  resolvedAt   DateTime?
-  durationMs   Int?      // how long the breach lasted
-  slaTarget    SlaTarget @relation(fields: [slaTargetId], references: [id], onDelete: Cascade)
+  id            String    @id @default(uuid())
+  slaTargetId   String
+  measuredValue Float // actual value that breached
+  breachedAt    DateTime  @default(now())
+  resolvedAt    DateTime?
+  durationMs    Int? // how long the breach lasted
+  slaTarget     SlaTarget @relation(fields: [slaTargetId], references: [id], onDelete: Cascade)
 
   @@index([slaTargetId])
   @@index([breachedAt])
@@ -1206,20 +1206,20 @@ model SlaBreach {
 
 // Q89: Alert Events (history of fired alerts)
 model AlertEvent {
-  id           String    @id @default(uuid())
-  type         String    // "error_rate" | "latency" | "memory" | "cpu" | "payment_failure" | "queue_depth"
-  severity     String    // "INFO" | "WARN" | "CRITICAL"
-  message      String
-  value        Float?    // triggering metric value
-  threshold    Float?    // threshold that was breached
-  status       String    @default("OPEN")   // "OPEN" | "ACKNOWLEDGED" | "RESOLVED" | "SILENCED"
+  id             String    @id @default(uuid())
+  type           String // "error_rate" | "latency" | "memory" | "cpu" | "payment_failure" | "queue_depth"
+  severity       String // "INFO" | "WARN" | "CRITICAL"
+  message        String
+  value          Float? // triggering metric value
+  threshold      Float? // threshold that was breached
+  status         String    @default("OPEN") // "OPEN" | "ACKNOWLEDGED" | "RESOLVED" | "SILENCED"
   acknowledgedBy String?
   acknowledgedAt DateTime?
-  resolvedAt   DateTime?
-  silencedUntil DateTime?
-  channel      String?   // "slack" | "email" | "pagerduty"
-  notifiedAt   DateTime?
-  createdAt    DateTime  @default(now())
+  resolvedAt     DateTime?
+  silencedUntil  DateTime?
+  channel        String? // "slack" | "email" | "pagerduty"
+  notifiedAt     DateTime?
+  createdAt      DateTime  @default(now())
 
   @@index([type])
   @@index([severity])
@@ -1229,14 +1229,14 @@ model AlertEvent {
 
 // Q90: On-Call Rotation
 model OnCallSchedule {
-  id         String   @id @default(uuid())
-  userId     String
-  startAt    DateTime
-  endAt      DateTime
-  timezone   String   @default("Africa/Abidjan")
-  level      Int      @default(1)  // 1 = primary, 2 = secondary/escalation
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id])
+  id        String   @id @default(uuid())
+  userId    String
+  startAt   DateTime
+  endAt     DateTime
+  timezone  String   @default("Africa/Abidjan")
+  level     Int      @default(1) // 1 = primary, 2 = secondary/escalation
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 
   @@index([startAt])
   @@index([endAt])
@@ -1245,13 +1245,13 @@ model OnCallSchedule {
 
 // Q91/Q92: Data Retention & Archival
 model DataRetentionLog {
-  id           String   @id @default(uuid())
-  entityType   String   // "User" | "Message" | "Payment" | ...
-  entityId     String
-  action       String   // "archived" | "deleted" | "anonymized"
-  reason       String   // "retention_policy" | "gdpr_request" | "manual"
-  triggeredBy  String?  // admin userId or "cron"
-  createdAt    DateTime @default(now())
+  id          String   @id @default(uuid())
+  entityType  String // "User" | "Message" | "Payment" | ...
+  entityId    String
+  action      String // "archived" | "deleted" | "anonymized"
+  reason      String // "retention_policy" | "gdpr_request" | "manual"
+  triggeredBy String? // admin userId or "cron"
+  createdAt   DateTime @default(now())
 
   @@index([entityType])
   @@index([action])
@@ -1262,7 +1262,7 @@ model DataRetentionLog {
 model GdprDeletionRequest {
   id            String    @id @default(uuid())
   userId        String
-  requestedBy   String    // userId (self) or admin userId
+  requestedBy   String // userId (self) or admin userId
   status        String    @default("PENDING") // "PENDING" | "IN_PROGRESS" | "COMPLETED" | "REJECTED"
   reason        String?
   completedAt   DateTime?
