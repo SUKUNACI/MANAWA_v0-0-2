@@ -294,12 +294,12 @@ describe('Q75: Environment Parity', () => {
   });
 
   it('.env.dev sets NODE_ENV to development', () => {
-    const content = fs.readFileSync(path.join(__dirname, '../.env.dev'), 'utf8');
+    const content = fs.readFileSync(path.join(__dirname, '../.env.dev.example'), 'utf8');
     expect(content).toMatch(/NODE_ENV=development/);
   });
 
   it('.env.staging sets NODE_ENV to staging', () => {
-    const content = fs.readFileSync(path.join(__dirname, '../.env.staging'), 'utf8');
+    const content = fs.readFileSync(path.join(__dirname, '../.env.staging.example'), 'utf8');
     expect(content).toMatch(/NODE_ENV=staging/);
   });
 });
