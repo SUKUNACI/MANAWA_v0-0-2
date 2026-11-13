@@ -110,11 +110,13 @@ function cacheGet(options = {}) {
     try {
       // Check cache
       const cached = await redis.get(cacheKey);
-      if (cached) {
+      if (cached !== null && cached !== undefined) {
         logger.info('[Cache] HIT', { path: req.path, ttl });
         res.set('X-Cache', 'HIT');
         res.set('X-Cache-Key', cacheKey);
-        return res.json(JSON.parse(cached));
+        // redis.get() already returns parsed objects in Redis mode; in in-memory mode
+        // it returns whatever was stored. Always pass the value directly to res.json.
+        return res.json(cached);
       }
 
       // Intercept response to cache it
@@ -122,7 +124,8 @@ function cacheGet(options = {}) {
       res.json = function (data) {
         // Cache successful responses only (2xx status)
         if (res.statusCode >= 200 && res.statusCode < 300 && data && typeof data === 'object') {
-          redis.set(cacheKey, JSON.stringify(data), 'EX', ttl).catch(err => {
+          // Pass the object directly — redis.js handles serialization internally
+          redis.set(cacheKey, data, ttl).catch(err => {
             logger.warn('[Cache] Failed to set cache', { key: cacheKey, error: err.message });
           });
           res.set('X-Cache', 'MISS');
