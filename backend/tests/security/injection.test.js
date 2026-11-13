@@ -20,6 +20,10 @@ app.post('/api/search/users', (req, res) => {
 
 app.get('/api/user/:id', (req, res) => {
   const { id } = req.params;
+  const decoded = decodeURIComponent(id);
+  if (decoded.includes('..') || decoded.includes('/')) {
+    return res.status(400).json({ error: 'Invalid id' });
+  }
   res.json({ id });
 });
 
