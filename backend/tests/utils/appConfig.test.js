@@ -392,4 +392,147 @@ describe('Application Configuration', () => {
       expect(result).toBe(999999999);
     });
   });
+
+  describe('Additional branch coverage for seedConfig', () => {
+    test('seedConfig should be called by getAllConfig', async () => {
+      jest.clearAllMocks();
+      prisma.appConfig.upsert = jest.fn().mockResolvedValue({});
+      prisma.appConfig.findMany = jest.fn().mockResolvedValueOnce([]);
+
+      await appConfig.getAllConfig();
+
+      // getAllConfig calls seedConfig which calls upsert
+      expect(prisma.appConfig.upsert).toHaveBeenCalled();
+    });
+  });
+
+  describe('Additional branch coverage for ensureSuperAdmin', () => {
+    test('should update super admin level when not SUPER', async () => {
+      process.env.SUPER_ADMIN_EMAIL = 'admin@manawa.app';
+
+      prisma.user = {
+        findUnique: jest.fn().mockResolvedValueOnce({
+          id: 'user-1',
+          adminLevel: 'ADMIN', // Not SUPER
+          securityQuestion: 'Question?',
+          securityAnswerHash: 'hash123',
+        }),
+        update: jest.fn().mockResolvedValueOnce({}),
+      };
+
+      await appConfig.ensureSuperAdmin();
+
+      expect(prisma.user.update).toHaveBeenCalled();
+      const updateCall = prisma.user.update.mock.calls[0][0];
+      expect(updateCall.data.adminLevel).toBe('SUPER');
+    });
+
+    test('should restore security question and answer from backup', async () => {
+      process.env.SUPER_ADMIN_EMAIL = 'admin@manawa.app';
+
+      prisma.user = {
+        findUnique: jest.fn().mockResolvedValueOnce({
+          id: 'user-1',
+          adminLevel: 'SUPER',
+          securityQuestion: null,
+          securityAnswerHash: null,
+        }),
+        update: jest.fn().mockResolvedValueOnce({}),
+      };
+
+      prisma.appConfig = {
+        findUnique: jest.fn().mockResolvedValueOnce({
+          value: JSON.stringify({ question: 'Secret?', answerHash: 'hash456' }),
+        }),
+      };
+
+      await appConfig.ensureSuperAdmin();
+
+      expect(prisma.user.update).toHaveBeenCalled();
+      const updateCall = prisma.user.update.mock.calls[0][0];
+      expect(updateCall.data.securityQuestion).toBe('Secret?');
+      expect(updateCall.data.securityAnswerHash).toBe('hash456');
+    });
+
+    test('should handle invalid backup JSON gracefully', async () => {
+      process.env.SUPER_ADMIN_EMAIL = 'admin@manawa.app';
+
+      prisma.user = {
+        findUnique: jest.fn().mockResolvedValueOnce({
+          id: 'user-1',
+          adminLevel: 'SUPER',
+          securityQuestion: null,
+          securityAnswerHash: null,
+        }),
+        update: jest.fn().mockResolvedValueOnce({}),
+      };
+
+      prisma.appConfig = {
+        findUnique: jest.fn().mockResolvedValueOnce({
+          value: 'invalid-json',
+        }),
+      };
+
+      await appConfig.ensureSuperAdmin();
+
+      // Should not throw, should continue
+      expect(prisma.user.findUnique).toHaveBeenCalled();
+    });
+
+    test('should not update when everything is already correct', async () => {
+      process.env.SUPER_ADMIN_EMAIL = 'admin@manawa.app';
+
+      prisma.user = {
+        findUnique: jest.fn().mockResolvedValueOnce({
+          id: 'user-1',
+          adminLevel: 'SUPER',
+          securityQuestion: 'Question?',
+          securityAnswerHash: 'hash123',
+        }),
+        update: jest.fn().mockResolvedValueOnce({}),
+      };
+
+      await appConfig.ensureSuperAdmin();
+
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    test('should handle appConfig.findUnique returning null', async () => {
+      process.env.SUPER_ADMIN_EMAIL = 'admin@manawa.app';
+
+      prisma.user = {
+        findUnique: jest.fn().mockResolvedValueOnce({
+          id: 'user-1',
+          adminLevel: 'SUPER',
+          securityQuestion: null,
+          securityAnswerHash: null,
+        }),
+        update: jest.fn().mockResolvedValueOnce({}),
+      };
+
+      prisma.appConfig = {
+        findUnique: jest.fn().mockResolvedValueOnce(null), // No backup found
+      };
+
+      await appConfig.ensureSuperAdmin();
+
+      // Should attempt update with only adminLevel if no backup
+      expect(prisma.user.update).toHaveBeenCalled();
+    });
+  });
+
+  describe('getAllConfig with edge cases', () => {
+    test('should handle configs without description in DB', async () => {
+      jest.clearAllMocks();
+      prisma.appConfig.upsert = jest.fn().mockResolvedValue({});
+      prisma.appConfig.findMany = jest.fn().mockResolvedValueOnce([
+        { key: 'commission_rate', value: '0.08', description: null, updatedBy: 'system', updatedAt: new Date() },
+      ]);
+
+      const result = await appConfig.getAllConfig();
+
+      // Should use default description
+      expect(result.commission_rate.description).toBeDefined();
+    });
+  });
 });
