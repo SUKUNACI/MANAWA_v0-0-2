@@ -7,6 +7,7 @@ jest.mock('../utils/geniuspay');
 describe('Payment Reconciliation Daily - Q52', () => {
   let testClient;
   let testProfessional;
+  let testProfessionalRecord;
   let testProject;
   let testQuote;
 
@@ -32,7 +33,7 @@ describe('Payment Reconciliation Daily - Q52', () => {
       },
     });
 
-    await prisma.professional.create({
+    testProfessionalRecord = await prisma.professional.create({
       data: {
         userId: testProfessional.id,
         trade: 'Electrician',
@@ -52,7 +53,7 @@ describe('Payment Reconciliation Daily - Q52', () => {
     testQuote = await prisma.quote.create({
       data: {
         projectId: testProject.id,
-        professionalId: testProfessional.id,
+        professionalId: testProfessionalRecord.id,
         description: 'Test',
         amount: 500,
         status: 'ACCEPTED',
@@ -218,7 +219,7 @@ describe('Payment Reconciliation Daily - Q52', () => {
         const quote = await prisma.quote.create({
           data: {
             projectId: testProject.id,
-            professionalId: testProfessional.id,
+            professionalId: testProfessionalRecord.id,
             description: `Quote ${i}`,
             amount: 500,
             status: 'ACCEPTED',

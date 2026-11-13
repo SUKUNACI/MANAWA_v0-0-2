@@ -285,8 +285,8 @@ describe('2FA Authentication Routes', () => {
     test('should fail if 2FA not enabled', async () => {
       const user = await prisma.user.create({
         data: {
-          id: 'test-user-no-2fa',
-          email: 'test-no-2fa@example.com',
+          id: uuidv4(),
+          email: `test-no-2fa-${Date.now()}@example.com`,
           passwordHash: 'hash',
           firstName: 'Test',
           lastName: 'User',

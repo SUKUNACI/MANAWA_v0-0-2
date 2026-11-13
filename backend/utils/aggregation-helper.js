@@ -254,24 +254,40 @@ async function getPriceDistributionStats() {
     `;
 
     // Price distribution buckets (for histogram)
+    // PostgreSQL does not allow GROUP BY / ORDER BY on a SELECT-level alias;
+    // wrap in a subquery so the alias is visible in ORDER BY.
     const buckets = await prisma.$queryRaw`
-      SELECT
-        CASE
-          WHEN "hourlyRate" IS NULL THEN 'Not Set'
-          WHEN "hourlyRate" < 30 THEN '0-30'
-          WHEN "hourlyRate" < 50 THEN '30-50'
-          WHEN "hourlyRate" < 75 THEN '50-75'
-          WHEN "hourlyRate" < 100 THEN '75-100'
-          WHEN "hourlyRate" < 150 THEN '100-150'
-          WHEN "hourlyRate" < 200 THEN '150-200'
-          WHEN "hourlyRate" < 300 THEN '200-300'
-          ELSE '300+'
-        END as price_range,
-        COUNT(*) as count,
-        AVG("hourlyRate")::FLOAT as avg_in_range
-      FROM "Professional" p
-      WHERE p."userId" IN (SELECT id FROM "User" WHERE "deletedAt" IS NULL)
-      GROUP BY price_range
+      SELECT price_range, count, avg_in_range
+      FROM (
+        SELECT
+          CASE
+            WHEN "hourlyRate" IS NULL THEN 'Not Set'
+            WHEN "hourlyRate" < 30 THEN '0-30'
+            WHEN "hourlyRate" < 50 THEN '30-50'
+            WHEN "hourlyRate" < 75 THEN '50-75'
+            WHEN "hourlyRate" < 100 THEN '75-100'
+            WHEN "hourlyRate" < 150 THEN '100-150'
+            WHEN "hourlyRate" < 200 THEN '150-200'
+            WHEN "hourlyRate" < 300 THEN '200-300'
+            ELSE '300+'
+          END as price_range,
+          COUNT(*) as count,
+          AVG("hourlyRate")::FLOAT as avg_in_range
+        FROM "Professional" p
+        WHERE p."userId" IN (SELECT id FROM "User" WHERE "deletedAt" IS NULL)
+        GROUP BY
+          CASE
+            WHEN "hourlyRate" IS NULL THEN 'Not Set'
+            WHEN "hourlyRate" < 30 THEN '0-30'
+            WHEN "hourlyRate" < 50 THEN '30-50'
+            WHEN "hourlyRate" < 75 THEN '50-75'
+            WHEN "hourlyRate" < 100 THEN '75-100'
+            WHEN "hourlyRate" < 150 THEN '100-150'
+            WHEN "hourlyRate" < 200 THEN '150-200'
+            WHEN "hourlyRate" < 300 THEN '200-300'
+            ELSE '300+'
+          END
+      ) sub
       ORDER BY
         CASE price_range
           WHEN 'Not Set' THEN 0

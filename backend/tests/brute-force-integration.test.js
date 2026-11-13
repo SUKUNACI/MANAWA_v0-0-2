@@ -38,9 +38,11 @@ describe('Brute Force Protection - Login Integration', () => {
   });
 
   beforeEach(async () => {
-    // Clear brute force cache (Redis) before each test
+    // Clear brute force state (Redis/in-memory) before each test
     await redisCache.clear();
-    // Also reset express-rate-limit MemoryStore for the test email key
+    await bruteForceMiddleware.clearFailedAttempts(testEmail);
+    await bruteForceMiddleware.clearLockout(testEmail);
+    // Also reset express-rate-limit MemoryStore if available (mocked in tests → no-op)
     if (accountLimiter && accountLimiter.resetKey) {
       await accountLimiter.resetKey(`account:${testEmail.toLowerCase()}`);
     }

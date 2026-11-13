@@ -44,7 +44,7 @@ describe('GeniusPay Webhooks - Q51', () => {
       },
     });
 
-    await prisma.professional.create({
+    const professional = await prisma.professional.create({
       data: {
         userId: testProfessional.id,
         trade: 'Electrician',
@@ -64,7 +64,7 @@ describe('GeniusPay Webhooks - Q51', () => {
     testQuote = await prisma.quote.create({
       data: {
         projectId: testProject.id,
-        professionalId: testProfessional.id,
+        professionalId: professional.id,
         description: 'Test',
         amount: 500,
         status: 'ACCEPTED',
