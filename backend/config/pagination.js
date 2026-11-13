@@ -44,7 +44,7 @@ module.exports = {
     'search': 20,
 
     // User dashboard: moderate amounts
-    'projects': 20,
+    'projects': 50,
     'quotes': 20,
     'bookings': 50,
     'messages': 20,
