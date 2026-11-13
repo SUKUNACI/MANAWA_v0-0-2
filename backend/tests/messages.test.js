@@ -94,6 +94,22 @@ describe('POST /api/messages', () => {
     const res = await request(app).post('/api/messages').send({ receiverId: USER_B, content: 'Test' });
     expect(res.status).toBe(401);
   });
+
+  test('403 si email non vérifié', async () => {
+    // requireAuth (1st call) → user passes; requireEmailVerified (2nd call) → emailVerified false → 403
+    prisma.user.findUnique.mockReset();
+    prisma.user.findUnique
+      .mockResolvedValueOnce(mockUserA)
+      .mockResolvedValueOnce({ emailVerified: false });
+
+    const res = await request(app)
+      .post('/api/messages')
+      .set('Authorization', `Bearer ${clientToken(USER_A)}`)
+      .send({ receiverId: USER_B, content: 'Bonjour' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('EMAIL_NOT_VERIFIED');
+  });
 });
 
 // ══ GET /api/messages/conversations ════════════════════════════════════════
