@@ -43,7 +43,7 @@ describe('createVideoRoom', () => {
 
   describe('avec DAILY_API_KEY défini', () => {
     beforeEach(() => {
-      process.env.DAILY_API_KEY = 'test-daily-api-key-123';
+      process.env.DAILY_API_KEY = 'test_mock_api_key_for_testing';
     });
 
     it('appelle axios.post avec les bons paramètres', async () => {

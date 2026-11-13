@@ -844,7 +844,7 @@ describe('POST /api/subscriptions/checkout', () => {
     expect(res.body.discount).toBe(2500);
     expect(prisma.appConfig.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { key: `pending_promo_GP-PROMO-005` },
+        where: { key: `pending_promo_test_code_001` },
       })
     );
   });
