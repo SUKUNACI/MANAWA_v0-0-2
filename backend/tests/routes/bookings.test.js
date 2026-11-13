@@ -135,6 +135,7 @@ const mockCancelledBooking = {
   status: 'CANCELLED',
   cancelReason: 'Urgence professionnelle',
   cancelledBy: PRO_USER_ID,
+  cancelledAt: new Date('2026-11-13T00:00:00.000Z'),
 };
 
 // ============ HELPER SETUP FUNCTIONS ============
@@ -339,7 +340,19 @@ describe('GET /api/bookings/:id - Get booking detail', () => {
       .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`);
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(mockBooking);
+    // JSON serialisation converts Date objects to ISO strings — compare non-Date fields directly
+    expect(res.body).toMatchObject({
+      id: mockBooking.id,
+      status: mockBooking.status,
+      startTime: mockBooking.startTime,
+      endTime: mockBooking.endTime,
+      clientId: mockBooking.clientId,
+      professionalId: mockBooking.professionalId,
+    });
+    // Date fields arrive as ISO strings over HTTP
+    expect(new Date(res.body.date)).toEqual(mockBooking.date);
+    expect(new Date(res.body.createdAt)).toEqual(mockBooking.createdAt);
+    expect(new Date(res.body.updatedAt)).toEqual(mockBooking.updatedAt);
   });
 
   test('should include client, professional and project details', async () => {

@@ -22,18 +22,29 @@ jest.mock('../../config/db', () => ({
 }));
 
 // ── Mock auth middleware ────────────────────────────────────────────────────────
-jest.mock('../../middleware/auth', () => ({
-  requireAuth: (req, res, next) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ error: 'No token' });
-    req.user = { id: 'user-1', role: 'ADMIN' };
-    next();
-  },
-  requirePermission: (permission) => (req, res, next) => {
-    if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Forbidden' });
-    next();
-  },
-}));
+jest.mock('../../middleware/auth', () => {
+  const jwt = require('jsonwebtoken');
+  return {
+    requireAuth: (req, res, next) => {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Non authentifié' });
+      }
+      const token = authHeader.split(' ')[1];
+      try {
+        const payload = jwt.verify(token, process.env.JWT_SECRET);
+        req.user = { id: payload.id || 'user-1', role: payload.role || 'ADMIN' };
+        next();
+      } catch {
+        return res.status(401).json({ error: 'Token invalide ou expiré' });
+      }
+    },
+    requirePermission: (permission) => (req, res, next) => {
+      if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Forbidden' });
+      next();
+    },
+  };
+});
 
 const prisma = require('../../config/db');
 const financesRouter = require('../../routes/finances');
