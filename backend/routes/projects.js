@@ -352,9 +352,8 @@ router.get('/', readLimiter, requireAuth,
     const projects = await prisma.project.findMany({
       where,
       include: {
-        photos: true,
         client: { select: { firstName: true, lastName: true, city: true } },
-        _count: { select: { quotes: true } },
+        _count: { select: { quotes: true, photos: true } },
       },
       ...paginationQuery,
     });
@@ -362,11 +361,13 @@ router.get('/', readLimiter, requireAuth,
     const alreadyQuotedIds = await markAlreadyQuotedProjects(projects, req.user.id, req.user.role);
 
     res.json(projects.map(p => {
-      const quoteCount = p._count?.quotes ?? p.quotes?.length ?? 0;
+      const quoteCount = p._count?.quotes ?? 0;
+      const photoCount = p._count?.photos ?? 0;
       return {
         ...p,
         quoteCount,
-        _count: { quotes: quoteCount },
+        photoCount,
+        _count: { quotes: quoteCount, photos: photoCount },
         alreadyQuoted: alreadyQuotedIds.has(p.id),
       };
     }));

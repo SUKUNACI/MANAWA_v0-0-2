@@ -79,11 +79,9 @@ router.get('/:id', async (req, res, next) => {
 
     if (!pro) return res.status(404).json({ error: 'Professionnel introuvable' });
 
-    const followerCount = await prisma.follow.count({ where: { professionalId: pro.id } });
-
     res.json({
       ...pro,
-      followerCount,
+      followerCount: pro._count.followers,
       subscription: pro.subscription ?? null,
     });
   } catch (err) {
