@@ -232,6 +232,7 @@ class CircuitBreaker {
   destroy() {
     if (this.resetTimer) {
       clearTimeout(this.resetTimer);
+      this.resetTimer = null;
     }
   }
 }

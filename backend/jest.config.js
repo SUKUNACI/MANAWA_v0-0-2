@@ -16,7 +16,6 @@ module.exports = {
     'routes/auth-2fa\\.test\\.js',
     'routes/payments-retry\\.test\\.js',
     'utils/badge\\.test\\.js',
-    'utils/circuit-breaker\\.test\\.js',
     'utils/error-handler-third-party\\.test\\.js',
     'utils/generatePdf\\.test\\.js',
     'utils/geniuspay\\.test\\.js',
