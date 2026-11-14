@@ -23,6 +23,7 @@ module.exports = {
     'webhooks-geniuspay\\.test\\.js',
     'q67-q68-aggregation\\.test\\.js',
     'brute-force-integration\\.test\\.js',
+    'utils/appConfig\\.test\\.js',
     'q109-q119-deployment\\.test\\.js',
     'middleware/auth\\.test\\.js',
     'routes/admin-recovery\\.test\\.js',
