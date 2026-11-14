@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1794643779645" clover="3.2.0">
-  <project timestamp="1794643779645" name="All files">
-    <metrics statements="8419" coveredstatements="7060" conditionals="4362" coveredconditionals="3401" methods="1233" coveredmethods="944" elements="14014" coveredelements="11405" complexity="0" loc="8419" ncloc="8419" packages="4" files="136" classes="136"/>
+<coverage generated="1794646520938" clover="3.2.0">
+  <project timestamp="1794646520938" name="All files">
+    <metrics statements="8435" coveredstatements="7074" conditionals="4368" coveredconditionals="3407" methods="1234" coveredmethods="945" elements="14037" coveredelements="11426" complexity="0" loc="8435" ncloc="8435" packages="4" files="136" classes="136"/>
     <package name="config">
       <metrics statements="1145" coveredstatements="689" conditionals="577" coveredconditionals="370" methods="233" coveredmethods="146"/>
       <file name="2fa.js" path="C:\Users\HP\Desktop\MANAWA_NEW\backend\config\2fa.js">
@@ -1344,7 +1344,7 @@
         <line num="74" count="2" type="cond" truecount="2" falsecount="0"/>
         <line num="75" count="1" type="stmt"/>
         <line num="77" count="1" type="stmt"/>
-        <line num="83" count="21" type="stmt"/>
+        <line num="83" count="22" type="stmt"/>
         <line num="84" count="165" type="cond" truecount="1" falsecount="1"/>
         <line num="85" count="0" type="stmt"/>
         <line num="87" count="165" type="cond" truecount="2" falsecount="0"/>
@@ -1776,7 +1776,7 @@
       </file>
     </package>
     <package name="routes">
-      <metrics statements="4964" coveredstatements="4649" conditionals="2444" coveredconditionals="2056" methods="619" coveredmethods="534"/>
+      <metrics statements="4980" coveredstatements="4663" conditionals="2450" coveredconditionals="2062" methods="620" coveredmethods="535"/>
       <file name="admin-alerts.js" path="C:\Users\HP\Desktop\MANAWA_NEW\backend\routes\admin-alerts.js">
         <metrics statements="94" coveredstatements="94" conditionals="52" coveredconditionals="49" methods="7" coveredmethods="7"/>
         <line num="6" count="1" type="stmt"/>
@@ -3591,7 +3591,7 @@
         <line num="463" count="1" type="stmt"/>
       </file>
       <file name="auth.js" path="C:\Users\HP\Desktop\MANAWA_NEW\backend\routes\auth.js">
-        <metrics statements="227" coveredstatements="209" conditionals="140" coveredconditionals="115" methods="15" coveredmethods="14"/>
+        <metrics statements="243" coveredstatements="223" conditionals="146" coveredconditionals="121" methods="16" coveredmethods="15"/>
         <line num="1" count="2" type="stmt"/>
         <line num="2" count="2" type="stmt"/>
         <line num="3" count="2" type="stmt"/>
@@ -3606,8 +3606,8 @@
         <line num="12" count="2" type="stmt"/>
         <line num="13" count="2" type="stmt"/>
         <line num="15" count="2" type="stmt"/>
-        <line num="19" count="1" type="stmt"/>
-        <line num="20" count="1" type="stmt"/>
+        <line num="19" count="2" type="stmt"/>
+        <line num="20" count="2" type="stmt"/>
         <line num="31" count="0" type="stmt"/>
         <line num="35" count="2" type="stmt"/>
         <line num="36" count="2" type="stmt"/>
@@ -3784,41 +3784,57 @@
         <line num="478" count="1" type="stmt"/>
         <line num="483" count="2" type="stmt"/>
         <line num="484" count="3" type="stmt"/>
-        <line num="485" count="3" type="stmt"/>
-        <line num="486" count="3" type="cond" truecount="2" falsecount="0"/>
-        <line num="487" count="1" type="stmt"/>
-        <line num="490" count="2" type="stmt"/>
-        <line num="491" count="2" type="stmt"/>
-        <line num="496" count="2" type="cond" truecount="2" falsecount="0"/>
-        <line num="497" count="1" type="stmt"/>
+        <line num="486" count="3" type="stmt"/>
+        <line num="491" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="492" count="1" type="stmt"/>
+        <line num="496" count="2" type="stmt"/>
+        <line num="497" count="2" type="cond" truecount="4" falsecount="0"/>
+        <line num="498" count="1" type="stmt"/>
         <line num="501" count="1" type="stmt"/>
         <line num="502" count="1" type="stmt"/>
+        <line num="503" count="1" type="stmt"/>
         <line num="505" count="1" type="stmt"/>
-        <line num="510" count="1" type="stmt"/>
+        <line num="511" count="1" type="stmt"/>
         <line num="512" count="1" type="stmt"/>
-        <line num="518" count="0" type="stmt"/>
-        <line num="522" count="0" type="stmt"/>
-        <line num="530" count="2" type="stmt"/>
-        <line num="531" count="1" type="stmt"/>
-        <line num="532" count="1" type="cond" truecount="2" falsecount="0"/>
-        <line num="533" count="1" type="stmt"/>
-        <line num="535" count="1" type="stmt"/>
-        <line num="541" count="0" type="stmt"/>
-        <line num="545" count="0" type="stmt"/>
-        <line num="553" count="2" type="stmt"/>
-        <line num="554" count="2" type="stmt"/>
-        <line num="555" count="2" type="stmt"/>
-        <line num="557" count="2" type="stmt"/>
-        <line num="567" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="514" count="0" type="stmt"/>
+        <line num="515" count="0" type="stmt"/>
+        <line num="520" count="2" type="stmt"/>
+        <line num="521" count="3" type="stmt"/>
+        <line num="522" count="3" type="stmt"/>
+        <line num="523" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="524" count="1" type="stmt"/>
+        <line num="527" count="2" type="stmt"/>
+        <line num="528" count="2" type="stmt"/>
+        <line num="533" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="534" count="1" type="stmt"/>
+        <line num="538" count="1" type="stmt"/>
+        <line num="539" count="1" type="stmt"/>
+        <line num="542" count="1" type="stmt"/>
+        <line num="547" count="1" type="stmt"/>
+        <line num="549" count="1" type="stmt"/>
+        <line num="555" count="0" type="stmt"/>
+        <line num="559" count="0" type="stmt"/>
+        <line num="567" count="2" type="stmt"/>
         <line num="568" count="1" type="stmt"/>
+        <line num="569" count="1" type="cond" truecount="2" falsecount="0"/>
+        <line num="570" count="1" type="stmt"/>
         <line num="572" count="1" type="stmt"/>
-        <line num="573" count="1" type="stmt"/>
-        <line num="574" count="1" type="stmt"/>
-        <line num="576" count="1" type="stmt"/>
-        <line num="594" count="0" type="stmt"/>
-        <line num="598" count="0" type="stmt"/>
-        <line num="605" count="2" type="stmt"/>
-        <line num="606" count="2" type="stmt"/>
+        <line num="578" count="0" type="stmt"/>
+        <line num="582" count="0" type="stmt"/>
+        <line num="590" count="2" type="stmt"/>
+        <line num="591" count="2" type="stmt"/>
+        <line num="592" count="2" type="stmt"/>
+        <line num="594" count="2" type="stmt"/>
+        <line num="604" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="605" count="1" type="stmt"/>
+        <line num="609" count="1" type="stmt"/>
+        <line num="610" count="1" type="stmt"/>
+        <line num="611" count="1" type="stmt"/>
+        <line num="613" count="1" type="stmt"/>
+        <line num="631" count="0" type="stmt"/>
+        <line num="635" count="0" type="stmt"/>
+        <line num="642" count="2" type="stmt"/>
+        <line num="643" count="2" type="stmt"/>
       </file>
       <file name="availability.js" path="C:\Users\HP\Desktop\MANAWA_NEW\backend\routes\availability.js">
         <metrics statements="5" coveredstatements="5" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="1"/>
@@ -7891,16 +7907,16 @@
         <line num="96" count="1175" type="cond" truecount="2" falsecount="0"/>
         <line num="97" count="1" type="stmt"/>
         <line num="107" count="1175" type="cond" truecount="4" falsecount="0"/>
-        <line num="108" count="11" type="stmt"/>
-        <line num="109" count="1164" type="cond" truecount="2" falsecount="0"/>
-        <line num="110" count="15" type="stmt"/>
-        <line num="118" count="46" type="stmt"/>
-        <line num="119" count="46" type="cond" truecount="2" falsecount="0"/>
-        <line num="121" count="46" type="cond" truecount="2" falsecount="0"/>
-        <line num="122" count="46" type="cond" truecount="2" falsecount="0"/>
-        <line num="125" count="46" type="stmt"/>
-        <line num="126" count="46" type="cond" truecount="2" falsecount="0"/>
-        <line num="127" count="41" type="stmt"/>
+        <line num="108" count="10" type="stmt"/>
+        <line num="109" count="1165" type="cond" truecount="2" falsecount="0"/>
+        <line num="110" count="12" type="stmt"/>
+        <line num="118" count="42" type="stmt"/>
+        <line num="119" count="42" type="cond" truecount="2" falsecount="0"/>
+        <line num="121" count="42" type="cond" truecount="2" falsecount="0"/>
+        <line num="122" count="42" type="cond" truecount="2" falsecount="0"/>
+        <line num="125" count="42" type="stmt"/>
+        <line num="126" count="42" type="cond" truecount="2" falsecount="0"/>
+        <line num="127" count="37" type="stmt"/>
         <line num="140" count="17" type="stmt"/>
         <line num="141" count="17" type="cond" truecount="2" falsecount="0"/>
         <line num="142" count="3" type="stmt"/>
@@ -7917,12 +7933,12 @@
         <line num="181" count="10" type="stmt"/>
         <line num="189" count="6" type="stmt"/>
         <line num="196" count="4" type="stmt"/>
-        <line num="203" count="46" type="stmt"/>
-        <line num="204" count="46" type="stmt"/>
-        <line num="207" count="46" type="cond" truecount="2" falsecount="0"/>
-        <line num="208" count="32" type="stmt"/>
-        <line num="209" count="32" type="cond" truecount="1" falsecount="1"/>
-        <line num="210" count="32" type="stmt"/>
+        <line num="203" count="42" type="stmt"/>
+        <line num="204" count="42" type="stmt"/>
+        <line num="207" count="42" type="cond" truecount="2" falsecount="0"/>
+        <line num="208" count="28" type="stmt"/>
+        <line num="209" count="28" type="cond" truecount="1" falsecount="1"/>
+        <line num="210" count="28" type="stmt"/>
         <line num="214" count="14" type="stmt"/>
         <line num="221" count="14" type="stmt"/>
         <line num="224" count="14" type="cond" truecount="1" falsecount="1"/>

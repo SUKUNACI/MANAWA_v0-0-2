@@ -70,6 +70,7 @@ model User {
   notificationPreference NotificationPreference?
   locale                 String                  @default("fr") // fr, en, es, de
   onCallSchedules        OnCallSchedule[]
+  adminSessions          AdminSession[]
 }
 
 model RefreshToken {
