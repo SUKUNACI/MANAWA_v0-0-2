@@ -1275,3 +1275,18 @@ model GdprDeletionRequest {
   @@index([status])
   @@index([createdAt])
 }
+
+// Admin Session Tracking — validate JWT against database before granting access
+model AdminSession {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenJti  String    @unique // JWT ID claim (jti) — unique identifier for this token
+  createdAt DateTime  @default(now())
+  expiresAt DateTime  // When this session token expires
+  revokedAt DateTime? // NULL = active, NOT NULL = revoked (logout, password change, etc.)
+
+  @@index([userId])
+  @@index([revokedAt])
+  @@index([expiresAt])
+}

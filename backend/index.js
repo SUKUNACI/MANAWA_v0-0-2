@@ -519,9 +519,9 @@ app.get('/p/:proId', (req, res) => {
 <body>
   <div class="logo">MANAWA</div>
   <p>Ouvrez ce profil dans l'application MANAWA</p>
-  <a class="btn" href="${deepLink}">Ouvrir dans l'app</a>
-  <a class="store" href="${storeUrl}">Télécharger MANAWA</a>
-  <script>window.location.href = "${deepLink}";</script>
+  <a class="btn" href="${deepLink.replace(/"/g, '&quot;')}">Ouvrir dans l'app</a>
+  <a class="store" href="${storeUrl.replace(/"/g, '&quot;')}">Télécharger MANAWA</a>
+  <script>window.location.href = "${deepLink.replace(/"/g, '\\"')}";</script>
 </body>
 </html>`);
 });
