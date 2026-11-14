@@ -1,36 +1,21 @@
+/**
+ * Professional Routes
+ * HTTP layer only — business logic delegated to ProfessionalModule.
+ */
+
 const express = require('express');
-const prisma = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const prisma = require('../config/db');
+const ProfessionalModule = require('../modules/professional');
 
 const router = express.Router();
+const profModule = new ProfessionalModule(prisma);
 
 // GET /api/professionals — liste publique
 router.get('/', async (req, res, next) => {
   try {
-    const { city, trade, page = 1, limit = 20 } = req.query;
-    const take = Math.min(100, parseInt(limit) || 20);
-    const skip = (Math.max(1, parseInt(page) || 1) - 1) * take;
-
-    const where = { user: { suspended: false } };
-    if (city) where.user.city = city;
-    if (trade) where.trade = trade;
-
-    const professionals = await prisma.professional.findMany({
-      where,
-      include: {
-        user: {
-          select: {
-            id: true, firstName: true, lastName: true,
-            email: true, city: true, avatarUrl: true, suspended: true,
-          },
-        },
-        _count: { select: { followers: true } },
-      },
-      skip,
-      take,
-      orderBy: { averageRating: 'desc' },
-    });
-
+    const { city, trade, page, limit } = req.query;
+    const professionals = await profModule.list({ city, trade, page, limit });
     res.json(professionals);
   } catch (err) {
     next(err);
@@ -40,22 +25,10 @@ router.get('/', async (req, res, next) => {
 // GET /api/professionals/me/status — statut identité (PROFESSIONAL uniquement)
 router.get('/me/status', requireAuth, requireRole('PROFESSIONAL'), async (req, res, next) => {
   try {
-    const pro = await prisma.professional.findUnique({
-      where: { userId: req.user.id },
-      select: {
-        id: true,
-        identityStatus: true,
-        identityRejectionReason: true,
-        verifiedByAdmin: true,
-        decennale: true,
-        accountType: true,
-      },
-    });
-
-    if (!pro) return res.status(404).json({ error: 'Profil professionnel introuvable' });
-
+    const pro = await profModule.getMyStatus(req.user.id);
     res.json(pro);
   } catch (err) {
+    if (err.status === 404) return res.status(404).json({ error: err.message });
     next(err);
   }
 });
@@ -63,27 +36,10 @@ router.get('/me/status', requireAuth, requireRole('PROFESSIONAL'), async (req, r
 // GET /api/professionals/:id — profil public d'un pro
 router.get('/:id', async (req, res, next) => {
   try {
-    const pro = await prisma.professional.findUnique({
-      where: { id: req.params.id },
-      include: {
-        user: {
-          select: {
-            id: true, firstName: true, lastName: true,
-            email: true, city: true, avatarUrl: true, phone: true, suspended: true,
-          },
-        },
-        _count: { select: { followers: true } },
-        companyMembers: true,
-      },
-    });
-
-    if (!pro) return res.status(404).json({ error: 'Professionnel introuvable' });
-
-    res.json({
-      ...pro,
-      followerCount: pro._count.followers,
-    });
+    const pro = await profModule.getById(req.params.id);
+    res.json(pro);
   } catch (err) {
+    if (err.status === 404) return res.status(404).json({ error: err.message });
     next(err);
   }
 });
@@ -91,33 +47,10 @@ router.get('/:id', async (req, res, next) => {
 // POST /api/professionals/:id/follow — toggle follow (auth requis)
 router.post('/:id/follow', requireAuth, async (req, res, next) => {
   try {
-    const proId = req.params.id;
-    const userId = req.user.id;
-
-    const pro = await prisma.professional.findUnique({ where: { id: proId } });
-    if (!pro) return res.status(404).json({ error: 'Professionnel introuvable' });
-
-    const existing = await prisma.follow.findUnique({
-      where: { followerId_professionalId: { followerId: userId, professionalId: proId } },
-    });
-
-    if (existing) {
-      await prisma.follow.delete({ where: { id: existing.id } });
-      return res.json({ following: false });
-    }
-
-    await prisma.follow.create({ data: { followerId: userId, professionalId: proId } });
-
-    prisma.notification.create({
-      data: {
-        userId: pro.userId,
-        type: 'NEW_FOLLOWER',
-        message: 'Quelqu\'un vous suit maintenant',
-      },
-    }).catch(() => {});
-
-    res.json({ following: true });
+    const result = await profModule.toggleFollow(req.params.id, req.user.id);
+    res.json(result);
   } catch (err) {
+    if (err.status === 404) return res.status(404).json({ error: err.message });
     next(err);
   }
 });
