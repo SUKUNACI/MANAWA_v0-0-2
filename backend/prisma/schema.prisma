@@ -148,6 +148,10 @@ model Professional {
   servicePackages         ServicePackage[]
   packageOrders           PackageOrder[]
   badges                  ProfessionalBadge[]
+
+  @@index([trade])
+  @@index([verifiedByAdmin, accountType])
+  @@index([averageRating, createdAt])
 }
 
 model PortfolioItem {
@@ -270,6 +274,9 @@ model Project {
   bookings                  Booking[]
   packageOrders             PackageOrder[]
   videoCalls                VideoCall[]
+
+  @@index([status, city, tradeNeeded, createdAt])
+  @@index([clientId, status])
 }
 
 model ProjectPhoto {
@@ -383,6 +390,9 @@ model Message {
   createdAt  DateTime @default(now())
   receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
   sender     User     @relation("SentMessages", fields: [senderId], references: [id])
+
+  @@index([receiverId, read, createdAt])
+  @@index([senderId, createdAt])
 }
 
 model Review {
@@ -474,6 +484,7 @@ model AdminLog {
 
   @@index([adminId])
   @@index([createdAt])
+  @@index([adminId, createdAt])
 }
 
 enum UserRole {
@@ -596,6 +607,7 @@ model Notification {
   @@index([userId])
   @@index([createdAt])
   @@index([isArchived])
+  @@index([userId, read, createdAt])
 }
 
 model BroadcastLog {
@@ -688,6 +700,7 @@ model AvailabilitySlot {
 
   @@index([professionalId])
   @@index([date])
+  @@index([professionalId, type, date])
 }
 
 model Booking {
@@ -712,6 +725,7 @@ model Booking {
   @@index([professionalId])
   @@index([clientId])
   @@index([date])
+  @@index([date, status, professionalId])
 }
 
 model ServicePackage {
