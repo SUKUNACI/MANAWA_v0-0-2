@@ -16,6 +16,33 @@ jest.mock('../config/db', () => ({
   pushToken: { findMany: jest.fn().mockResolvedValue([]) },
 }));
 
+jest.mock('../middleware/auth', () => ({
+  requireAuth: (req, res, next) => {
+    const header = req.headers.authorization;
+    if (!header || !header.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Non authentifié' });
+    }
+    const jwt = require('jsonwebtoken');
+    try {
+      req.user = jwt.verify(header.split(' ')[1], process.env.JWT_SECRET);
+    } catch {
+      return res.status(401).json({ error: 'Token invalide' });
+    }
+    next();
+  },
+  requireEmailVerified: (req, res, next) => {
+    const prismaDb = require('../config/db');
+    return prismaDb.user.findUnique({ where: { id: req.user.id }, select: { emailVerified: true } })
+      .then(user => {
+        if (!user || user.emailVerified !== true) {
+          return res.status(403).json({ error: 'Veuillez vérifier votre adresse email avant de continuer.', code: 'EMAIL_NOT_VERIFIED' });
+        }
+        next();
+      })
+      .catch(next);
+  },
+}));
+
 const prisma = require('../config/db');
 const messageRoutes = require('../routes/messages');
 
@@ -66,9 +93,8 @@ describe('POST /api/messages', () => {
 
   test('400 si receiverId manquant', async () => {
     prisma.user.findUnique.mockReset();
-    prisma.user.findUnique
-      .mockResolvedValueOnce(mockUserA)
-      .mockResolvedValueOnce({ ...mockUserA, emailVerified: true });
+    // requireAuth uses JWT only (no DB); requireEmailVerified calls findUnique once
+    prisma.user.findUnique.mockResolvedValueOnce({ ...mockUserA, emailVerified: true });
     const res = await request(app)
       .post('/api/messages')
       .set('Authorization', `Bearer ${clientToken(USER_A)}`)
@@ -79,9 +105,8 @@ describe('POST /api/messages', () => {
 
   test('400 si content vide', async () => {
     prisma.user.findUnique.mockReset();
-    prisma.user.findUnique
-      .mockResolvedValueOnce(mockUserA)
-      .mockResolvedValueOnce({ ...mockUserA, emailVerified: true });
+    // requireAuth uses JWT only (no DB); requireEmailVerified calls findUnique once
+    prisma.user.findUnique.mockResolvedValueOnce({ ...mockUserA, emailVerified: true });
     const res = await request(app)
       .post('/api/messages')
       .set('Authorization', `Bearer ${clientToken(USER_A)}`)
@@ -96,10 +121,9 @@ describe('POST /api/messages', () => {
   });
 
   test('403 si email non vérifié', async () => {
-    // requireAuth (1st call) → user passes; requireEmailVerified (2nd call) → emailVerified false → 403
+    // requireAuth uses JWT only (no DB); requireEmailVerified (1st call) → emailVerified false → 403
     prisma.user.findUnique.mockReset();
     prisma.user.findUnique
-      .mockResolvedValueOnce(mockUserA)
       .mockResolvedValueOnce({ emailVerified: false });
 
     const res = await request(app)
@@ -233,11 +257,8 @@ describe('EDGE CASES: Message Content Handling', () => {
 
   test('Very long message content should be handled', async () => {
     const longContent = 'x'.repeat(50000);
-    useA();
-    prisma.user.findUnique
-      .mockResolvedValueOnce(mockUserA)
-      .mockResolvedValueOnce({ ...mockUserA, emailVerified: true })
-      .mockResolvedValueOnce(mockUserB);
+    // requireAuth: JWT only; requireEmailVerified: 1 findUnique call; send: rejects early (too long, no DB)
+    prisma.user.findUnique.mockResolvedValue({ ...mockUserA, emailVerified: true });
     prisma.message.create.mockResolvedValue({
       id: 'msg-1', senderId: USER_A, receiverId: USER_B, content: longContent,
     });
@@ -251,11 +272,11 @@ describe('EDGE CASES: Message Content Handling', () => {
   });
 
   test('Unicode characters in messages should be preserved', async () => {
-    useA();
-    prisma.user.findUnique
-      .mockResolvedValueOnce(mockUserA)
-      .mockResolvedValueOnce({ ...mockUserA, emailVerified: true })
-      .mockResolvedValueOnce(mockUserB);
+    // requireAuth: JWT only; requireEmailVerified: findUnique(USER_A); send: findUnique(USER_B)
+    prisma.user.findUnique.mockImplementation(({ where }) => {
+      if (where?.id === USER_B) return Promise.resolve(mockUserB);
+      return Promise.resolve({ ...mockUserA, emailVerified: true });
+    });
     prisma.message.create.mockResolvedValue({
       id: 'msg-1', senderId: USER_A, receiverId: USER_B,
       content: '✓ αβγδ 中文 العربية 🎉',
@@ -270,11 +291,11 @@ describe('EDGE CASES: Message Content Handling', () => {
   });
 
   test('XSS attempt in message should not execute', async () => {
-    useA();
-    prisma.user.findUnique
-      .mockResolvedValueOnce(mockUserA)
-      .mockResolvedValueOnce({ ...mockUserA, emailVerified: true })
-      .mockResolvedValueOnce(mockUserB);
+    // requireAuth: JWT only; requireEmailVerified: findUnique(USER_A); send: findUnique(USER_B)
+    prisma.user.findUnique.mockImplementation(({ where }) => {
+      if (where?.id === USER_B) return Promise.resolve(mockUserB);
+      return Promise.resolve({ ...mockUserA, emailVerified: true });
+    });
     prisma.message.create.mockResolvedValue({
       id: 'msg-1', senderId: USER_A, receiverId: USER_B,
       content: '<img src=x onerror="alert(1)">',
@@ -289,11 +310,8 @@ describe('EDGE CASES: Message Content Handling', () => {
   });
 
   test('Null bytes in message content should be handled', async () => {
-    useA();
-    prisma.user.findUnique
-      .mockResolvedValueOnce(mockUserA)
-      .mockResolvedValueOnce({ ...mockUserA, emailVerified: true })
-      .mockResolvedValueOnce(mockUserB);
+    // requireAuth: JWT only; requireEmailVerified: 1 findUnique call; send: rejects early (null byte)
+    prisma.user.findUnique.mockResolvedValue({ ...mockUserA, emailVerified: true });
     prisma.message.create.mockResolvedValue({
       id: 'msg-1', senderId: USER_A, receiverId: USER_B, content: 'test\x00content',
     });
@@ -311,11 +329,17 @@ describe('EDGE CASES: Message Content Handling', () => {
 
 describe('EDGE CASES: Concurrent Message Operations', () => {
   test('Concurrent messages between same users should not duplicate', async () => {
+    // requireAuth reads user by JWT id; requireEmailVerified reads emailVerified
+    // MessageModule.send reads receiver; _assertClientProRelationship reads professional + message.findFirst
     prisma.user.findUnique.mockImplementation(({ where }) => {
       if (where?.id === USER_A) return Promise.resolve(mockUserA);
       if (where?.id === USER_B) return Promise.resolve(mockUserB);
-      return Promise.resolve(null);
+      return Promise.resolve({ ...mockUserA, emailVerified: true });
     });
+
+    prisma.professional.findUnique.mockResolvedValue({ id: 'pro-b' });
+    prisma.message.findFirst.mockResolvedValue({ id: 'existing-msg' }); // existing conversation unlocks send
+    prisma.quote.findFirst.mockResolvedValue(null);
 
     let messageCount = 0;
     prisma.message.create.mockImplementation(() => {
