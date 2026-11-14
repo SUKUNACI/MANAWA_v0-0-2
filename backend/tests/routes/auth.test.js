@@ -880,6 +880,7 @@ describe('POST /api/auth/admin-renew', () => {
 describe('POST /api/auth/setup-admin', () => {
   beforeEach(() => {
     process.env.SUPER_ADMIN_SETUP_SECRET = 'super-secret-123';
+    process.env.INITIAL_ADMIN_PASSWORD = 'TestPass123!';
     // findUnique est appelé avec req.user.id (l'admin qui envoie la requête)
     prisma.user.findUnique.mockResolvedValue({
       ...mockAdminUser,

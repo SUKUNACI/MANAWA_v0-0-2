@@ -60,7 +60,7 @@ router.post(
       logger.error('Register error', { email: req.body?.email, error: err.message, code: err.code, stack: err.stack });
       const requestId = `req-${Date.now()}`;
       if (err.status === 409 || err.message.includes('Unique constraint')) {
-        return res.status(409).json({ error: 'Email already exists', code: 'EMAIL_EXISTS', requestId });
+        return res.status(409).json({ error: err.message || 'Cet email est déjà utilisé', code: 'EMAIL_EXISTS', requestId });
       }
       res.status(500).json({ error: 'Erreur interne du serveur', code: err.code || 'UNKNOWN_ERROR', requestId });
     }
