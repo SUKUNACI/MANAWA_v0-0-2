@@ -8,6 +8,7 @@ const { requireAuth, optionalAuth } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
 const { validateFilters, applyFilters } = require('../utils/filter-helper');
 const { applyPageBasedPagination, validatePageBasedPaginationQuery, buildPaginatedResponse } = require('../utils/pagination-helper');
+const searchCache = require('../utils/search-cache');
 
 const router = express.Router();
 
@@ -42,23 +43,25 @@ function clampPage(raw) {
 // ---------------------------------------------------------------------------
 
 async function searchProfessionals(q, { skip = 0, take = DEFAULT_LIMIT, filters = {} } = {}) {
-  let where = {
-    user: { deletedAt: null },
-    OR: [
-      { user: { firstName: { contains: q, mode: 'insensitive' } } },
-      { user: { lastName: { contains: q, mode: 'insensitive' } } },
-      { trade: { contains: q, mode: 'insensitive' } },
-      { trades: { has: q } },
-      { description: { contains: q, mode: 'insensitive' } },
-      { companyName: { contains: q, mode: 'insensitive' } },
-      { user: { city: { contains: q, mode: 'insensitive' } } },
-    ],
-  };
+  // Try cache first
+  return searchCache.getOrExecute('professionals', q, { skip, take, filters }, async () => {
+    let where = {
+      user: { deletedAt: null },
+      OR: [
+        { user: { firstName: { contains: q, mode: 'insensitive' } } },
+        { user: { lastName: { contains: q, mode: 'insensitive' } } },
+        { trade: { contains: q, mode: 'insensitive' } },
+        { trades: { has: q } },
+        { description: { contains: q, mode: 'insensitive' } },
+        { companyName: { contains: q, mode: 'insensitive' } },
+        { user: { city: { contains: q, mode: 'insensitive' } } },
+      ],
+    };
 
-  // Q65: Apply filters
-  where = applyFilters('professionals', where, filters);
+    // Q65: Apply filters
+    where = applyFilters('professionals', where, filters);
 
-  return prisma.professional.findMany({
+    return prisma.professional.findMany({
     where,
     select: {
       id: true,
@@ -83,6 +86,7 @@ async function searchProfessionals(q, { skip = 0, take = DEFAULT_LIMIT, filters 
     },
     skip,
     take,
+    });
   });
 }
 
