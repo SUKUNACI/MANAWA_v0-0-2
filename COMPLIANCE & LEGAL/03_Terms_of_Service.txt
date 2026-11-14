@@ -1,0 +1,161 @@
+================================================================================
+                         TERMS OF SERVICE
+                            MANAWA Platform
+================================================================================
+
+Effective Date: 2026-11-14
+Last Updated: 2026-11-14
+
+================================================================================
+1. ACCEPTANCE OF TERMS
+================================================================================
+
+By using MANAWA, you agree to these Terms. If you disagree with any part,
+you may not use our service.
+
+================================================================================
+2. USER ELIGIBILITY
+================================================================================
+
+You must be:
+  ✅ At least 18 years old
+  ✅ Legally authorized to enter binding agreements
+  ✅ Responsible for account confidentiality
+  ✅ Accepting responsibility for all account activity
+
+================================================================================
+3. USER ACCOUNTS
+================================================================================
+
+YOUR RESPONSIBILITIES:
+  • Provide accurate and complete information
+  • Update information when it changes
+  • Never share your password
+  • Notify us immediately of unauthorized access
+
+ACCOUNT TERMINATION:
+  • We may terminate if you violate these Terms
+  • We may terminate if you're inactive 12+ months
+  • You may terminate anytime
+  • Data is retained per Privacy Policy
+
+================================================================================
+4. PROHIBITED CONDUCT
+================================================================================
+
+YOU MAY NOT:
+  ❌ Post false, misleading, or fraudulent quotes
+  ❌ Harass, threaten, or defame other users
+  ❌ Post discriminatory or racist content
+  ❌ Bypass security measures
+  ❌ Use bots or automated scripts
+  ❌ Spam or send unsolicited messages
+  ❌ Post content about illegal activities
+  ❌ Resell services or act as middleman
+  ❌ Impersonate other users
+  ❌ Manipulate ratings or reviews
+
+CONSEQUENCES:
+  1st violation:  Warning
+  2nd violation:  7-day suspension
+  3rd violation:  Permanent ban
+
+================================================================================
+5. PROFESSIONAL REQUIREMENTS (If you're a Professional)
+================================================================================
+
+  ✅ You must be legally authorized to provide services
+  ✅ You must hold all required licenses/certifications
+  ✅ You must comply with local laws
+  ✅ You must not discriminate against clients
+  ✅ You must provide honest quotes
+  ✅ You must respond within 24 hours
+  ✅ You must maintain professional conduct
+
+================================================================================
+6. PAYMENT & PRICING
+================================================================================
+
+  • Currency: As displayed during booking
+  • Commission: MANAWA takes 15% on completed services
+  • Professionals: Set your own rates
+  • Refunds: Must be requested within 30 days
+  • Disputes: Resolved by MANAWA admin team
+
+================================================================================
+7. LIABILITY DISCLAIMER
+================================================================================
+
+WE ARE NOT LIABLE FOR:
+  • Service interruptions or downtime
+  • Third-party service failures
+  • User-generated content
+  • Disputes between users
+
+SERVICE PROVIDED "AS-IS":
+  • No warranties or guarantees
+  • No liability for indirect damages
+  • No liability for lost profits or data
+
+================================================================================
+8. DISPUTE RESOLUTION
+================================================================================
+
+BEFORE LEGAL ACTION:
+  1. Contact support@manawa.app
+  2. Provide detailed description
+  3. Allow 30 days for resolution attempt
+
+BINDING ARBITRATION:
+  • All disputes resolved by arbitration (not court)
+  • Limited appeal rights
+  • Exception: Disputes under €500 (small claims court allowed)
+
+================================================================================
+9. PRIVACY & DATA
+================================================================================
+
+  ✅ We collect data per our Privacy Policy
+  ✅ We use data to provide and improve service
+  ✅ We do NOT sell personal data
+  ✅ We comply with GDPR and local laws
+
+================================================================================
+10. TERMINATION OF SERVICE
+================================================================================
+
+We may terminate your account if you:
+  • Violate these Terms
+  • Engage in fraudulent activity
+  • Repeatedly violate policies
+  • Provide legal reasons for termination
+
+================================================================================
+11. GOVERNING LAW
+================================================================================
+
+These Terms are governed by the laws of the jurisdiction where MANAWA
+operates, without regard to conflicts of law.
+
+================================================================================
+12. CONTACT US
+================================================================================
+
+For questions about these Terms:
+
+  Email: support@manawa.app
+  Address: [Company Address]
+  Phone: [Company Phone]
+
+================================================================================
+ACKNOWLEDGMENT
+================================================================================
+
+By using MANAWA, you acknowledge that you have read, understood, and agree
+to be bound by these Terms of Service.
+
+Last Updated: 2026-11-14
+
+================================================================================
+END OF DOCUMENT
+================================================================================

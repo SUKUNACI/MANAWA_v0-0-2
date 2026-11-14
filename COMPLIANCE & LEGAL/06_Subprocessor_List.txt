@@ -1,0 +1,94 @@
+================================================================================
+                       SUBPROCESSOR LIST
+                           MANAWA Platform
+================================================================================
+
+Last Updated: 2026-11-14
+
+================================================================================
+PROCESSOR DIRECTORY
+================================================================================
+
+1. GENIUSPAY - Payment Processing
+   Location: Munich, Germany (EU)
+   Contact: dpo@geniuspay.de
+   Data: Payments, transactions, billing
+   Retention: 7 years
+   Security: PCI-DSS Level 1
+   DPA: Signed
+
+2. FIREBASE - Notifications & Real-time
+   Location: USA + EU data centers
+   Contact: dpo-eu@google.com
+   Data: Push tokens, activity, analytics
+   Retention: 14 months
+   Security: ISO 27001
+   DPA: Signed
+
+3. MAILJET - Email Service
+   Location: Paris, France (EU)
+   Contact: dpo@mailjet.com
+   Data: Emails, contacts
+   Retention: 90 days
+   Security: ISO 27001
+   DPA: Signed
+
+4. TWILIO - SMS & Voice
+   Location: San Francisco, USA
+   Contact: privacy@twilio.com
+   Data: Phone numbers, SMS, calls
+   Retention: 30-90 days
+   Security: SOC 2 Type II
+   DPA: Signed
+
+5. CLOUDINARY - Image Storage
+   Location: Tel Aviv, Israel
+   Contact: privacy@cloudinary.com
+   Data: Profile images, photos
+   Retention: 90 days (inactive)
+   Security: ISO 27001
+   DPA: Signed
+
+6. GOOGLE ANALYTICS - Usage Analytics
+   Location: USA + EU servers
+   Contact: dpo-eu@google.com
+   Data: Page views, user sessions
+   Retention: 14 months
+   Security: ISO 27001
+   DPA: Signed
+
+7. AWS - Cloud Infrastructure
+   Location: Frankfurt, Germany (EU)
+   Contact: aws-privacy@amazon.com
+   Data: All encrypted data, backups
+   Retention: 30 days
+   Security: ISO 27001, SOC 2 Type II
+   DPA: Signed
+
+8. SENTRY - Error Tracking
+   Location: San Francisco, USA
+   Contact: privacy@sentry.io
+   Data: Error messages, stack traces
+   Retention: 90 days
+   Security: SOC 2 Type II
+   DPA: Signed
+
+================================================================================
+SUMMARY
+================================================================================
+
+All 8 processors have:
+- Data Processing Agreements (DPA) signed
+- Standard Contractual Clauses (SCC) in place
+- GDPR compliance verified
+- Appropriate security certifications
+
+Users have rights to:
+- Request data access
+- Request data deletion
+- Opt out of analytics
+- Object to processor use
+
+For questions: privacy@manawa.app
+
+================================================================================

@@ -875,6 +875,65 @@ describe('POST /api/auth/admin-renew', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// POST /api/auth/setup-admin  (ADMIN + SUPER + secret requis)
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('POST /api/auth/setup-admin', () => {
+  beforeEach(() => {
+    process.env.SUPER_ADMIN_SETUP_SECRET = 'super-secret-123';
+    // findUnique est appelé avec req.user.id (l'admin qui envoie la requête)
+    prisma.user.findUnique.mockResolvedValue({
+      ...mockAdminUser,
+      adminLevel: 'SUPER',
+    });
+    prisma.$executeRaw.mockResolvedValue(1);
+    prisma.adminLog.create.mockResolvedValue({});
+  });
+
+  test('200 — SUPER admin peut créer l\'admin initial', async () => {
+    const res = await request(app)
+      .post('/api/auth/setup-admin')
+      .set('Authorization', `Bearer ${adminToken()}`)
+      .send({ superAdminSecret: 'super-secret-123' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+  });
+
+  test('403 — STANDARD admin refusé', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      ...mockAdminUser,
+      adminLevel: 'STANDARD',
+    });
+
+    const res = await request(app)
+      .post('/api/auth/setup-admin')
+      .set('Authorization', `Bearer ${adminToken()}`)
+      .send({ superAdminSecret: 'super-secret-123' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/super administrateur/i);
+  });
+
+  test('403 — secret superAdmin incorrect', async () => {
+    const res = await request(app)
+      .post('/api/auth/setup-admin')
+      .set('Authorization', `Bearer ${adminToken()}`)
+      .send({ superAdminSecret: 'wrong-secret' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/secret/i);
+  });
+
+  test('401 — non authentifié', async () => {
+    const res = await request(app)
+      .post('/api/auth/setup-admin')
+      .send({ superAdminSecret: 'super-secret-123' });
+
+    expect(res.status).toBe(401);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // POST /api/auth/unlock  (ADMIN uniquement)
 // ═══════════════════════════════════════════════════════════════════════════════
 describe('POST /api/auth/unlock', () => {

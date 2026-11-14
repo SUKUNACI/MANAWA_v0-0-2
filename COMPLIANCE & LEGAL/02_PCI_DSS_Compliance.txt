@@ -1,0 +1,128 @@
+================================================================================
+                         PCI-DSS COMPLIANCE
+                        Payment Security Rules
+================================================================================
+
+Applicable à: Payment processing via GeniusPay
+Last Updated: 2026-11-14
+Status: ✅ COMPLIANT
+
+================================================================================
+WHAT IS PCI-DSS?
+================================================================================
+
+PCI-DSS (Payment Card Industry Data Security Standard) protects credit card
+data during transactions. All businesses accepting cards must comply.
+
+================================================================================
+KEY REQUIREMENTS
+================================================================================
+
+1. FIREWALL & NETWORK
+   ✅ Firewall enabled on all infrastructure
+   ✅ Unnecessary ports closed
+   ✅ Database on private network (not public)
+   ✅ Only HTTP (80), HTTPS (443), API (3000) open
+
+2. PROTECT CARDHOLDER DATA
+   ✅ Credit card data NOT stored by MANAWA (GeniusPay handles)
+   ✅ Database encryption enabled
+   ✅ Backups encrypted
+   ✅ No card numbers in application logs
+
+3. ENCRYPT DATA IN TRANSIT
+   ✅ HTTPS/TLS 1.2+ on all endpoints
+   ✅ Valid SSL certificate installed
+   ✅ All API calls encrypted
+   ✅ WebSocket connections encrypted
+
+4. ACCESS CONTROL
+   ✅ Role-based access control (RBAC) implemented
+   ✅ Users can only access their own data
+   ✅ Admin access restricted to authorized staff
+   ✅ Access logs maintained
+
+5. MONITORING & TESTING
+   ✅ Firewall logs reviewed regularly
+   ✅ Intrusion detection enabled
+   ✅ Unauthorized attempts logged
+   ✅ Alert system for suspicious activity
+
+6. SECURITY POLICIES
+   ✅ Data retention policy documented
+   ✅ Incident response procedure ready
+   ✅ Staff security training required
+   ✅ Annual compliance audit scheduled
+
+================================================================================
+WHAT MANAWA HANDLES vs GENIUSPAY
+================================================================================
+
+GeniusPay Handles (PCI-DSS Level 1):
+  ✅ Card tokenization
+  ✅ Secure payment processing
+  ✅ Data encryption
+  ✅ PCI compliance certification
+
+MANAWA Stores ONLY:
+  ✅ Transaction IDs (GP_12345678)
+  ✅ Amounts (250.00 EUR)
+  ✅ Timestamps
+  ✅ Payment status (pending, completed, failed)
+  ✅ User IDs
+
+MANAWA NEVER Stores:
+  ❌ Credit card numbers
+  ❌ CVV codes
+  ❌ Expiry dates
+  ❌ Cardholder names
+  ❌ Bank account numbers
+
+================================================================================
+BREACH RESPONSE PROCEDURE
+================================================================================
+
+IF PAYMENT BREACH OCCURS:
+
+Within 1 Hour:
+  1. Disable affected accounts
+  2. Stop all payment processing
+  3. Notify GeniusPay security team
+  4. Document incident details
+
+Within 24 Hours:
+  1. Forensic investigation begins
+  2. Notify PCI-DSS authorities
+  3. Notify affected customers
+  4. Update incident response log
+
+Within 72 Hours:
+  1. Report to relevant authorities
+  2. Begin corrective actions
+  3. Conduct root cause analysis
+  4. Implement preventive measures
+
+================================================================================
+COMPLIANCE VERIFICATION
+================================================================================
+
+Control                          Status
+─────────────────────────────────────────────────────────────────────────────
+HTTPS/TLS                        ✅ Active
+Firewall                         ✅ Configured
+Database Encryption              ✅ Enabled
+Access Controls                  ✅ Implemented
+Logging                          ✅ 90-day retention
+Incident Response                ✅ Documented
+GeniusPay DPA                     ✅ Signed
+
+================================================================================
+CONTACT
+================================================================================
+
+GeniusPay Support: support@geniuspay.com
+MANAWA Security: security@manawa.app
+
+================================================================================
+END OF DOCUMENT
+================================================================================

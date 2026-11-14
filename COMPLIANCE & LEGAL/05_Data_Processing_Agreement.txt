@@ -1,0 +1,203 @@
+================================================================================
+                   DATA PROCESSING AGREEMENT (DPA)
+                        MANAWA Platform
+================================================================================
+
+Effective Date: 2026-11-14
+Last Updated: 2026-11-14
+
+================================================================================
+PURPOSE
+================================================================================
+
+This agreement establishes terms under which MANAWA (Data Controller)
+engages third-party service providers (Data Processors) to process personal
+data on its behalf, in compliance with GDPR Article 28.
+
+================================================================================
+PROCESSOR OBLIGATIONS
+================================================================================
+
+Each processor agrees to:
+
+1. PROCESS DATA ONLY ON INSTRUCTIONS
+   ✅ Only process data as directed by MANAWA
+   ✅ No independent use of personal data
+   ✅ Comply with GDPR and local laws
+
+2. MAINTAIN CONFIDENTIALITY
+   ✅ Employees must sign confidentiality agreements
+   ✅ No unauthorized access to data
+   ✅ Data deleted after contract termination
+
+3. IMPLEMENT SECURITY
+   ✅ Encryption in transit and at rest
+   ✅ Access controls and authentication
+   ✅ Regular security audits
+   ✅ Incident response procedures
+
+4. AUDIT & COMPLIANCE
+   ✅ Annual security audit
+   ✅ Provide audit reports to MANAWA
+   ✅ Allow MANAWA to verify compliance
+   ✅ Notify MANAWA of legal requests
+
+5. SUB-PROCESSOR MANAGEMENT
+   ✅ Notify MANAWA of any sub-processors
+   ✅ Require sub-processors to sign DPA
+   ✅ MANAWA can object to new sub-processors
+
+================================================================================
+MANAWA'S OBLIGATIONS
+================================================================================
+
+MANAWA agrees to:
+
+1. PROVIDE CLEAR INSTRUCTIONS
+   ✅ Define what data can be processed
+   ✅ Specify processing purposes
+   ✅ Outline data retention periods
+   ✅ Describe security requirements
+
+2. MONITOR COMPLIANCE
+   ✅ Regular compliance audits
+   ✅ Request proof of security measures
+   ✅ Verify data protection practices
+   ✅ Review incident reports
+
+================================================================================
+DATA SUBJECT RIGHTS
+================================================================================
+
+Processors must support MANAWA in enabling:
+
+RIGHT TO ACCESS:
+  ✅ Provide data in machine-readable format
+  ✅ Respond within 30 days
+
+RIGHT TO ERASURE:
+  ✅ Delete data upon request
+  ✅ Confirm deletion in writing
+
+RIGHT TO RECTIFICATION:
+  ✅ Allow users to correct data
+  ✅ Update records promptly
+
+RIGHT TO DATA PORTABILITY:
+  ✅ Export data in structured format
+  ✅ Support data transfers
+
+================================================================================
+DATA BREACH NOTIFICATION
+================================================================================
+
+If a breach occurs, processor must:
+
+WITHIN 24 HOURS:
+  1. Notify MANAWA
+  2. Details of breach
+  3. Data affected
+  4. Likely consequences
+  5. Measures taken
+
+ASSIST WITH NOTIFICATIONS:
+  • Help notify affected users
+  • Notify authorities if required
+  • Provide evidence for investigation
+
+PREVENT RECURRENCE:
+  • Root cause analysis
+  • Corrective actions
+  • Audit verification
+
+================================================================================
+DATA DELETION & RETURN
+================================================================================
+
+UPON TERMINATION:
+
+DELETE PERSONAL DATA:
+  ✅ Remove all copies of user data
+  ✅ Confirm deletion in writing
+  ✅ Retain only if legally required
+
+AUDIT TRAIL:
+  ✅ Maintain records of deletion
+  ✅ Provide deletion certificates
+  ✅ Archive for 7 years
+
+================================================================================
+TERM & TERMINATION
+================================================================================
+
+• Agreement effective upon signature
+• Renews annually unless terminated
+• Either party may terminate with 30 days notice
+• Data handling terms survive termination
+
+================================================================================
+INTERNATIONAL TRANSFERS
+================================================================================
+
+FOR DATA TRANSFERS OUTSIDE EU:
+
+STANDARD CONTRACTUAL CLAUSES (SCCs):
+  ✅ Required for non-EU processors
+  ✅ Transfers must comply with GDPR Chapter 5
+
+ADEQUACY DECISIONS:
+  ✅ EU adequately protects data
+  ✅ Processors must maintain equivalence
+
+================================================================================
+APPENDIX A: PROCESSING DETAILS
+================================================================================
+
+Data Types:        Personal, financial, communication
+Purpose:           Service delivery, support, analytics
+Retention Period:  Per Privacy Policy
+Processor:         [Service Name]
+Subprocessors:     [List if any]
+
+================================================================================
+APPENDIX B: PROCESSOR RESPONSIBILITIES
+================================================================================
+
+SECURITY:
+  • Encryption in transit and at rest
+  • Access control and authentication
+  • Audit logs for 90 days
+  • Regular security updates
+
+COMPLIANCE:
+  • Annual audit
+  • Incident response
+  • Breach notification
+
+SUPPORT:
+  • Data export on request
+  • Data deletion on request
+  • Breach notification
+
+================================================================================
+SIGNATURES
+================================================================================
+
+By signing below, both parties agree to this Data Processing Agreement.
+
+Party                 Name                Date        Signature
+───────────────────────────────────────────────────────────────────
+MANAWA               [CEO Name]         2026-11-14   __________
+Processor            [Contact Name]     __________   __________
+
+================================================================================
+THIS DPA IS INCORPORATED BY REFERENCE INTO THE SERVICE AGREEMENT
+AND TAKES PRECEDENCE IN MATTERS OF DATA PROTECTION
+================================================================================
+
+Last Updated: 2026-11-14
+Next Review: 2027-11-14
+
+================================================================================
+END OF DOCUMENT
+================================================================================

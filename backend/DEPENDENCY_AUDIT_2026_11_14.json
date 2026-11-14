@@ -1,0 +1,423 @@
+{
+  "audit_metadata": {
+    "project": "MANAWA Backend",
+    "node_version": "26.5.0",
+    "npm_version": "12.0.1",
+    "scan_date": "2026-11-14",
+    "total_dependencies_prod": 57,
+    "total_dependencies_dev": 7,
+    "total_transitive": 841
+  },
+  "vulnerabilities": {
+    "critical": [],
+    "high": [],
+    "moderate": [],
+    "low": [
+      {
+        "package": "deepmerge",
+        "severity": "low",
+        "cve": "GHSA-gcqx-w48m-w2h4",
+        "title": "Prototype poisoning via mergeObject()",
+        "description": "deepmerge mergeObject() allows prototype poisoning of returned objects (CWE-1321)",
+        "cvss_score": 5.3,
+        "affected_range": ">=4.2.0 <=4.3.1",
+        "current_version": "4.3.0",
+        "fix_version": ">=4.3.2",
+        "fix_available": true,
+        "reason_not_fixed": "Jest major version bump required (30 to 25 = breaking change with forced downgrade)"
+      },
+      {
+        "package": "jest",
+        "severity": "low",
+        "chain": "jest -> @jest/core -> jest-config -> deepmerge",
+        "current_version": "30.5.2",
+        "transitive_vulnerable": "deepmerge vulnerability propagates",
+        "notes": "Devdependency only, not in production"
+      }
+    ],
+    "info": 0,
+    "total_vulnerabilities": 5,
+    "npm_audit_score": 95
+  },
+  "outdated_packages": {
+    "major_updates_available": 14,
+    "minor_updates_available": 10,
+    "patch_updates_available": 3,
+    "critical_outdated": [
+      {
+        "package": "@prisma/client",
+        "current": "5.22.0",
+        "wanted": "5.22.0",
+        "latest": "7.10.1",
+        "update_type": "major",
+        "breaking_changes": true,
+        "notes": "Major version jump, migration required"
+      },
+      {
+        "package": "prisma",
+        "current": "5.22.0",
+        "wanted": "5.22.0",
+        "latest": "8.0.0-rc.33",
+        "update_type": "major",
+        "breaking_changes": true,
+        "notes": "RC version, coordinate with @prisma/client"
+      },
+      {
+        "package": "@sentry/node",
+        "current": "10.78.0",
+        "wanted": "10.78.0",
+        "latest": "11.12.0",
+        "update_type": "major",
+        "breaking_changes": true
+      },
+      {
+        "package": "express",
+        "current": "4.22.3",
+        "wanted": "4.22.3",
+        "latest": "5.3.0",
+        "update_type": "major",
+        "breaking_changes": true,
+        "notes": "Major API changes expected"
+      },
+      {
+        "package": "bcryptjs",
+        "current": "2.4.3",
+        "wanted": "2.4.3",
+        "latest": "3.0.3",
+        "update_type": "major",
+        "breaking_changes": true,
+        "security_impact": "minor - new major likely includes better hashing",
+        "notes": "CRITICAL for auth - thorough testing required"
+      },
+      {
+        "package": "express-rate-limit",
+        "current": "7.5.1",
+        "wanted": "7.5.1",
+        "latest": "8.7.4",
+        "update_type": "major",
+        "breaking_changes": true,
+        "security_impact": "high - used for API protection"
+      },
+      {
+        "package": "firebase-admin",
+        "current": "14.5.0",
+        "wanted": "14.5.1",
+        "latest": "14.5.1",
+        "update_type": "patch",
+        "breaking_changes": false,
+        "is_patch": true,
+        "action": "Should update immediately (simple patch)"
+      }
+    ]
+  },
+  "unused_dependencies": {
+    "production": [
+      {
+        "package": "ioredis",
+        "reason": "Installed but not directly imported in main code. May be used transitively via bull or conditionally.",
+        "severity": "medium",
+        "recommendation": "Verify if needed - appears in bull dependency chain"
+      },
+      {
+        "package": "lru-cache",
+        "reason": "Installed but not imported. May be optional dependency or transitive.",
+        "severity": "low",
+        "recommendation": "Check if this should be removed"
+      },
+      {
+        "package": "pino-pretty",
+        "reason": "Installed but not directly imported. May be used for pretty-printing logs in dev.",
+        "severity": "low",
+        "recommendation": "Consider moving to devDependencies"
+      }
+    ],
+    "devDependencies": [
+      {
+        "package": "@types/jest",
+        "reason": "TypeScript types for Jest not used (no .ts tests detected)",
+        "severity": "low",
+        "recommendation": "Remove if not using TypeScript"
+      },
+      {
+        "package": "chai",
+        "reason": "Installed but not used. Jest is primary test framework.",
+        "severity": "low",
+        "recommendation": "Remove or migrate all tests to Chai if switching"
+      },
+      {
+        "package": "eslint",
+        "reason": "Installed but not referenced in scripts or used actively",
+        "severity": "medium",
+        "recommendation": "Set up eslint config and pre-commit hook or remove"
+      }
+    ]
+  },
+  "missing_dependencies": {
+    "critical_blocking": [
+      {
+        "package": "uuid",
+        "used_in": [
+          "tests/routes/auth-2fa-unit.test.js",
+          "tests/routes/auth-2fa.test.js",
+          "tests/routes/payments-retry-unit.test.js",
+          "tests/routes/payments-retry.test.js",
+          "routes/videoCalls.js"
+        ],
+        "severity": "CRITICAL",
+        "status": "BLOCKING - causes runtime error",
+        "fix": "npm install uuid"
+      },
+      {
+        "package": "@playwright/test",
+        "used_in": [
+          "tests/backoffice-authenticated.e2e.js",
+          "tests/backoffice-manual-auth.e2e.js",
+          "tests/backoffice.e2e.js"
+        ],
+        "severity": "CRITICAL",
+        "type": "devDependency",
+        "status": "E2E tests cannot run",
+        "fix": "npm install --save-dev @playwright/test"
+      },
+      {
+        "package": "aws-sdk",
+        "used_in": ["scripts/backup-manager.js", "routes/admin-recovery.js", "config/backup-strategy.js"],
+        "severity": "CRITICAL",
+        "status": "Backup/recovery features disabled",
+        "fix": "npm install aws-sdk"
+      }
+    ],
+    "high_priority": [
+      {
+        "package": "node-fetch",
+        "used_in": ["utils/rollback-manager.js"],
+        "severity": "HIGH",
+        "status": "Rollback utility cannot function",
+        "fix": "npm install node-fetch"
+      },
+      {
+        "package": "@google-cloud/storage",
+        "used_in": ["scripts/backup-manager.js"],
+        "severity": "HIGH",
+        "status": "GCS backup strategy disabled",
+        "fix": "npm install @google-cloud/storage"
+      },
+      {
+        "package": "raw-body",
+        "used_in": ["routes/webhooks-geniuspay.js"],
+        "severity": "HIGH",
+        "status": "Payment webhook handling broken",
+        "fix": "npm install raw-body"
+      }
+    ],
+    "medium_priority": [
+      {
+        "package": "glob",
+        "used_in": ["scripts/minify.js"],
+        "severity": "MEDIUM",
+        "fix": "npm install glob"
+      },
+      {
+        "package": "terser",
+        "used_in": ["scripts/minify.js"],
+        "severity": "MEDIUM",
+        "fix": "npm install terser"
+      }
+    ],
+    "other": [
+      {
+        "package": "k6",
+        "used_in": ["tests/performance/k6-load-test.mjs"],
+        "severity": "LOW",
+        "type": "load testing tool (external binary)",
+        "notes": "May be installed separately as CLI, not npm package"
+      }
+    ]
+  },
+  "deprecated_packages": {
+    "found": 0,
+    "packages": []
+  },
+  "duplicate_dependencies": {
+    "note": "npm v12 uses lockfile management. Check package-lock.json for duplicate resolution.",
+    "found": 0,
+    "examples": []
+  },
+  "license_compliance": {
+    "gpl_found": false,
+    "agpl_found": false,
+    "copyleft_found": false,
+    "risky_licenses": [],
+    "status": "PASS - No GPL/AGPL licenses detected"
+  },
+  "node_compatibility": {
+    "current_node_version": "26.5.0",
+    "package_json_engines_specified": false,
+    "recommendation": "Add engines field to package.json",
+    "suggested_engines": {
+      "node": ">=18.0.0",
+      "npm": ">=9.0.0"
+    }
+  },
+  "peer_dependencies": {
+    "unmet": 0,
+    "issues": [],
+    "status": "PASS - No peer dependency conflicts"
+  },
+  "bundle_size_impact": {
+    "heavy_dependencies": [
+      {
+        "package": "firebase-admin",
+        "reason": "Full Firebase SDK with many modules",
+        "mitigation": "Only import what you need: import admin from firebase-admin/app"
+      },
+      {
+        "package": "cloudinary",
+        "reason": "Image processing library",
+        "mitigation": "Consider lazy-loading if not always needed"
+      },
+      {
+        "package": "jest",
+        "reason": "Comprehensive test framework",
+        "note": "DevDependency - not bundled to production"
+      }
+    ]
+  },
+  "critical_findings": [
+    {
+      "finding_id": "MISSING_DEPS_001",
+      "title": "CRITICAL: Missing production dependencies",
+      "severity": "CRITICAL",
+      "description": "8 required dependencies not installed. Code will crash at runtime when imported.",
+      "affected": [
+        "uuid (auth, payments, video calls)",
+        "aws-sdk (backup system)",
+        "@google-cloud/storage (GCS backup)",
+        "node-fetch (rollback manager)",
+        "raw-body (payment webhooks)",
+        "@playwright/test (E2E tests)",
+        "glob (minify script)",
+        "terser (minify script)"
+      ],
+      "fix_command": "npm install uuid aws-sdk @google-cloud/storage node-fetch raw-body glob terser && npm install --save-dev @playwright/test",
+      "action": "IMMEDIATE"
+    },
+    {
+      "finding_id": "VULN_001",
+      "title": "Prototype poisoning in deepmerge (devDependency)",
+      "severity": "MEDIUM",
+      "description": "deepmerge 4.3.0-4.3.1 allows prototype pollution. Affects jest test framework.",
+      "impact": "Test runner could be compromised. DevDependency only (not production).",
+      "cvss_score": 5.3,
+      "fix_option_1": "Accept risk (devDependency only, low impact)",
+      "fix_option_2": "Downgrade jest to 25.1.0 (breaking change, major version downgrade)",
+      "recommendation": "Accept risk for now, plan jest upgrade in next major version cycle"
+    },
+    {
+      "finding_id": "SECURITY_001",
+      "title": "Authentication library outdated (bcryptjs)",
+      "severity": "HIGH",
+      "description": "bcryptjs 2.4.3 is 2 major versions behind (latest 3.0.3)",
+      "impact": "May miss security improvements, password hashing could be suboptimal",
+      "recommendation": "Upgrade to bcryptjs@3.0.3 with full auth test suite validation",
+      "test_coverage": "All 2FA, login, password reset tests must pass"
+    },
+    {
+      "finding_id": "SECURITY_002",
+      "title": "Rate limiting outdated (express-rate-limit)",
+      "severity": "HIGH",
+      "description": "express-rate-limit 7.5.1 is 1 major version behind (latest 8.7.4)",
+      "impact": "API DoS protection may be ineffective or have vulnerabilities",
+      "recommendation": "Upgrade to express-rate-limit@8.7.4 as part of security hardening"
+    },
+    {
+      "finding_id": "DATABASE_001",
+      "title": "Prisma database ORM 2 versions behind",
+      "severity": "MEDIUM",
+      "description": "Prisma 5.22.0 is 2 major versions behind (latest 7.10.1)",
+      "impact": "Missing database features, performance improvements, security patches",
+      "recommendation": "Plan Prisma v7 migration with full regression testing"
+    },
+    {
+      "finding_id": "UNUSED_001",
+      "title": "Unused dependencies consuming disk space",
+      "severity": "LOW",
+      "description": "ioredis, lru-cache, pino-pretty installed but not directly imported",
+      "recommendation": "Verify necessity; consider removing or documenting why they're needed"
+    },
+    {
+      "finding_id": "DEV_001",
+      "title": "Unused devDependencies",
+      "severity": "LOW",
+      "description": "@types/jest, chai, eslint installed but not used",
+      "recommendation": "Remove unused or activate linting/type checking"
+    },
+    {
+      "finding_id": "CONFIG_001",
+      "title": "No Node.js version constraint in package.json",
+      "severity": "MEDIUM",
+      "description": "Missing 'engines' field - developers may use incompatible Node versions",
+      "recommendation": "Add: \"engines\": {\"node\": \">=18.0.0\", \"npm\": \">=9.0.0\"}"
+    }
+  ],
+  "summary": {
+    "npm_audit_score": 95,
+    "total_vulnerabilities": 5,
+    "vulnerabilities_critical": 0,
+    "vulnerabilities_high": 0,
+    "vulnerabilities_moderate": 0,
+    "vulnerabilities_low": 5,
+    "vulnerabilities_production": 0,
+    "vulnerabilities_dev": 5,
+    "missing_dependencies": 8,
+    "outdated_packages": 27,
+    "unused_packages": 6,
+    "overall_status": "FAIL - Missing dependencies blocking execution",
+    "action_items_blocking": 1,
+    "action_items_high": 3,
+    "action_items_medium": 5,
+    "action_items_low": 4
+  },
+  "recommendations_priority_order": [
+    {
+      "priority": 1,
+      "action": "Install missing dependencies immediately",
+      "command": "npm install uuid aws-sdk @google-cloud/storage node-fetch raw-body glob terser && npm install --save-dev @playwright/test"
+    },
+    {
+      "priority": 2,
+      "action": "Update firebase-admin patch (14.5.0 -> 14.5.1)",
+      "command": "npm install firebase-admin@14.5.1"
+    },
+    {
+      "priority": 3,
+      "action": "Upgrade bcryptjs for auth security",
+      "command": "npm install bcryptjs@3.0.3 && npm test -- --testPathPattern=auth"
+    },
+    {
+      "priority": 4,
+      "action": "Upgrade express-rate-limit for API protection",
+      "command": "npm install express-rate-limit@8.7.4"
+    },
+    {
+      "priority": 5,
+      "action": "Add Node.js version constraint to package.json",
+      "action_json": "\"engines\": {\"node\": \">=18.0.0\", \"npm\": \">=9.0.0\"}"
+    },
+    {
+      "priority": 6,
+      "action": "Plan Prisma v7 migration (medium-term)",
+      "notes": "Requires regression testing, database schema validation"
+    },
+    {
+      "priority": 7,
+      "action": "Verify unused dependencies necessity",
+      "affected": ["ioredis", "lru-cache", "pino-pretty", "@types/jest", "chai", "eslint"]
+    },
+    {
+      "priority": 8,
+      "action": "Set up npm audit in CI/CD",
+      "notes": "Run npm audit on every commit, fail on high/critical"
+    }
+  ]
+}

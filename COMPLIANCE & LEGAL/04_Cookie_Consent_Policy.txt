@@ -1,0 +1,184 @@
+================================================================================
+                      COOKIE CONSENT POLICY
+                            MANAWA Platform
+================================================================================
+
+Effective Date: 2026-11-14
+Applies to: All website visitors
+
+================================================================================
+WHAT ARE COOKIES?
+================================================================================
+
+Cookies are small files stored on your computer that help websites remember
+information about you. Used for:
+  • Keeping you logged in
+  • Remembering preferences
+  • Analyzing website usage
+  • Showing relevant content
+
+================================================================================
+TYPES OF COOKIES ON MANAWA
+================================================================================
+
+1️⃣ ESSENTIAL COOKIES (Always Active - No Consent Needed)
+
+These cookies are REQUIRED for MANAWA to function properly.
+
+   Cookie Name        Purpose                      Duration
+   ────────────────────────────────────────────────────────────────
+   session_id         Keeps you logged in         Until logout
+   csrf_token         Security (prevents attacks) Session
+   user_preferences   Language/theme choice       1 year
+   payment_status     Payment processing          Session
+   auth_token         JWT authentication          7 days
+
+WHY ESSENTIAL?
+  • Without session_id: You'd need to login on every page
+  • Without csrf_token: Attackers could hijack your account
+  • Without payment_status: Payments would fail
+
+
+2️⃣ ANALYTICS COOKIES (Requires Your Consent)
+
+These track how you use MANAWA to help us improve.
+
+   Cookie Name        Tool                Duration
+   ────────────────────────────────────────────────────
+   _ga                Google Analytics    2 years
+   _gid               Google Analytics    24 hours
+   amplitude_id       Amplitude Analytics 10 years
+
+WHAT WE LEARN:
+  ✓ Which pages you visit
+  ✓ How long you stay
+  ✓ What you click on
+  ✓ Where you came from
+
+NOTE: No personal data shared. Only anonymous statistics.
+
+
+3️⃣ MARKETING COOKIES (Requires Your Consent)
+
+These help us show you relevant ads and measure effectiveness.
+
+   Cookie Name        Tool                Duration
+   ────────────────────────────────────────────────────
+   fbp                Facebook Pixel      90 days
+   gclid              Google Ads          Session
+   utm_source         Our tracking        Session
+
+HOW WE USE IT:
+  • Show ads for MANAWA on Facebook/Google
+  • Measure if ads work
+  • Retarget users who visited but didn't book
+
+
+4️⃣ FUNCTIONAL COOKIES (Requires Your Consent)
+
+These enhance your experience with additional features.
+
+   Cookie Name              Purpose                 Duration
+   ─────────────────────────────────────────────────────────────
+   notification_pref        Your notification pref  1 year
+   recent_searches          Your search history     30 days
+   favorites                Your bookmarked pros    1 year
+
+================================================================================
+COOKIE CONSENT BANNER
+================================================================================
+
+When you first visit MANAWA, you see:
+
+   ┌────────────────────────────────────────────┐
+   │  🍪 We use cookies to improve experience  │
+   │  [Accept All] [Reject All] [Settings]     │
+   └────────────────────────────────────────────┘
+
+WHAT EACH BUTTON DOES:
+
+Accept All:
+  ✅ Essential      (always)
+  ✅ Analytics      (yes)
+  ✅ Marketing      (yes)
+  ✅ Functional     (yes)
+
+Reject All:
+  ✅ Essential      (always)
+  ❌ Analytics      (no)
+  ❌ Marketing      (no)
+  ❌ Functional     (no)
+
+Settings:
+  • Choose which types to allow
+  • Different per category
+
+================================================================================
+YOUR RIGHTS
+================================================================================
+
+YOU CAN:
+  ✅ Change consent anytime (click "Cookie Settings")
+  ✅ View what cookies we store
+  ✅ Request deletion of tracking cookies
+  ✅ Use MANAWA without analytics (service still works)
+
+WE CANNOT:
+  ❌ Delete essential cookies (site won't work without them)
+  ❌ Stop tracking if you accept analytics
+  ❌ Honor opt-out if you accept marketing cookies
+
+================================================================================
+MANAGING COOKIES IN YOUR BROWSER
+================================================================================
+
+Chrome:    Settings → Privacy → Cookies
+Firefox:   Preferences → Privacy → Cookies
+Safari:    Preferences → Privacy → Cookies
+Edge:      Settings → Privacy → Cookies
+
+================================================================================
+THIRD-PARTY COOKIES
+================================================================================
+
+MANAWA uses cookies from:
+  • Google Analytics (analytics)
+  • Facebook Pixel (marketing)
+  • GeniusPay (payments)
+  • Firebase (notifications)
+
+These companies also set their own cookies per their privacy policies.
+
+================================================================================
+DATA RETENTION
+================================================================================
+
+Cookie Type          Retained Until
+─────────────────────────────────────────────────────
+Essential            Until logout
+Analytics            2 years
+Marketing            90 days
+Functional           1 year
+
+After retention period, cookies are automatically deleted.
+
+================================================================================
+COMPLIANCE
+================================================================================
+
+This policy complies with:
+  ✅ GDPR Cookie Law
+  ✅ ePrivacy Directive
+  ✅ Cookie Law (EU 2009/136/EC)
+
+================================================================================
+CONTACT
+================================================================================
+
+For questions about cookies:
+  Email: privacy@manawa.app
+  Address: [Company Address]
+
+================================================================================
+END OF DOCUMENT
+================================================================================
