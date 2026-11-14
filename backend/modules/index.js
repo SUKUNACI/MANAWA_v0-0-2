@@ -17,6 +17,12 @@ const ProfessionalModule = require('./professional');
 const ProjectModule = require('./project');
 const QuoteModule = require('./quote');
 const MessageModule = require('./message');
+const UserModule = require('./user');
+const VerificationModule = require('./verification');
+const FinanceModule = require('./finance');
+const SubscriptionModule = require('./subscription');
+const PaymentRetryModule = require('./paymentRetry');
+const RolePermissionModule = require('./rolePermission');
 
 /**
  * Create module instances with Prisma dependency injection
@@ -38,6 +44,12 @@ function createModules(prisma, stripe = null) {
     project: new ProjectModule(prisma),
     quote: new QuoteModule(prisma),
     message: new MessageModule(prisma),
+    user: new UserModule(prisma),
+    verification: new VerificationModule(prisma),
+    finance: new FinanceModule(prisma),
+    subscription: new SubscriptionModule(prisma),
+    paymentRetry: new PaymentRetryModule(prisma),
+    rolePermission: new RolePermissionModule(prisma),
   };
 }
 
@@ -54,5 +66,11 @@ module.exports = {
   ProjectModule,
   QuoteModule,
   MessageModule,
+  UserModule,
+  VerificationModule,
+  FinanceModule,
+  SubscriptionModule,
+  PaymentRetryModule,
+  RolePermissionModule,
   createModules,
 };
