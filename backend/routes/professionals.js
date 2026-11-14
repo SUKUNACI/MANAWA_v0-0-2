@@ -82,7 +82,6 @@ router.get('/:id', async (req, res, next) => {
     res.json({
       ...pro,
       followerCount: pro._count.followers,
-      subscription: pro.subscription ?? null,
     });
   } catch (err) {
     next(err);
