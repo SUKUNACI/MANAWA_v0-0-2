@@ -9,6 +9,10 @@ on:
     branches:
       - main
 
+permissions:
+  security-events: write
+  contents: read
+
 jobs:
   gitleaks:
     name: Scan for secrets
