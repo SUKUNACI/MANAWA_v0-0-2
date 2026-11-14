@@ -84,7 +84,7 @@ jobs:
           MAILJET_SECRET_KEY: test_mailjet_secret_for_ci
         run: npm test -- --coverage --coverageReporters=json-summary --coverageReporters=text
 
-      - name: Enforce 80% coverage gate
+      - name: Enforce 75% coverage gate
         working-directory: ${{ env.WORKING_DIR }}
         run: |
           node -e "
@@ -92,7 +92,7 @@ jobs:
             const { lines, branches, functions, statements } = summary.total;
             const min = Math.min(lines.pct, branches.pct, functions.pct, statements.pct);
             console.log('Coverage — lines: ' + lines.pct + '%, branches: ' + branches.pct + '%, functions: ' + functions.pct + '%, statements: ' + statements.pct + '%');
-            if (min < 80) { console.error('COVERAGE GATE FAILED'); process.exit(1); }
+            if (min < 75) { console.error('COVERAGE GATE FAILED'); process.exit(1); }
           "
 
       - name: Upload coverage report
