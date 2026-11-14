@@ -122,6 +122,7 @@ const mockPro = {
   portfolio: [],
   followers: [],
   companyMembers: [],
+  _count: { followers: 5 },
 };
 
 // ─── GET /api/professionals ───────────────────────────────────────────────────

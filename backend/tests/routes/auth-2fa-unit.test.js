@@ -573,7 +573,7 @@ describe('POST /api/v1/auth/2fa/disable', () => {
       .send({ password: 'wrong-password', totpCode: '123456' });
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toContain('mot de passe');
+    expect(res.body.error).toContain('Mot de passe');
   });
 
   test('should return 401 if TOTP is invalid', async () => {

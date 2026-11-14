@@ -190,6 +190,7 @@ describe('PATCH /api/quotes/:id', () => {
     prisma.quote.findUnique.mockResolvedValue(mockQuote);
     prisma.quote.update.mockResolvedValue({ ...mockQuote, status: 'ACCEPTED' });
     prisma.project.findUnique.mockResolvedValue(mockProject);
+    prisma.project.update.mockResolvedValue({ ...mockProject, status: 'IN_PROGRESS' });
   });
 
   test('client peut accepter un devis', async () => {
@@ -350,6 +351,10 @@ describe('EDGE CASES: Quote Lifecycle', () => {
       if (where?.id === CLIENT_USER_ID) return Promise.resolve(mockClientUser);
       return Promise.resolve(null);
     });
+    prisma.quote.findUnique.mockResolvedValue(mockQuote);
+    prisma.quote.update.mockResolvedValue({ ...mockQuote, status: 'ACCEPTED' });
+    prisma.project.update.mockResolvedValue({ ...mockProject, status: 'IN_PROGRESS' });
+    prisma.professional.findUnique.mockResolvedValue(mockPro);
   });
 
   test('Quote almost expiring should show warning', async () => {

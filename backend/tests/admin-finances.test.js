@@ -2,6 +2,36 @@ const request = require('supertest');
 const express = require('express');
 const { adminToken } = require('./helpers');
 
+// ── Mock bulk-operations ────────────────────────────────────────────────────────
+jest.mock('../routes/bulk-operations', () => {
+  const router = require('express').Router();
+  return router;
+});
+
+// ── Mock auth ─────────────────────────────────────────────────────────────────────
+jest.mock('../middleware/auth', () => ({
+  requireAuth: (req, res, next) => {
+    const header = req.headers.authorization;
+    if (!header || !header.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Non authentifié' });
+    }
+    const jwt = require('jsonwebtoken');
+    try {
+      req.user = jwt.verify(header.split(' ')[1], process.env.JWT_SECRET);
+      next();
+    } catch {
+      return res.status(401).json({ error: 'Token invalide' });
+    }
+  },
+  requireRole: (role) => (req, res, next) => {
+    const roles = Array.isArray(role) ? role : [role];
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Accès refusé' });
+    }
+    next();
+  },
+}));
+
 // ── Mock Prisma ────────────────────────────────────────────────────────────────
 jest.mock('../config/db', () => ({
   user: {

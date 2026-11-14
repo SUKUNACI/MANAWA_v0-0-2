@@ -250,13 +250,14 @@ describe('GET /api/professionals/:id', () => {
     expect(res.body).toHaveProperty('subscription', null);
   });
 
-  test('200 — retourne le followerCount depuis prisma.follow.count', async () => {
-    prisma.follow.count.mockResolvedValue(42);
-
+  test('200 — retourne le followerCount depuis _count.followers (optimized, no N+1)', async () => {
+    // Optimized: now uses _count.followers from include, eliminating prisma.follow.count() call
     const res = await request(app).get(`/api/professionals/${PRO_ID}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.followerCount).toBe(42);
+    expect(res.body.followerCount).toBe(10); // from mockProfessional._count.followers
+    // Verify follow.count was NOT called (optimization working)
+    expect(prisma.follow.count).not.toHaveBeenCalled();
   });
 
   test('200 — un client peut voir le profil d\'un pro', async () => {
