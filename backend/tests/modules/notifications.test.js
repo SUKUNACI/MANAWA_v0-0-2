@@ -183,6 +183,21 @@ describe('NotificationsModule', () => {
         expect.objectContaining({
           where: { userId: 'user-1' },
           take: 10,
+          skip: 0,
+        })
+      );
+    });
+
+    test('forwards skip and where for pagination', async () => {
+      prisma.notification.findMany.mockResolvedValue([]);
+
+      await notificationsModule.getRecent('user-1', 30, 30, { userId: 'user-1', isArchived: false });
+
+      expect(prisma.notification.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: 'user-1', isArchived: false },
+          take: 30,
+          skip: 30,
         })
       );
     });

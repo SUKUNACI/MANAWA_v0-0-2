@@ -180,14 +180,17 @@ class NotificationsModule {
    * Get recent notifications for user
    * @param {string} userId - User ID
    * @param {number} limit - Max results
+   * @param {number} skip - Number of records to skip (for pagination)
+   * @param {object|null} where - Prisma where clause override (defaults to { userId })
    * @returns {Promise<Array>} Notifications
    */
-  async getRecent(userId, limit = 20) {
+  async getRecent(userId, limit = 20, skip = 0, where = null) {
     try {
       return await this.prisma.notification.findMany({
-        where: { userId },
+        where: where || { userId },
         orderBy: { createdAt: 'desc' },
         take: limit,
+        skip,
       });
     } catch (err) {
       logger.warn('[NotificationsModule] Failed to get recent notifications', {
