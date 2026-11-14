@@ -10,7 +10,11 @@ const { test, expect } = require('@playwright/test');
 const BACKOFFICE_URL = 'https://manawa-backend.onrender.com/admin/';
 const LOGIN_URL = 'https://manawa-backend.onrender.com/admin/login.html';
 const ADMIN_EMAIL = 'app_manawa@proton.me';
-const ADMIN_PASSWORD = 'PASSWORD_REMOVED';
+const ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD;
+
+if (!ADMIN_PASSWORD) {
+  throw new Error('❌ TEST_ADMIN_PASSWORD n\'est pas défini. Définissez-le dans vos variables d\'environnement avant de lancer les tests E2E.');
+}
 
 test.describe('MANAWA Backoffice - Full Authentication Flow', () => {
   test('1. Login flow and session creation', async ({ page }) => {

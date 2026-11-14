@@ -479,43 +479,6 @@ router.get('/debug/check-columns', async (req, res) => {
   }
 });
 
-// TEMPORARY: Create admin user if missing (ADMIN + SUPER_ADMIN check required)
-router.post('/setup-admin', requireAuth, requireRole('ADMIN'), async (req, res) => {
-  try {
-    // Verify the request is from a SUPER_ADMIN only
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { adminLevel: true },
-    });
-
-    if (user?.adminLevel !== 'SUPER') {
-      return res.status(403).json({ error: 'Accès refusé. Réservé au super administrateur.' });
-    }
-
-    // Require explicit SUPER_ADMIN password from env
-    const { superAdminSecret } = req.body;
-    if (!superAdminSecret || superAdminSecret !== process.env.SUPER_ADMIN_SETUP_SECRET) {
-      return res.status(403).json({ error: 'Secret super admin requis pour cette opération sensible' });
-    }
-
-    const adminEmail = 'app_manawa@proton.me';
-    const password = 'PASSWORD_REMOVED';
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    const result = await prisma.$executeRaw`
-      INSERT INTO "User" (id, email, "passwordHash", "firstName", "lastName", role, "createdAt", "updatedAt")
-      SELECT gen_random_uuid(), ${adminEmail}, ${passwordHash}, ${'Admin'}, ${'MANAWA'}, 'ADMIN'::"UserRole", NOW(), NOW()
-      WHERE NOT EXISTS (SELECT 1 FROM "User" WHERE email = ${adminEmail})
-    `;
-
-    await writeAdminLog(req, 'SETUP_ADMIN', 'User', 'SYSTEM', { result });
-    res.json({ ok: true, message: `Admin setup complete (${result} row affected)` });
-  } catch (err) {
-    logger.error('Setup admin error', { error: err.message });
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // POST /api/auth/unlock — Admin unlock account (requires verification)
 router.post('/unlock', requireAuth, requireRole('ADMIN'), async (req, res) => {
   try {
