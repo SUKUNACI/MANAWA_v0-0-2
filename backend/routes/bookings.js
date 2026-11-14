@@ -1,19 +1,20 @@
+'use strict';
+
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const { param, query, body, validationResult } = require('express-validator');
+const { param, query, body } = require('express-validator');
 const prisma = require('../config/db');
-const { buildPaginationQuery } = require('../utils/sorting-helper');
-const { getSortableFields } = require('../config/sortable-fields');
 const { requireAuth } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
-const { applyPageBasedPagination, validatePageBasedPaginationQuery, buildPaginatedResponse } = require('../utils/pagination-helper');
+const { applyPageBasedPagination, validatePageBasedPaginationQuery } = require('../utils/pagination-helper');
+const BookingModule = require('../modules/booking');
 
 const router = express.Router();
+const bookingModule = new BookingModule(prisma);
 
-// Rate limiters
 const readLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 100, // 100 requests per minute
+  windowMs: 60 * 1000,
+  max: 100,
   keyGenerator: (req) => req.user?.id || req.ip,
   standardHeaders: true,
   legacyHeaders: false,
@@ -21,8 +22,8 @@ const readLimiter = rateLimit({
 });
 
 const writeLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 30, // 30 requests per minute
+  windowMs: 60 * 1000,
+  max: 30,
   keyGenerator: (req) => req.user?.id || req.ip,
   standardHeaders: true,
   legacyHeaders: false,
@@ -41,110 +42,60 @@ router.get('/', readLimiter, requireAuth,
   ],
   handleValidationErrors,
   async (req, res, next) => {
-  try {
-    if (!req.user) return res.status(401).json({ error: 'Non authentifié' });
-    const { status, professionalId, dateFrom, dateTo, search } = req.query;
-    const { limit, skip, offset } = applyPageBasedPagination(req.query, 'bookings');
+    try {
+      const { status, professionalId, dateFrom, dateTo, search } = req.query;
+      const { limit, skip, offset } = applyPageBasedPagination(req.query, 'bookings');
 
-    let where = {};
+      const where = {};
+      if (status) where.status = status;
+      if (professionalId) where.professionalId = professionalId;
+      if (dateFrom || dateTo) {
+        where.date = {};
+        if (dateFrom) where.date.gte = new Date(dateFrom);
+        if (dateTo) where.date.lte = new Date(dateTo);
+      }
+      if (search) {
+        where.OR = [
+          { client: { firstName: { contains: search, mode: 'insensitive' } } },
+          { client: { lastName: { contains: search, mode: 'insensitive' } } },
+          { professional: { user: { firstName: { contains: search, mode: 'insensitive' } } } },
+          { professional: { user: { lastName: { contains: search, mode: 'insensitive' } } } },
+        ];
+      }
 
-    if (status) where.status = status;
-    if (professionalId) where.professionalId = professionalId;
-    if (dateFrom || dateTo) {
-      where.date = {};
-      if (dateFrom) where.date.gte = new Date(dateFrom);
-      if (dateTo) where.date.lte = new Date(dateTo);
-    }
-    if (search) {
-      where.OR = [
-        { client: { firstName: { contains: search, mode: 'insensitive' } } },
-        { client: { lastName: { contains: search, mode: 'insensitive' } } },
-        { professional: { user: { firstName: { contains: search, mode: 'insensitive' } } } },
-        { professional: { user: { lastName: { contains: search, mode: 'insensitive' } } } },
-      ];
-    }
-
-    const [bookings, total] = await Promise.all([
-      prisma.booking.findMany({
+      const { bookings, total, page, pageCount } = await bookingModule.listBookings({
         where,
-        include: {
-          client: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
-          professional: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  firstName: true,
-                  lastName: true,
-                  email: true,
-                },
-              },
-            },
-          },
-          project: true,
-        },
         skip,
         take: limit,
-        orderBy: { date: 'desc' },
-      }),
-      prisma.booking.count({ where }),
-    ]);
+      });
 
-    const page = Math.floor(offset / limit) + 1;
-    res.json({
-      bookings,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    });
-  } catch (err) {
-    next(err);
+      res.json({
+        bookings,
+        pagination: { page: Math.floor(offset / limit) + 1, limit, total, totalPages: pageCount },
+      });
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
 // GET /api/bookings/:id - Get booking detail
 router.get('/:id', requireAuth,
-  [
-    param('id').trim().notEmpty().withMessage('id requis'),
-  ],
+  [param('id').trim().notEmpty().withMessage('id requis')],
   handleValidationErrors,
   async (req, res, next) => {
-  try {
-    if (!req.user) return res.status(401).json({ error: 'Non authentifié' });
-    const booking = await prisma.booking.findUnique({
-      where: { id: req.params.id },
-      include: {
-        client: true,
-        professional: {
-          include: {
-            user: true,
-          },
-        },
-        project: true,
-        auditLog: true,
-      },
-    });
-
-    if (!booking) return res.status(404).json({ error: 'Réservation introuvable' });
-
-    res.json(booking);
-  } catch (err) {
-    next(err);
+    try {
+      const booking = await bookingModule.getDetail(req.params.id);
+      if (!booking) return res.status(404).json({ error: 'Réservation introuvable' });
+      res.json(booking);
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
 // PATCH /api/bookings/:id/cancel - Cancel booking
-router.patch('/:id/cancel', requireAuth,
+router.patch('/:id/cancel', writeLimiter, requireAuth,
   [
     param('id').trim().notEmpty().withMessage('id requis'),
     body('reason').optional().trim().isLength({ max: 500 }).withMessage('reason too long'),
@@ -152,31 +103,14 @@ router.patch('/:id/cancel', requireAuth,
   ],
   handleValidationErrors,
   async (req, res, next) => {
-  try {
-    if (!req.user) return res.status(401).json({ error: 'Non authentifié' });
-    const { reason, notifyByEmail } = req.body;
-
-    const booking = await prisma.booking.update({
-      where: { id: req.params.id },
-      data: {
-        status: 'CANCELLED',
-        cancellationReason: reason || null,
-        cancelledAt: new Date(),
-      },
-      include: {
-        client: true,
-        professional: { include: { user: true } },
-      },
-    });
-
-    if (notifyByEmail) {
-      // TODO: Send email notification to client and professional
+    try {
+      const { reason, notifyByEmail } = req.body;
+      const booking = await bookingModule.cancel(req.params.id, { reason, notifyByEmail });
+      res.json({ success: true, booking });
+    } catch (err) {
+      next(err);
     }
-
-    res.json({ success: true, booking });
-  } catch (err) {
-    next(err);
   }
-});
+);
 
 module.exports = router;
