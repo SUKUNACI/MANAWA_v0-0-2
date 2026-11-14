@@ -1,0 +1,17 @@
+# Gitleaks configuration — rules by default only
+# No custom patterns containing secrets
+
+[build]
+# Use verbose output to help debug
+verbose = false
+
+# Allow unencrypted http (not for production)
+allow-unencrypted-http = false
+
+# Fail on warnings
+fail = true
+
+# Max depth to scan (0 = unlimited)
+max-target-megabytes = 0
+
+# Only use default rules
