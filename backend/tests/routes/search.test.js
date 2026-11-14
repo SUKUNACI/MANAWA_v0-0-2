@@ -39,6 +39,10 @@ jest.mock('../../utils/logger', () => ({
   debug: jest.fn(),
 }));
 
+jest.mock('../../utils/search-cache', () => ({
+  getOrExecute: jest.fn((type, q, params, executeFn) => executeFn()),
+}));
+
 // filter-helper est appelé dans la route — on le laisse réel (logique pure, pas de DB)
 // pagination-helper est utilisé dans la route via import direct — on le laisse réel aussi
 

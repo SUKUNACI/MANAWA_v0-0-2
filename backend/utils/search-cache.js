@@ -38,10 +38,17 @@ class SearchCache {
       // Fall through to DB query
     }
 
-    // Execute query
-    const result = await executeFn();
+    // Execute query (let errors propagate)
+    let result;
+    try {
+      result = await executeFn();
+    } catch (err) {
+      // Re-throw DB errors immediately (don't cache failures)
+      logger.error(`[SearchCache] Query error: ${err.message}`);
+      throw err;
+    }
 
-    // Cache result
+    // Cache result only on success
     try {
       await cache.set(cacheKey, JSON.stringify(result), this.ttl);
       logger.info(`[SearchCache] SET: ${cacheKey} (TTL ${this.ttl}s)`);
