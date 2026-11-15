@@ -113,13 +113,15 @@ class MobileModule {
    * @param {number} limit - Max results per page (default 20, max 50)
    * @param {number} page - Page number (default 1)
    * @param {boolean} unreadOnly - If true, return only unread notifications
+   * @param {boolean} slim - If true, omit heavy fields like data
    * @returns {Promise<object>} { notifications, total, page, limit, unreadCount }
    */
   async getNotifications(
     userId,
     limit = 20,
     page = 1,
-    unreadOnly = false
+    unreadOnly = false,
+    slim = false
   ) {
     try {
       const boundLimit = Math.min(50, Math.max(1, limit));
@@ -145,7 +147,7 @@ class MobileModule {
             read: true,
             createdAt: true,
             // Include data field only if not in slim mode
-            ...(process.env.MOBILE_SLIM_MODE !== 'true' && { data: true }),
+            ...(!slim && { data: true }),
           },
         }),
         this.prisma.notification.count({ where }),
