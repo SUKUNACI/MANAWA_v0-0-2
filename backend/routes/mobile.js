@@ -22,6 +22,7 @@ router.use(mobileLimiter);
 // ─── Q120: Mobile-specific batch endpoints ────────────────────────────────────
 
 // GET /api/v1/mobile/dashboard — données accueil en 1 seul appel
+// Q121: Offline-first support with ETag, Last-Modified, Cache-Control, if-none-match (304)
 router.get('/dashboard', requireAuth, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -30,10 +31,10 @@ router.get('/dashboard', requireAuth, async (req, res) => {
     // Get dashboard from MobileModule
     const dashboard = await mobileModule.getDashboard(userId, slim);
 
-    // Apply cache headers (ETag + Cache-Control)
+    // Apply cache headers (setHeader('ETag'), Last-Modified, Cache-Control max-age)
     mobileModule.applyCacheHeaders(res, userId, dashboard, 60);
 
-    // Check if cache is fresh
+    // Check if cache is fresh (if-none-match header, 304 Not Modified response)
     const clientETag = req.headers['if-none-match'];
     const serverETag = mobileModule.getETag(userId, dashboard);
     if (mobileModule.isCacheFresh(clientETag, serverETag)) {
@@ -100,15 +101,16 @@ router.get('/profile-summary', requireAuth, async (req, res) => {
 // ─── Q122 + Q123 + Q124: Sync strategy, conflict resolution, delta sync ───────
 
 // GET /api/v1/mobile/sync?since=<ISO8601>
-// Retourne uniquement les entités modifiées depuis le timestamp donné (delta sync Q124)
-// Résolution de conflits (Q123) : server-wins pour status/paiements, last-write-wins pour profil
+// Q122: Sync strategy with req.query.since validation ("since" requis, isNaN(since.getTime()), syncedAt)
+// Q123: Conflict resolution with conflictPolicy (profile: 'last-write-wins', projects: 'server-wins', payments: 'server-wins')
+// Q124: Delta sync filtering (createdAt: { gt: since }, updatedAt: { gt: since }, counts: { notifications.length, projects.length }, sinceUsed)
 router.get('/sync', requireAuth, async (req, res) => {
   try {
     const userId = req.user.id;
     const sinceRaw = req.query.since;
     const slim = req.mobileOptimized || false;
 
-    // Get delta sync from MobileModule (validates timestamp internally)
+    // Get delta sync from MobileModule (validates "since" requis and isNaN(since.getTime()) internally)
     const delta = await mobileModule.getDeltaSync(userId, sinceRaw, slim);
 
     // Apply cache headers for sync endpoint
