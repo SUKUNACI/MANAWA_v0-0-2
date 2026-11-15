@@ -11,6 +11,10 @@ describe('RolePermissionModule — Edge Cases', () => {
     jest.clearAllMocks();
   });
 
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('throws 400 when invalid action provided', async () => {
     prisma.adminRoleType.findUnique.mockResolvedValue({ id: 'role-1', name: 'Admin' });
     prisma.rolePermission.findUnique.mockResolvedValue(null);

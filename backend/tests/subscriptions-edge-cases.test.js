@@ -13,6 +13,10 @@ describe('SubscriptionModule — Edge Cases', () => {
     jest.clearAllMocks();
   });
 
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('throws 400 when promo code does not exist', async () => {
     prisma.promoCode.findUnique.mockResolvedValue(null);
 

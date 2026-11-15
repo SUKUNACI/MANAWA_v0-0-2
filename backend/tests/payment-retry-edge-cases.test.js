@@ -13,6 +13,10 @@ describe('PaymentRetryModule — Edge Cases', () => {
     jest.clearAllMocks();
   });
 
+  afterEach(() => {
+    jest.clearAllMocks();
+  });;
+
   it('throws 403 when user not authorized for payment', async () => {
     const payment = {
       quoteId: 'quote-1',
