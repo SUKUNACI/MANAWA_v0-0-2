@@ -108,7 +108,13 @@ async function secretRotationDailyJob() {
       category: 'secret-rotation-job',
       message: 'Daily rotation job completed',
       level: 'info',
-      data: results,
+      data: {
+        total: results.total,
+        autoRotated: results.autoRotated,
+        manualRequired: results.manualRequired,
+        failed: results.failed,
+        durationMs: duration,
+      },
     });
 
     return results;

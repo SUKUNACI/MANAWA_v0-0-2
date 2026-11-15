@@ -3,7 +3,14 @@
  * Defines which secrets to rotate, rotation intervals, and methods
  */
 
-const ROTATION_CONFIG = Object.freeze({
+function deepFreeze(obj) {
+  Object.values(obj).forEach((v) => {
+    if (v && typeof v === 'object') Object.freeze(v);
+  });
+  return Object.freeze(obj);
+}
+
+const ROTATION_CONFIG = deepFreeze({
   // API Keys
   STRIPE_API_KEY: {
     type: 'api_key',

@@ -2,7 +2,6 @@ const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 const { ROTATION_STATUS, ROTATION_TYPE, ROTATION_METHOD } = require('../config/ROTATION_SCHEDULE');
 
-// Use environment DATABASE_URL
 const prisma = new PrismaClient({
   datasources: {
     db: {
@@ -12,24 +11,22 @@ const prisma = new PrismaClient({
 });
 
 class SecretRotationModule {
-  /**
-   * Generate a cryptographically secure random secret
-   */
   static generateNewSecret(type = 'api_key') {
     const length = type === 'password' ? 32 : 48;
-    return crypto.randomBytes(length).toString('base64').replace(/[^a-zA-Z0-9]/g, '').substring(0, length);
+    const raw = crypto.randomBytes(length * 2).toString('base64');
+    const result = raw.replace(/[^a-zA-Z0-9]/g, '').substring(0, length);
+    if (result.length < length) {
+      throw new Error(`Insufficient entropy: got ${result.length}, need ${length}`);
+    }
+    return result;
   }
 
-  /**
-   * Hash a secret using SHA256
-   */
   static hashSecret(secret) {
-    return crypto.createHash('sha256').update(secret).digest('hex');
+    const key = process.env.ROTATION_HASH_KEY;
+    if (!key) throw new Error('ROTATION_HASH_KEY env var required');
+    return crypto.createHmac('sha256', key).update(secret).digest('hex');
   }
 
-  /**
-   * Create a rotation schedule for a secret
-   */
   static async scheduleRotation(data) {
     const { secretName, secretType, rotationInterval, method = 'auto', metadata = {} } = data;
 
@@ -50,9 +47,6 @@ class SecretRotationModule {
     });
   }
 
-  /**
-   * Get all secrets due for rotation
-   */
   static async getRotationsDue() {
     return prisma.secretRotationSchedule.findMany({
       where: {
@@ -65,9 +59,6 @@ class SecretRotationModule {
     });
   }
 
-  /**
-   * Rotate a secret: generate new, update schedule, log
-   */
   static async rotateSecret(secretName, rotatedBy = 'system') {
     try {
       const schedule = await prisma.secretRotationSchedule.findUnique({
@@ -78,49 +69,62 @@ class SecretRotationModule {
         throw new Error(`Secret schedule not found: ${secretName}`);
       }
 
-      const oldSecret = crypto.randomBytes(16).toString('hex');
-      const oldHash = this.hashSecret(oldSecret);
+      const lastLog = await prisma.secretRotationLog.findFirst({
+        where: { secretName, status: ROTATION_STATUS.SUCCESS },
+        orderBy: { rotatedAt: 'desc' },
+      });
 
+      const oldHash = lastLog?.newHash ?? null;
       const newSecret = this.generateNewSecret(schedule.secretType);
       const newHash = this.hashSecret(newSecret);
-
       const now = new Date();
       const nextRotation = new Date(now.getTime() + schedule.rotationInterval * 24 * 60 * 60 * 1000);
 
-      await prisma.secretRotationSchedule.update({
-        where: { secretName },
-        data: {
-          lastRotated: now,
-          nextRotation,
-          updatedAt: now,
-        },
-      });
+      await prisma.$transaction(async (tx) => {
+        await tx.secretRotationSchedule.update({
+          where: { secretName },
+          data: {
+            lastRotated: now,
+            nextRotation,
+            updatedAt: now,
+          },
+        });
 
-      await this.logRotation({
-        secretName,
-        rotationType: ROTATION_TYPE.AUTOMATIC,
-        oldHash,
-        newHash,
-        rotatedBy,
-        status: ROTATION_STATUS.SUCCESS,
+        await tx.secretRotationLog.create({
+          data: {
+            secretName,
+            rotationType: ROTATION_TYPE.AUTOMATIC,
+            oldHash: oldHash || 'initial',
+            newHash,
+            rotatedBy,
+            status: ROTATION_STATUS.SUCCESS,
+            metadata: {
+              deploymentRequired: true,
+              generatedAt: now.toISOString(),
+            },
+          },
+        });
       });
 
       return {
         success: true,
         newSecret,
-        oldHash,
-        newHash,
+        message: 'Secret generated. DEPLOYMENT TO PROVIDER REQUIRED',
       };
     } catch (error) {
-      await this.logRotation({
-        secretName,
-        rotationType: ROTATION_TYPE.AUTOMATIC,
-        oldHash: 'unknown',
-        newHash: 'unknown',
-        rotatedBy,
-        status: ROTATION_STATUS.FAILED,
-        errorMessage: error.message,
-      });
+      try {
+        await this.logRotation({
+          secretName,
+          rotationType: ROTATION_TYPE.AUTOMATIC,
+          oldHash: 'unknown',
+          newHash: 'unknown',
+          rotatedBy,
+          status: ROTATION_STATUS.FAILED,
+          errorMessage: error.message,
+        });
+      } catch (logError) {
+        console.error(`Failed to log error for ${secretName}:`, logError.message);
+      }
 
       return {
         success: false,

@@ -9,9 +9,13 @@ const secretRotationDailyJob = require('../jobs/secret-rotation-daily');
 let scheduledJobs = [];
 
 /**
- * Initialize all scheduled jobs
+ * Initialize all scheduled jobs (idempotent)
  */
 function initializeScheduler() {
+  if (scheduledJobs.length > 0) {
+    console.warn('[SCHEDULER] Already initialized — skipping duplicate');
+    return;
+  }
   console.log('[SCHEDULER] Initializing scheduled jobs...');
 
   const secretRotationSchedule = '0 2 * * *'; // 2 AM UTC

@@ -1,27 +1,23 @@
 const express = require('express');
-const { authenticateToken, checkAdminRole } = require('../middleware/auth');
+const { requireSuperAdmin } = require('../middleware/auth');
 const SecretRotationModule = require('../modules/SecretRotationModule');
 const { ROTATION_CONFIG } = require('../config/ROTATION_SCHEDULE');
 const { sendSuccess, sendError } = require('../utils/error-response');
+const prisma = require('../config/db');
 
 const router = express.Router();
 
-router.use(authenticateToken);
-router.use(checkAdminRole);
+router.use(requireSuperAdmin);
 
 /**
  * GET /admin/secret-rotation/schedules
  */
 router.get('/schedules', async (req, res) => {
   try {
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
-
     const schedules = await prisma.secretRotationSchedule.findMany({
       orderBy: { nextRotation: 'asc' },
     });
 
-    await prisma.$disconnect();
     return sendSuccess(res, { schedules }, 200, 'Rotation schedules retrieved');
   } catch (error) {
     return sendError(res, error, 500);
