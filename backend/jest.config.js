@@ -29,6 +29,8 @@ module.exports = {
     'routes/admin-recovery\\.test\\.js',
     'routes/projects\\.test\\.js',
     'routes/subscriptions\\.test\\.js',
+    'role-permissions\\.test\\.js',
+    'quotes\\.test\\.js',
   ],
   setupFiles: ['./tests/setup.js'],
   clearMocks: true,
