@@ -1343,3 +1343,56 @@ model SecretAccessLog {
   @@index([userId])
   @@index([secretType])
 }
+
+// Key Versioning — manage encryption keys with version tracking & rotation
+model KeyVersion {
+  id        String   @id @default(cuid())
+  keyName   String   // JWT_SECRET, DB_ENCRYPTION_KEY, API_ENCRYPTION_KEY, etc.
+  version   Int      // 1, 2, 3... increments on rotation
+  algorithm String   // AES-256-GCM, RSA-4096, HMAC-SHA256, etc.
+  isActive  Boolean  @default(false) // Only ONE active key per keyName
+  createdAt DateTime @default(now())
+  expiresAt DateTime? // When this key expires (can still decrypt old data)
+
+  @@unique([keyName, version]) // Unique combination per key
+  @@index([keyName])
+  @@index([isActive])
+  @@index([createdAt])
+}
+
+// Secret Rotation Schedule — track which secrets to rotate and when
+model SecretRotationSchedule {
+  id               String   @id @default(cuid())
+  secretName       String   @unique // "STRIPE_API_KEY", "SENDGRID_API_KEY", "JWT_SECRET", etc.
+  secretType       String   // "api_key", "token", "password"
+  rotationInterval Int      // Days between rotations (30, 90, 365)
+  lastRotated      DateTime @default(now())
+  nextRotation     DateTime // Calculated: lastRotated + rotationInterval
+  enabled          Boolean  @default(true)
+  rotationMethod   String   @default("auto") // "auto", "manual", "manual_with_approval"
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  metadata         Json?    // Extra config (provider, endpoint, etc.)
+
+  @@index([secretName])
+  @@index([nextRotation])
+  @@index([enabled])
+}
+
+// Secret Rotation Log — audit trail of all secret rotations
+model SecretRotationLog {
+  id             String   @id @default(cuid())
+  secretName     String   // Which secret was rotated
+  rotationType   String   // "automatic", "manual", "emergency"
+  oldHash        String   // SHA256 hash of old secret (not the secret itself!)
+  newHash        String   // SHA256 hash of new secret
+  rotatedBy      String?  // userId or "system"
+  rotatedAt      DateTime @default(now())
+  status         String   @default("pending") // "success", "failed", "pending_approval"
+  errorMessage   String?
+  metadata       Json?
+
+  @@index([secretName])
+  @@index([rotatedAt])
+  @@index([status])
+}
