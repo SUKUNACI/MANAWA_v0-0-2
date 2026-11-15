@@ -175,6 +175,41 @@ router.post('/logout', async (req, res) => {
   }
 });
 
+// PATCH /api/auth/password-change
+router.patch('/password-change', requireAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'currentPassword et newPassword requis' });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'newPassword doit avoir au moins 8 caractères' });
+    }
+
+    const result = await auth.changePassword(req.user.id, currentPassword, newPassword);
+
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('user-agent');
+
+    // Audit log — password changed
+    await AuditLogModule.createAuditLog({
+      action: 'PASSWORD_CHANGE',
+      resourceType: 'USER',
+      resourceId: req.user.id,
+      userId: req.user.id,
+      ipAddress,
+      userAgent,
+      metadata: { reason: 'user_change_via_auth' },
+    }).catch((err) => logger.error('Audit log failed for PASSWORD_CHANGE', { error: err.message }));
+
+    res.json(result);
+  } catch (err) {
+    logger.error('Password change error', { error: err.message });
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    res.status(500).json({ error: 'Erreur lors du changement de mot de passe', code: err.code || 'UNKNOWN_ERROR' });
+  }
+});
+
 // POST /api/auth/admin-session
 router.post('/admin-session', async (req, res) => {
   const { token } = req.body;
