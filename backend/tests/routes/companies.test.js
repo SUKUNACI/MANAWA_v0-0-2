@@ -156,7 +156,7 @@ describe('GET /api/companies', () => {
         where: expect.objectContaining({
           OR: expect.arrayContaining([
             expect.objectContaining({
-              companyName: expect.objectContaining({
+              trade: expect.objectContaining({
                 contains: 'Electro',
                 mode: 'insensitive',
               }),

@@ -102,7 +102,12 @@ jobs:
           npm audit --json | npx npm-audit-to-sarif > audit.sarif || true
         continue-on-error: true
 
+      - name: Check if SARIF file exists
+        id: check-sarif
+        run: test -f backend/audit.sarif && echo "exists=true" >> $GITHUB_OUTPUT || echo "exists=false" >> $GITHUB_OUTPUT
+
       - name: Upload SARIF to GitHub Security
+        if: steps.check-sarif.outputs.exists == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: backend/audit.sarif
