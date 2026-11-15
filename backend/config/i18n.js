@@ -27,6 +27,9 @@ const translations = {
     'validation.min_length':    'Trop court (minimum {min} caractères)',
     'validation.max_length':    'Trop long (maximum {max} caractères)',
     'validation.invalid_amount':'Montant invalide',
+    'validation.password_weak': 'Le mot de passe est trop faible',
+    'validation.invalid_format':'Format invalide',
+    'validation.duplicate_entry':'Cette entrée existe déjà',
 
     // Ressources
     'resource.not_found':       'Ressource introuvable',
@@ -34,6 +37,8 @@ const translations = {
     'resource.deleted':         'Supprimé avec succès',
     'resource.updated':         'Mis à jour avec succès',
     'resource.created':         'Créé avec succès',
+    'resource.gone':            'Cette ressource n\'est plus disponible',
+    'resource.deleted_error':   'Cette ressource a été supprimée',
 
     // Paiements (XOF)
     'payment.success':          'Paiement de {amount} XOF confirmé',
@@ -48,11 +53,27 @@ const translations = {
     'quote.rejected':           'Devis refusé',
     'quote.expired':            'Ce devis a expiré',
 
+    // Services
+    'service.unavailable':      'Service temporairement indisponible',
+    'service.timeout':          'Service indisponible (timeout)',
+    'service.email_failed':     'Erreur lors de l\'envoi du email',
+    'service.sms_failed':       'Erreur lors de l\'envoi du SMS',
+    'payment.invalid_method':   'Méthode de paiement invalide',
+    'payment.timeout':          'Délai d\'attente du paiement dépassé',
+    'payment.gateway_error':    'Erreur de la passerelle de paiement',
+    'payment.already_processed':'Paiement déjà traité',
+    'booking.conflict':         'Conflit de réservation',
+
+    // Business
+    'business.project_unavailable': 'Ce projet n\'est pas disponible',
+
     // Général
     'server.error':             'Une erreur est survenue, veuillez réessayer',
     'rate_limit.exceeded':      'Trop de requêtes, réessayez dans quelques minutes',
     'upload.too_large':         'Fichier trop volumineux',
     'upload.invalid_type':      'Type de fichier non autorisé',
+    'upload.failed':            'Erreur lors de l\'envoi du fichier',
+    'auth.token_invalid':       'Token invalide',
   },
 
   en: {
@@ -73,6 +94,9 @@ const translations = {
     'validation.min_length':    'Too short (minimum {min} characters)',
     'validation.max_length':    'Too long (maximum {max} characters)',
     'validation.invalid_amount':'Invalid amount',
+    'validation.password_weak': 'Password is too weak',
+    'validation.invalid_format':'Invalid format',
+    'validation.duplicate_entry':'This entry already exists',
 
     // Resources
     'resource.not_found':       'Resource not found',
@@ -80,6 +104,8 @@ const translations = {
     'resource.deleted':         'Successfully deleted',
     'resource.updated':         'Successfully updated',
     'resource.created':         'Successfully created',
+    'resource.gone':            'This resource is no longer available',
+    'resource.deleted_error':   'This resource has been deleted',
 
     // Payments (XOF)
     'payment.success':          'Payment of {amount} XOF confirmed',
@@ -94,11 +120,27 @@ const translations = {
     'quote.rejected':           'Quote rejected',
     'quote.expired':            'This quote has expired',
 
+    // Services
+    'service.unavailable':      'Service temporarily unavailable',
+    'service.timeout':          'Service unavailable (timeout)',
+    'service.email_failed':     'Error sending email',
+    'service.sms_failed':       'Error sending SMS',
+    'payment.invalid_method':   'Invalid payment method',
+    'payment.timeout':          'Payment timeout exceeded',
+    'payment.gateway_error':    'Payment gateway error',
+    'payment.already_processed':'Payment already processed',
+    'booking.conflict':         'Booking conflict',
+
+    // Business
+    'business.project_unavailable': 'This project is not available',
+
     // General
     'server.error':             'An error occurred, please try again',
     'rate_limit.exceeded':      'Too many requests, please try again in a few minutes',
     'upload.too_large':         'File too large',
     'upload.invalid_type':      'File type not allowed',
+    'upload.failed':            'File upload failed',
+    'auth.token_invalid':       'Invalid token',
   },
 };
 
