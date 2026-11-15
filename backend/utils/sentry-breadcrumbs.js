@@ -36,7 +36,6 @@ function addPaymentBreadcrumb(action, data = {}) {
       method: data.method,
       userId: data.userId,
       status: data.status,
-      ...data,
     },
   });
 }
@@ -55,7 +54,6 @@ function addSearchBreadcrumb(action, data = {}) {
       resultCount: data.resultCount,
       duration: data.duration,
       userId: data.userId,
-      ...data,
     },
   });
 }
@@ -73,7 +71,6 @@ function addDatabaseBreadcrumb(action, data = {}) {
       table: data.table,
       recordCount: data.recordCount,
       duration: data.duration,
-      ...data,
     },
   });
 }
@@ -92,7 +89,6 @@ function addAPIBreadcrumb(action, data = {}) {
       method: data.method,
       status: data.status,
       duration: data.duration,
-      ...data,
     },
   });
 }
@@ -111,7 +107,6 @@ function addFileBreadcrumb(action, data = {}) {
       size: data.size,
       type: data.type,
       duration: data.duration,
-      ...data,
     },
   });
 }
@@ -126,9 +121,7 @@ function addErrorBreadcrumb(action, error, data = {}) {
     level: 'error',
     data: {
       errorCode: error.code,
-      errorMessage: error.message,
       errorType: error.constructor.name,
-      ...data,
     },
   });
 }

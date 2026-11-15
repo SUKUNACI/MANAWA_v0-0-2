@@ -176,7 +176,7 @@ const ERROR_CODES = {
     code: 'RES_002',
     status: 403,
     retryable: false,
-    i18nKey: 'auth.forbidden',
+    i18nKey: 'resource.access_denied',
   },
   RES_CONFLICT: {
     code: 'RES_003',
@@ -280,7 +280,7 @@ const ERROR_CODES = {
     code: 'BUS_005',
     status: 403,
     retryable: false,
-    i18nKey: 'auth.forbidden',
+    i18nKey: 'business.operation_not_allowed',
   },
 };
 
@@ -288,20 +288,23 @@ const ERROR_CODES = {
  * Factory function to create standardized error responses
  * @param {Object} errorCode - Error code config from ERROR_CODES
  * @param {string} locale - Language locale (fr, en)
- * @param {Object} i18nFunc - i18n translation function t(key, locale, vars)
+ * @param {Function} i18nFunc - i18n translation function t(key, locale, vars)
  * @param {Object} vars - Variables for i18n interpolation
  * @returns {Object} Standardized error object
  */
 function createError(errorCode, locale, i18nFunc, vars = {}) {
   if (!errorCode) {
-    throw new Error('Invalid error code');
+    throw new Error('createError: errorCode is required');
+  }
+  if (typeof i18nFunc !== 'function') {
+    throw new Error('createError: i18nFunc must be a function');
   }
 
   return {
     error: i18nFunc(errorCode.i18nKey, locale, vars),
     code: errorCode.code,
     status: errorCode.status,
-    retryable: errorCode.retryable || false,
+    retryable: errorCode.retryable,
   };
 }
 
@@ -323,6 +326,9 @@ function isRetryable(key) {
   const code = ERROR_CODES[key];
   return code ? code.retryable : false;
 }
+
+Object.keys(ERROR_CODES).forEach(key => Object.freeze(ERROR_CODES[key]));
+Object.freeze(ERROR_CODES);
 
 module.exports = {
   ERROR_CODES,

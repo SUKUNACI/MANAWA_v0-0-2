@@ -39,6 +39,7 @@ const translations = {
     'resource.created':         'Créé avec succès',
     'resource.gone':            'Cette ressource n\'est plus disponible',
     'resource.deleted_error':   'Cette ressource a été supprimée',
+    'resource.access_denied':   'Accès à cette ressource refusé',
 
     // Paiements (XOF)
     'payment.success':          'Paiement de {amount} XOF confirmé',
@@ -66,6 +67,7 @@ const translations = {
 
     // Business
     'business.project_unavailable': 'Ce projet n\'est pas disponible',
+    'business.operation_not_allowed': 'Cette opération n\'est pas autorisée',
 
     // Erreurs supplémentaires Auth
     'auth.session_expired':     'Votre session a expiré',
@@ -233,6 +235,7 @@ const translations = {
     'resource.created':         'Successfully created',
     'resource.gone':            'This resource is no longer available',
     'resource.deleted_error':   'This resource has been deleted',
+    'resource.access_denied':   'Access to this resource is denied',
 
     // Payments (XOF)
     'payment.success':          'Payment of {amount} XOF confirmed',
@@ -260,6 +263,7 @@ const translations = {
 
     // Business
     'business.project_unavailable': 'This project is not available',
+    'business.operation_not_allowed': 'This operation is not allowed',
 
     // Additional Auth Errors
     'auth.session_expired':     'Your session has expired',
