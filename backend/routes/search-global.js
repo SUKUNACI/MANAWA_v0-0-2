@@ -15,11 +15,13 @@ const { query } = require('express-validator');
 const { optionalAuth } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
 const SearchModule = require('../modules/search');
+const SearchGlobalModule = require('../modules/search-global');
 const prisma = require('../config/db');
 const logger = require('../utils/logger');
 
 const router = express.Router();
 const searchModule = new SearchModule(prisma);
+const searchGlobalModule = new SearchGlobalModule(searchModule, prisma, logger);
 
 // Rate limiters
 const globalSearchLimiter = rateLimit({
@@ -31,116 +33,86 @@ const globalSearchLimiter = rateLimit({
   message: { error: 'Trop de requêtes de recherche, réessayez dans une minute' },
 });
 
-// GET / — Global search across all indices
-router.get('/', globalSearchLimiter, optionalAuth,
-  [
-    query('q').trim().notEmpty().isLength({ min: 2, max: 200 }).withMessage('q required, 2-200 chars'),
-    query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('limit must be 1-50'),
-    query('offset').optional().isInt({ min: 0 }).withMessage('offset must be >= 0'),
-  ],
-  handleValidationErrors,
-  async (req, res, next) => {
+/**
+ * Validation rules for all search endpoints
+ */
+const searchValidationRules = [
+  query('q').trim().notEmpty().isLength({ min: 2, max: 200 }).withMessage('q required, 2-200 chars'),
+  query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('limit must be 1-50'),
+  query('offset').optional().isInt({ min: 0 }).withMessage('offset must be >= 0'),
+];
+
+/**
+ * Generic search handler factory
+ * Supports both global search and type-specific search
+ */
+const createSearchHandler = (type = null) => {
+  return async (req, res, next) => {
     try {
-      const { q } = req.query;
-      if (!q || q.trim().length < 2) return res.status(400).json({ error: 'q required, 2-200 chars' });
+      const { q, limit = 10, offset = 0 } = req.query;
 
-      const limit = req.query.limit || 10;
-      const offset = req.query.offset || 0;
+      // Extract and validate search term
+      const termValidation = searchGlobalModule.validateSearchTerm(q);
+      if (!termValidation.valid) {
+        return res.status(400).json({ error: termValidation.errors[0] });
+      }
 
-      const term = q.trim();
-      const rawFilters = searchModule.parseFiltersFromQuery(req.query);
+      // Validate and clamp pagination
+      const paginationValidation = searchGlobalModule.validatePagination(limit, offset);
+      const { clamped } = paginationValidation;
 
-      const result = await searchModule.searchGlobal(term, { limit, offset, filters: rawFilters });
+      // Parse filters from query parameters
+      const filters = searchGlobalModule.parseFilters(req.query);
+
+      // Execute search based on type
+      let result;
+      if (type) {
+        // Type-specific search
+        const typeValidation = searchGlobalModule.validateType(type);
+        if (!typeValidation.valid) {
+          return res.status(400).json({ error: typeValidation.errors[0] });
+        }
+        result = await searchGlobalModule.searchByType(type, q.trim(), {
+          limit: clamped.limit,
+          offset: clamped.offset,
+          filters,
+        });
+      } else {
+        // Global search across all types
+        result = await searchGlobalModule.searchGlobal(q.trim(), {
+          limit: clamped.limit,
+          offset: clamped.offset,
+          filters,
+        });
+      }
+
       res.json(result);
     } catch (err) {
-      logger.error('[SearchGlobal] Global search failed', { error: err.message });
+      logger.error('[SearchGlobal] Search failed', {
+        type: type || 'global',
+        error: err.message,
+      });
       next(err);
     }
-  }
-);
+  };
+};
+
+// GET / — Global search across all indices
+router.get('/', globalSearchLimiter, optionalAuth, searchValidationRules, handleValidationErrors, createSearchHandler());
 
 // GET /professionals — Search professionals only
-router.get('/professionals', globalSearchLimiter, optionalAuth,
-  [
-    query('q').trim().notEmpty().isLength({ min: 2, max: 200 }).withMessage('q required, 2-200 chars'),
-    query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('limit must be 1-50'),
-    query('offset').optional().isInt({ min: 0 }).withMessage('offset must be >= 0'),
-  ],
-  handleValidationErrors,
-  async (req, res, next) => {
-    try {
-      const { q } = req.query;
-      if (!q || q.trim().length < 2) return res.status(400).json({ error: 'q required, 2-200 chars' });
-
-      const limit = req.query.limit || 10;
-      const offset = req.query.offset || 0;
-
-      const term = q.trim();
-      const rawFilters = searchModule.parseFiltersFromQuery(req.query);
-
-      const result = await searchModule.searchGlobalByType('professionals', term, { limit, offset, filters: rawFilters });
-      res.json(result);
-    } catch (err) {
-      logger.error('[SearchGlobal] Professionals search failed', { error: err.message });
-      next(err);
-    }
-  }
-);
+router.get('/professionals', globalSearchLimiter, optionalAuth, searchValidationRules, handleValidationErrors, createSearchHandler('professionals'));
 
 // GET /packages — Search packages only
-router.get('/packages', globalSearchLimiter, optionalAuth,
-  [
-    query('q').trim().notEmpty().isLength({ min: 2, max: 200 }).withMessage('q required, 2-200 chars'),
-    query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('limit must be 1-50'),
-    query('offset').optional().isInt({ min: 0 }).withMessage('offset must be >= 0'),
-  ],
-  handleValidationErrors,
-  async (req, res, next) => {
-    try {
-      const { q } = req.query;
-      if (!q || q.trim().length < 2) return res.status(400).json({ error: 'q required, 2-200 chars' });
-
-      const limit = req.query.limit || 10;
-      const offset = req.query.offset || 0;
-
-      const term = q.trim();
-      const rawFilters = searchModule.parseFiltersFromQuery(req.query);
-
-      const result = await searchModule.searchGlobalByType('packages', term, { limit, offset, filters: rawFilters });
-      res.json(result);
-    } catch (err) {
-      logger.error('[SearchGlobal] Packages search failed', { error: err.message });
-      next(err);
-    }
-  }
-);
+router.get('/packages', globalSearchLimiter, optionalAuth, searchValidationRules, handleValidationErrors, createSearchHandler('packages'));
 
 // GET /portfolio — Search portfolio only
-router.get('/portfolio', globalSearchLimiter, optionalAuth,
-  [
-    query('q').trim().notEmpty().isLength({ min: 2, max: 200 }).withMessage('q required, 2-200 chars'),
-    query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('limit must be 1-50'),
-    query('offset').optional().isInt({ min: 0 }).withMessage('offset must be >= 0'),
-  ],
-  handleValidationErrors,
-  async (req, res, next) => {
-    try {
-      const { q } = req.query;
-      if (!q || q.trim().length < 2) return res.status(400).json({ error: 'q required, 2-200 chars' });
+router.get('/portfolio', globalSearchLimiter, optionalAuth, searchValidationRules, handleValidationErrors, createSearchHandler('portfolio'));
 
-      const limit = req.query.limit || 10;
-      const offset = req.query.offset || 0;
+// GET /projects — Search projects only
+router.get('/projects', globalSearchLimiter, optionalAuth, searchValidationRules, handleValidationErrors, createSearchHandler('projects'));
 
-      const term = q.trim();
-      const rawFilters = searchModule.parseFiltersFromQuery(req.query);
-
-      const result = await searchModule.searchGlobalByType('portfolio', term, { limit, offset, filters: rawFilters });
-      res.json(result);
-    } catch (err) {
-      logger.error('[SearchGlobal] Portfolio search failed', { error: err.message });
-      next(err);
-    }
-  }
-);
+// GET /reviews — Search reviews only
+router.get('/reviews', globalSearchLimiter, optionalAuth, searchValidationRules, handleValidationErrors, createSearchHandler('reviews'));
 
 module.exports = router;

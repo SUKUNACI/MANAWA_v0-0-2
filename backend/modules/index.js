@@ -6,7 +6,11 @@
  */
 
 const SearchModule = require('./search');
+const SearchFacetsModule = require('./search-facets');
+const SearchGlobalModule = require('./search-global');
 const NotificationsModule = require('./notifications');
+const NotificationPreferencesModule = require('./notification-preferences');
+const NotificationTemplateModule = require('./notification-template');
 const BookingModule = require('./booking');
 const AnalyticsModule = require('./analytics');
 const PaymentsModule = require('./payments');
@@ -31,6 +35,7 @@ const VideoCallModule = require('./videoCall');
 const BadgeModule = require('./badge');
 const CompanyModule = require('./company');
 const ReferralModule = require('./referral');
+const MobileModule = require('./mobile');
 
 /**
  * Create module instances with Prisma dependency injection
@@ -39,9 +44,14 @@ const ReferralModule = require('./referral');
  * @returns {object} All module instances
  */
 function createModules(prisma, stripe = null) {
+  const searchModule = new SearchModule(prisma);
   return {
-    search: new SearchModule(prisma),
+    search: searchModule,
+    searchFacets: new SearchFacetsModule(searchModule, prisma),
+    searchGlobal: new SearchGlobalModule(searchModule, prisma),
     notifications: new NotificationsModule(prisma),
+    notificationPreferences: new NotificationPreferencesModule(prisma),
+    notificationTemplate: new NotificationTemplateModule(prisma),
     booking: new BookingModule(prisma),
     analytics: new AnalyticsModule(prisma),
     payments: new PaymentsModule(prisma, stripe),
@@ -66,12 +76,17 @@ function createModules(prisma, stripe = null) {
     badge: new BadgeModule(prisma),
     company: new CompanyModule(prisma),
     referral: new ReferralModule(prisma),
+    mobile: new MobileModule(prisma),
   };
 }
 
 module.exports = {
   SearchModule,
+  SearchFacetsModule,
+  SearchGlobalModule,
   NotificationsModule,
+  NotificationPreferencesModule,
+  NotificationTemplateModule,
   BookingModule,
   AnalyticsModule,
   PaymentsModule,
@@ -96,5 +111,6 @@ module.exports = {
   BadgeModule,
   CompanyModule,
   ReferralModule,
+  MobileModule,
   createModules,
 };
