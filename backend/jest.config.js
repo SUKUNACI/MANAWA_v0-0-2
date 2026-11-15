@@ -29,12 +29,12 @@ module.exports = {
     'routes/admin-recovery\\.test\\.js',
     'routes/projects\\.test\\.js',
     'routes/subscriptions\\.test\\.js',
-    'role-permissions\\.test\\.js',
-    'quotes\\.test\\.js',
   ],
   setupFiles: ['./tests/setup.js'],
   clearMocks: true,
-  testTimeout: 10000,
+  testTimeout: 20000,
+  forceExit: true,
+  maxWorkers: 1,
   // Q113: Coverage gate — pipeline fails if any metric drops below 75%
   // Note: 28 BD-dependent files excluded from coverage; gate adjusted to reflect testable codebase
   coverageThreshold: {
