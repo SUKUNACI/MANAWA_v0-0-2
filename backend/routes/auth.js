@@ -118,10 +118,16 @@ router.post(
       await bruteForceMiddleware.clearFailedAttempts(emailLower);
       await bruteForceMiddleware.logLoginAttempt(result.user.id, emailLower, 'success', ipAddress, userAgent);
 
-<<<<<<< Updated upstream
-=======
       // Audit log — login successful
-      await logAuditEvent('LOGIN', 'USER', result.user.id, result.user.id, { email: emailLower, twoFARequired: result.requiresTwoFA || false }, req);
+      await AuditLogModule.createAuditLog({
+        action: 'LOGIN',
+        resourceType: 'USER',
+        resourceId: result.user.id,
+        userId: result.user.id,
+        ipAddress,
+        userAgent,
+        metadata: { email: emailLower, twoFARequired: result.requiresTwoFA || false },
+      });
 
       // SECRET ACCESS LOG — JWT_SECRET access for token generation
       await SecretAccessTracker.logAccess({
@@ -134,7 +140,6 @@ router.post(
         reason: 'login_token_generation',
       });
 
->>>>>>> Stashed changes
       if (result.requiresTwoFA) {
         return res.status(200).json({
           requiresTwoFA: true,
@@ -195,8 +200,6 @@ router.post('/logout', async (req, res) => {
   }
 });
 
-<<<<<<< Updated upstream
-=======
 // PATCH /api/auth/password-change
 router.patch('/password-change', requireAuth, async (req, res) => {
   try {
@@ -209,10 +212,20 @@ router.patch('/password-change', requireAuth, async (req, res) => {
     }
 
     const result = await auth.changePassword(req.user.id, currentPassword, newPassword);
-    await logAuditEvent('PASSWORD_CHANGE', 'USER', req.user.id, req.user.id, { reason: 'user_change_via_auth' }, req);
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('user-agent');
+
+    await AuditLogModule.createAuditLog({
+      action: 'PASSWORD_CHANGE',
+      resourceType: 'USER',
+      resourceId: req.user.id,
+      userId: req.user.id,
+      ipAddress,
+      userAgent,
+      metadata: { reason: 'user_change_via_auth' },
+    });
 
     // SECRET ACCESS LOG — password hash accessed for verification
-    const { ipAddress, userAgent } = getRequestMetadata(req);
     await SecretAccessTracker.logAccess({
       secretId: `USER_PASSWORD_${req.user.id}`,
       secretType: 'USER_PASSWORD',
@@ -231,7 +244,6 @@ router.patch('/password-change', requireAuth, async (req, res) => {
   }
 });
 
->>>>>>> Stashed changes
 // POST /api/auth/admin-session
 router.post('/admin-session', async (req, res) => {
   const { token } = req.body;
@@ -242,13 +254,21 @@ router.post('/admin-session', async (req, res) => {
     if (!secure) {
       logger.warn('[Admin] Running in development mode - cookies are not secure. Enable HTTPS for production.');
     }
-<<<<<<< Updated upstream
-=======
 
-    await logAuditEvent('ADMIN_SESSION_CREATE', 'ADMIN_SESSION', user.id, user.id, { adminLevel: user.adminLevel }, req);
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('user-agent');
+
+    await AuditLogModule.createAuditLog({
+      action: 'ADMIN_SESSION_CREATE',
+      resourceType: 'ADMIN_SESSION',
+      resourceId: user.id,
+      userId: user.id,
+      ipAddress,
+      userAgent,
+      metadata: { adminLevel: user.adminLevel },
+    });
 
     // SECRET ACCESS LOG — admin credentials verified + JWT_SECRET for admin token generation
-    const { ipAddress, userAgent } = getRequestMetadata(req);
     await SecretAccessTracker.logAccess({
       secretId: 'JWT_SECRET',
       secretType: 'JWT_SECRET',
@@ -259,7 +279,6 @@ router.post('/admin-session', async (req, res) => {
       reason: 'admin_session_token_generation',
     });
 
->>>>>>> Stashed changes
     res.cookie('adminToken', tok, { httpOnly: true, secure, sameSite: 'strict', maxAge: 15 * 60 * 1000 });
     res.cookie('adminCsrf', csrfToken, { httpOnly: true, secure, sameSite: 'strict', maxAge: 15 * 60 * 1000 });
     res.json({ user, token: tok, csrfToken });
