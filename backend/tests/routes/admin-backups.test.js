@@ -150,8 +150,6 @@ describe('Admin Backups Routes', () => {
     });
 
     it('should return all backups when type=full is passed (filter uses req.params, not req.query)', async () => {
-      // NOTE: The route reads `type` from req.params instead of req.query (known bug),
-      // so the type filter is never applied and all backups are returned.
       backupStrategy.getBackupStats.mockResolvedValue(mockBackupStats);
 
       const res = await request(app)
@@ -159,12 +157,11 @@ describe('Admin Backups Routes', () => {
         .set('Authorization', `Bearer ${adminToken()}`);
 
       expect(res.status).toBe(200);
-      // Both full and incremental are returned because type from req.params is always undefined
-      expect(res.body.backups.length).toBe(2);
+      expect(res.body.backups.length).toBe(1);
+      expect(res.body.backups[0].key).toContain('full');
     });
 
-    it('should return all backups when type=incremental is passed (filter uses req.params, not req.query)', async () => {
-      // NOTE: Same bug — type filter never applies when reading from req.params
+    it('should return only incremental backups when type=incremental is passed', async () => {
       backupStrategy.getBackupStats.mockResolvedValue(mockBackupStats);
 
       const res = await request(app)
@@ -172,7 +169,8 @@ describe('Admin Backups Routes', () => {
         .set('Authorization', `Bearer ${adminToken()}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.backups.length).toBe(2);
+      expect(res.body.backups.length).toBe(1);
+      expect(res.body.backups[0].key).toContain('incremental');
     });
 
     it('should include sizeInMB in each backup entry', async () => {

@@ -22,15 +22,15 @@ router.get('/status', requireAuth, requireRole('ADMIN'), readLimiter, async (req
 });
 
 router.post('/trigger', requireAuth, requireRole('ADMIN'), writeLimiter, [body('type').isIn(['full', 'incremental'])], handleValidationErrors, async (req, res, next) => {
-  try { const r = await module_.triggerBackup(req.body.type); res.json({ success: true, backup: r, message: `${req.body.type} backup triggered`, timestamp: new Date().toISOString() }); } catch (err) { next(err); }
+  try { const r = await module_.triggerBackup(req.body.type); res.json({ success: true, backup: r, message: `${req.body.type} backup triggered`, timestamp: new Date().toISOString() }); } catch (err) { res.status(500).json({ error: 'Failed to trigger backup' }); }
 });
 
 router.post('/:backupName/restore', requireAuth, requireRole('ADMIN'), writeLimiter, async (req, res, next) => {
-  try { const r = await module_.restoreBackup(req.params.backupName); r ? res.json({ success: true, message: `restored successfully` }) : res.status(500).json({ error: 'Restore failed' }); } catch (err) { next(err); }
+  try { const r = await module_.restoreBackup(req.params.backupName); r ? res.json({ success: true, message: `restored successfully` }) : res.status(500).json({ error: 'Restore failed' }); } catch (err) { res.status(500).json({ error: 'Failed to restore backup' }); }
 });
 
 router.post('/:backupName/test', requireAuth, requireRole('ADMIN'), readLimiter, async (req, res, next) => {
-  try { const v = await module_.testBackup(req.params.backupName); res.json({ success: true, valid: v, message: v ? 'valid and recoverable' : 'failed integrity check' }); } catch (err) { next(err); }
+  try { const v = await module_.testBackup(req.params.backupName); res.json({ success: true, valid: v, message: v ? 'valid and recoverable' : 'failed integrity check' }); } catch (err) { res.status(500).json({ error: 'Failed to test backup' }); }
 });
 
 router.get('/replication/status', requireAuth, requireRole('ADMIN'), readLimiter, async (req, res, next) => {
