@@ -1,4 +1,6 @@
 const { v2: cloudinary } = require('cloudinary');
+const SecretAccessTracker = require('../modules/SecretAccessTracker');
+const logger = require('../utils/logger');
 
 /**
  * Enhanced Cloudinary Configuration with Image Optimization
@@ -320,6 +322,25 @@ const OPTIMIZATION = {
   },
 };
 
+/**
+ * Log Cloudinary API access (secret tracking)
+ */
+const logCloudinaryAccess = async (userId, ipAddress, userAgent, action = 'upload', metadata = {}) => {
+  try {
+    await SecretAccessTracker.logAccess({
+      secretId: process.env.CLOUDINARY_API_KEY || 'CLOUDINARY_API_KEY',
+      secretType: 'CLOUDINARY_API_KEY',
+      action: 'ACCESS',
+      userId,
+      ipAddress,
+      userAgent,
+      reason: `cloudinary_${action}`,
+    });
+  } catch (err) {
+    logger.error('[CDN] Cloudinary access log failed', { error: err.message, userId, action });
+  }
+};
+
 module.exports = {
   cloudinary,
   TRANSFORMATIONS,
@@ -330,4 +351,5 @@ module.exports = {
   SIGNED_URL_CONFIG,
   ACCOUNT_LIMITS,
   OPTIMIZATION,
+  logCloudinaryAccess,
 };

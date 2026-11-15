@@ -8,9 +8,43 @@ const bulkOperationsRoutes = require('./bulk-operations');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const prisma = require('../config/db');
 const AdminModule = require('../modules/admin');
+const AuditLogModule = require('../modules/AuditLogModule');
+const SecretAccessTracker = require('../modules/SecretAccessTracker');
 
 const router = express.Router();
 const admin = new AdminModule(prisma);
+
+// Helper to log admin actions + secret access
+const logAdminAction = async (req, action, resourceType, resourceId, metadata = {}, secretType = null) => {
+  const ipAddress = req.ip || req.connection.remoteAddress;
+  const userAgent = req.get('user-agent');
+  try {
+    await AuditLogModule.createAuditLog({
+      action,
+      resourceType,
+      resourceId,
+      userId: req.user.id,
+      ipAddress,
+      userAgent,
+      metadata: { adminAction: true, ...metadata },
+    });
+
+    // Log secret access if applicable
+    if (secretType) {
+      await SecretAccessTracker.logAccess({
+        secretId: secretType,
+        secretType,
+        action: action.includes('ROTATE') ? 'ROTATE' : 'ACCESS',
+        userId: req.user.id,
+        ipAddress,
+        userAgent,
+        reason: `admin_${action.toLowerCase()}`,
+      });
+    }
+  } catch (err) {
+    logger.error(`Audit log failed for ${action}`, { error: err.message });
+  }
+};
 
 // All admin routes require admin role
 router.use(requireAuth, requireRole('ADMIN'));
@@ -126,6 +160,12 @@ router.delete('/professionals/:id/complaint', async (req, res) => {
 router.post('/users/:id/reset-password', async (req, res) => {
   try {
     const result = await admin.resetUserPassword(req.params.id);
+<<<<<<< Updated upstream
+=======
+    await logAdminAction(req, 'USER_PASSWORD_RESET', 'USER', req.params.id, {
+      reason: req.body?.reason || 'admin_request',
+    }, 'USER_PASSWORD_HASH');
+>>>>>>> Stashed changes
     res.json(result);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
