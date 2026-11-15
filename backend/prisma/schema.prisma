@@ -1305,3 +1305,41 @@ model AdminSession {
   @@index([revokedAt])
   @@index([expiresAt])
 }
+
+// Immutable Audit Trail — write-once logs with hash chain for tamper detection
+model AuditLog {
+  id            String   @id @default(cuid())
+  action        String   // READ, WRITE, DELETE, ROTATE, LOGIN, PASSWORD_CHANGE
+  resourceType  String   // USER, SECRET, KEY, PAYMENT, PERMISSION, ADMIN_ACTION
+  resourceId    String
+  userId        String?
+  timestamp     DateTime @default(now())
+  ipAddress     String?
+  userAgent     String?
+  previousHash  String?  // Hash of previous AuditLog entry (hash chain)
+  currentHash   String   @unique // SHA256 hash of this entry for tamper detection
+  metadata      Json?    // Additional context (reason, changes, etc.)
+
+  @@unique([id, currentHash]) // Enforce immutability
+  @@index([timestamp])
+  @@index([userId])
+  @@index([resourceType])
+  @@index([resourceId])
+}
+
+// Secret Access Log — track who accessed what secrets when
+model SecretAccessLog {
+  id           String   @id @default(cuid())
+  secretId     String   // Should be encrypted/hashed
+  secretType   String   // API_KEY, JWT_SECRET, DB_PASSWORD, CLOUDINARY_KEY, MAILJET_KEY, AWS_KEY, etc.
+  action       String   // ACCESS, ROTATE, DELETE, CREATE
+  userId       String
+  timestamp    DateTime @default(now())
+  ipAddress    String
+  userAgent    String?
+  reason       String?  // Why was this secret accessed? (e.g., "authentication", "token-refresh", "key-rotation")
+
+  @@index([timestamp])
+  @@index([userId])
+  @@index([secretType])
+}

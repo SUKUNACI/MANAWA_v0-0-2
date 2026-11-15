@@ -6,7 +6,9 @@ const upload = require('../config/upload');
 const { verifyMagicBytes } = require('../config/upload');
 const { uploadBuffer } = require('../config/cloudinary');
 const { requireAuth } = require('../middleware/auth');
+const logger = require('../utils/logger');
 const UserModule = require('../modules/user');
+const AuditLogModule = require('../modules/AuditLogModule');
 
 const router = express.Router();
 const userModule = new UserModule(prisma);
@@ -39,6 +41,21 @@ router.patch('/me',
 
     try {
       const result = await userModule.updateProfile(req.user.id, req.body, req.user.role);
+
+      const ipAddress = req.ip || req.connection.remoteAddress;
+      const userAgent = req.get('user-agent');
+
+      // Audit log — profile update
+      await AuditLogModule.createAuditLog({
+        action: 'PROFILE_UPDATE',
+        resourceType: 'USER',
+        resourceId: req.user.id,
+        userId: req.user.id,
+        ipAddress,
+        userAgent,
+        metadata: { changedFields: Object.keys(req.body) },
+      }).catch((err) => logger.error('Audit log failed for PROFILE_UPDATE', { error: err.message }));
+
       res.json(result);
     } catch (err) {
       if (err.status) return res.status(err.status).json({ error: err.message });
@@ -71,6 +88,21 @@ router.post('/me/avatar', requireAuth, upload.single('avatar'), verifyMagicBytes
     if (!req.file) return res.status(400).json({ error: 'Photo requise' });
     const avatarUrl = await uploadBuffer(req.file.buffer, 'manawa/avatars');
     const user = await prisma.user.update({ where: { id: req.user.id }, data: { avatarUrl }, include: { professional: true } });
+
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('user-agent');
+
+    // Audit log — avatar upload
+    await AuditLogModule.createAuditLog({
+      action: 'AVATAR_UPLOAD',
+      resourceType: 'USER',
+      resourceId: req.user.id,
+      userId: req.user.id,
+      ipAddress,
+      userAgent,
+      metadata: { fileName: req.file.originalname, size: req.file.size },
+    }).catch((err) => logger.error('Audit log failed for AVATAR_UPLOAD', { error: err.message }));
+
     const { passwordHash: _, ...userSafe } = user;
     res.json(userSafe);
   } catch (err) {
@@ -87,6 +119,21 @@ router.delete('/me',
 
     try {
       const result = await userModule.deleteAccount(req.user.id, req.body.password);
+
+      const ipAddress = req.ip || req.connection.remoteAddress;
+      const userAgent = req.get('user-agent');
+
+      // Audit log — account deleted
+      await AuditLogModule.createAuditLog({
+        action: 'ACCOUNT_DELETE',
+        resourceType: 'USER',
+        resourceId: req.user.id,
+        userId: req.user.id,
+        ipAddress,
+        userAgent,
+        metadata: { reason: 'user_requested' },
+      }).catch((err) => logger.error('Audit log failed for ACCOUNT_DELETE', { error: err.message }));
+
       res.json(result);
     } catch (err) {
       if (err.status) return res.status(err.status).json({ error: err.message });
@@ -107,6 +154,21 @@ router.patch('/me/password',
 
     try {
       const result = await userModule.changePassword(req.user.id, req.body.currentPassword, req.body.newPassword);
+
+      const ipAddress = req.ip || req.connection.remoteAddress;
+      const userAgent = req.get('user-agent');
+
+      // Audit log — password changed
+      await AuditLogModule.createAuditLog({
+        action: 'PASSWORD_CHANGE',
+        resourceType: 'USER',
+        resourceId: req.user.id,
+        userId: req.user.id,
+        ipAddress,
+        userAgent,
+        metadata: { reason: 'user_change' },
+      }).catch((err) => logger.error('Audit log failed for PASSWORD_CHANGE', { error: err.message }));
+
       res.json(result);
     } catch (err) {
       if (err.status) return res.status(err.status).json({ error: err.message });

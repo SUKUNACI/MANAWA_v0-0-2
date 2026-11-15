@@ -13,6 +13,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const bruteForceMiddleware = require('../middleware/bruteForceMiddleware');
 const bruteForceConfig = require('../config/brute-force');
 const AuthModule = require('../modules/auth');
+const AuditLogModule = require('../modules/AuditLogModule');
 
 const router = express.Router();
 const auth = new AuthModule(prisma);
@@ -116,6 +117,17 @@ router.post(
       await bruteForceMiddleware.clearFailedAttempts(emailLower);
       await bruteForceMiddleware.logLoginAttempt(result.user.id, emailLower, 'success', ipAddress, userAgent);
 
+      // Audit log — login successful
+      await AuditLogModule.createAuditLog({
+        action: 'LOGIN',
+        resourceType: 'USER',
+        resourceId: result.user.id,
+        userId: result.user.id,
+        ipAddress,
+        userAgent,
+        metadata: { email: emailLower, twoFARequired: result.requiresTwoFA || false },
+      }).catch((err) => logger.error('Audit log failed for LOGIN', { error: err.message }));
+
       if (result.requiresTwoFA) {
         return res.status(200).json({
           requiresTwoFA: true,
@@ -173,6 +185,21 @@ router.post('/admin-session', async (req, res) => {
     if (!secure) {
       logger.warn('[Admin] Running in development mode - cookies are not secure. Enable HTTPS for production.');
     }
+
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('user-agent');
+
+    // Audit log — admin session created
+    await AuditLogModule.createAuditLog({
+      action: 'ADMIN_SESSION_CREATE',
+      resourceType: 'ADMIN_SESSION',
+      resourceId: user.id,
+      userId: user.id,
+      ipAddress,
+      userAgent,
+      metadata: { adminLevel: user.adminLevel },
+    }).catch((err) => logger.error('Audit log failed for ADMIN_SESSION_CREATE', { error: err.message }));
+
     res.cookie('adminToken', tok, { httpOnly: true, secure, sameSite: 'strict', maxAge: 15 * 60 * 1000 });
     res.cookie('adminCsrf', csrfToken, { httpOnly: true, secure, sameSite: 'strict', maxAge: 15 * 60 * 1000 });
     res.json({ user, token: tok, csrfToken });
@@ -264,7 +291,21 @@ router.post('/unlock', requireAuth, requireRole('ADMIN'), async (req, res) => {
     const { email, reason } = req.body;
     if (!email) return res.status(400).json({ error: 'Email requis' });
 
-    const { email: unlockedEmail } = await auth.unlockAccount(email, bruteForceMiddleware);
+    const { email: unlockedEmail, userId } = await auth.unlockAccount(email, bruteForceMiddleware);
+
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('user-agent');
+
+    // Audit log — admin unlock account
+    await AuditLogModule.createAuditLog({
+      action: 'ACCOUNT_UNLOCK',
+      resourceType: 'USER',
+      resourceId: userId || unlockedEmail,
+      userId: req.user.id,
+      ipAddress,
+      userAgent,
+      metadata: { unlockedEmail, reason: reason || 'manual unlock' },
+    }).catch((err) => logger.error('Audit log failed for ACCOUNT_UNLOCK', { error: err.message }));
 
     logger.info('[Admin] Account unlocked', { email: unlockedEmail, adminId: req.user.id });
     res.json({ ok: true, message: `Compte déverrouillé pour ${unlockedEmail}`, email: unlockedEmail });

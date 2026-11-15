@@ -7,10 +7,31 @@ const express = require('express');
 const bulkOperationsRoutes = require('./bulk-operations');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const prisma = require('../config/db');
+const logger = require('../utils/logger');
 const AdminModule = require('../modules/admin');
+const AuditLogModule = require('../modules/AuditLogModule');
 
 const router = express.Router();
 const admin = new AdminModule(prisma);
+
+// Helper to log admin actions
+const logAdminAction = async (req, action, resourceType, resourceId, metadata = {}) => {
+  const ipAddress = req.ip || req.connection.remoteAddress;
+  const userAgent = req.get('user-agent');
+  try {
+    await AuditLogModule.createAuditLog({
+      action,
+      resourceType,
+      resourceId,
+      userId: req.user.id,
+      ipAddress,
+      userAgent,
+      metadata: { adminAction: true, ...metadata },
+    });
+  } catch (err) {
+    logger.error(`Audit log failed for ${action}`, { error: err.message });
+  }
+};
 
 // All admin routes require admin role
 router.use(requireAuth, requireRole('ADMIN'));
@@ -52,6 +73,9 @@ router.get('/professionals/:id', async (req, res) => {
 router.patch('/professionals/:id/verify', async (req, res) => {
   try {
     const professional = await admin.verifyProfessional(req.params.id);
+    await logAdminAction(req, 'PROFESSIONAL_VERIFY', 'PROFESSIONAL', req.params.id, {
+      professionalName: professional?.user?.firstName + ' ' + professional?.user?.lastName,
+    });
     res.json({ professional });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -61,6 +85,9 @@ router.patch('/professionals/:id/verify', async (req, res) => {
 router.patch('/professionals/:id/reject', async (req, res) => {
   try {
     const professional = await admin.rejectProfessional(req.params.id, req.body.reason);
+    await logAdminAction(req, 'PROFESSIONAL_REJECT', 'PROFESSIONAL', req.params.id, {
+      reason: req.body.reason,
+    });
     res.json({ professional });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -88,6 +115,9 @@ router.patch('/professionals/:id/revoke-decennale', async (req, res) => {
 router.patch('/professionals/:id/suspend', async (req, res) => {
   try {
     await admin.suspendProfessional(req.params.id);
+    await logAdminAction(req, 'PROFESSIONAL_SUSPEND', 'PROFESSIONAL', req.params.id, {
+      reason: req.body?.reason || 'admin_request',
+    });
     res.json({ success: true });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -97,6 +127,7 @@ router.patch('/professionals/:id/suspend', async (req, res) => {
 router.patch('/professionals/:id/reactivate', async (req, res) => {
   try {
     await admin.reactivateProfessional(req.params.id);
+    await logAdminAction(req, 'PROFESSIONAL_REACTIVATE', 'PROFESSIONAL', req.params.id);
     res.json({ success: true });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -126,6 +157,9 @@ router.delete('/professionals/:id/complaint', async (req, res) => {
 router.post('/users/:id/reset-password', async (req, res) => {
   try {
     const result = await admin.resetUserPassword(req.params.id);
+    await logAdminAction(req, 'USER_PASSWORD_RESET', 'USER', req.params.id, {
+      reason: req.body?.reason || 'admin_request',
+    });
     res.json(result);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -156,6 +190,9 @@ router.get('/finances/commissions', async (req, res) => {
 router.patch('/finances/commissions/:professionalId/mark-paid', async (req, res) => {
   try {
     const { updated } = await admin.markCommissionsPaid();
+    await logAdminAction(req, 'COMMISSIONS_MARK_PAID', 'PROFESSIONAL', req.params.professionalId, {
+      updated,
+    });
     res.json({ success: true, updated });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -208,6 +245,9 @@ router.get('/support/tickets', async (req, res) => {
 router.patch('/support/tickets/:id/priority', async (req, res) => {
   try {
     const ticket = await admin.updateTicketPriority(req.params.id, req.body.priority);
+    await logAdminAction(req, 'TICKET_PRIORITY_UPDATE', 'SUPPORT_TICKET', req.params.id, {
+      priority: req.body.priority,
+    });
     res.json({ ticket });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -217,6 +257,9 @@ router.patch('/support/tickets/:id/priority', async (req, res) => {
 router.patch('/support/tickets/:id/assign', async (req, res) => {
   try {
     const ticket = await admin.assignTicket(req.params.id, req.body.assignedToAdminId);
+    await logAdminAction(req, 'TICKET_ASSIGN', 'SUPPORT_TICKET', req.params.id, {
+      assignedToAdminId: req.body.assignedToAdminId,
+    });
     res.json({ ticket });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -237,6 +280,9 @@ router.get('/messaging/stats', async (req, res) => {
 router.delete('/messaging/messages/:id', async (req, res) => {
   try {
     await admin.deleteMessage(req.params.id);
+    await logAdminAction(req, 'MESSAGE_DELETE', 'MESSAGE', req.params.id, {
+      reason: req.body?.reason || 'admin_moderation',
+    });
     res.json({ success: true });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
