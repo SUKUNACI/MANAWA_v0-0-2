@@ -138,19 +138,25 @@ class KeyVersioningModule {
   }
 
   /**
-   * Effectue la rotation vers une nouvelle version
+   * Crée et active une nouvelle version de clé en une seule opération
+   * @param {string} keyName - Nom de la clé
+   * @param {string} algorithm - Algorithme (ex: AES-256-GCM)
+   * @returns {Promise<Object>} Nouvelle version active
+   */
+  static async createAndActivateKeyVersion(keyName, algorithm) {
+    const newVersion = await this.createKeyVersion(keyName, algorithm);
+    return this.activateKeyVersion(keyName, newVersion.version);
+  }
+
+  /**
+   * Effectue la rotation vers une nouvelle version (alias pour createAndActivateKeyVersion)
+   * @deprecated Utilisez createAndActivateKeyVersion à la place
    * @param {string} keyName - Nom de la clé
    * @param {string} algorithm - Algorithme (ex: AES-256-GCM)
    * @returns {Promise<Object>} Nouvelle version active
    */
   static async rotateToNewVersion(keyName, algorithm) {
-    // Crée la nouvelle version
-    const newVersion = await this.createKeyVersion(keyName, algorithm);
-
-    // Active la nouvelle version
-    const activated = await this.activateKeyVersion(keyName, newVersion.version);
-
-    return activated;
+    return this.createAndActivateKeyVersion(keyName, algorithm);
   }
 
   /**
@@ -159,39 +165,27 @@ class KeyVersioningModule {
    */
   static async healthCheck() {
     const issues = [];
-
-    // Vérifie que chaque clé importante a au moins une version active
     const criticalKeys = ['JWT_SECRET', 'DB_ENCRYPTION_KEY', 'API_ENCRYPTION_KEY'];
 
-    for (const keyName of criticalKeys) {
-      const activeKey = await this.getActiveKey(keyName);
-      if (!activeKey) {
-        issues.push(`No active key found for ${keyName}`);
-      }
-    }
-
-    // Vérifie qu'il n'y a qu'une seule clé active par keyName
-    const allKeys = await prisma.keyVersion.findMany({
-      select: { keyName: true, isActive: true },
+    // Check critical keys + multiple active detection in one query
+    const activeKeysByName = await prisma.keyVersion.groupBy({
+      by: ['keyName'],
+      where: { isActive: true },
+      _count: { id: true },
     });
 
-    const keyNameCounts = {};
-    for (const key of allKeys) {
-      if (key.isActive) {
-        keyNameCounts[key.keyName] = (keyNameCounts[key.keyName] || 0) + 1;
+    const activeKeyMap = Object.fromEntries(activeKeysByName.map(k => [k.keyName, k._count.id]));
+
+    for (const keyName of criticalKeys) {
+      const count = activeKeyMap[keyName] || 0;
+      if (count === 0) {
+        issues.push(`No active key found for ${keyName}`);
+      } else if (count > 1) {
+        issues.push(`Multiple active keys found for ${keyName} (${count})`);
       }
     }
 
-    for (const [keyName, count] of Object.entries(keyNameCounts)) {
-      if (count > 1) {
-        issues.push(`Multiple active keys found for ${keyName}`);
-      }
-    }
-
-    return {
-      healthy: issues.length === 0,
-      issues,
-    };
+    return { healthy: issues.length === 0, issues };
   }
 }
 

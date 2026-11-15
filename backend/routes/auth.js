@@ -18,6 +18,30 @@ const AuditLogModule = require('../modules/AuditLogModule');
 const router = express.Router();
 const auth = new AuthModule(prisma);
 
+// Extract request metadata for audit logging
+const getRequestMetadata = (req) => ({
+  ipAddress: req.ip || req.connection.remoteAddress,
+  userAgent: req.get('user-agent'),
+});
+
+// Helper for audit logging
+const logAuditEvent = async (action, resourceType, resourceId, userId, metadata, req) => {
+  const { ipAddress, userAgent } = getRequestMetadata(req);
+  try {
+    await AuditLogModule.createAuditLog({
+      action,
+      resourceType,
+      resourceId,
+      userId,
+      ipAddress,
+      userAgent,
+      metadata,
+    });
+  } catch (err) {
+    logger.error(`Audit log failed for ${action}`, { error: err.message });
+  }
+};
+
 // Rate limit per IP (register + login)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -82,8 +106,7 @@ router.post(
 
       const { email, password } = req.body;
       const emailLower = email.toLowerCase();
-      const ipAddress = req.ip || req.connection.remoteAddress;
-      const userAgent = req.get('user-agent');
+      const { ipAddress, userAgent } = getRequestMetadata(req);
 
       let result;
       try {
@@ -118,15 +141,7 @@ router.post(
       await bruteForceMiddleware.logLoginAttempt(result.user.id, emailLower, 'success', ipAddress, userAgent);
 
       // Audit log — login successful
-      await AuditLogModule.createAuditLog({
-        action: 'LOGIN',
-        resourceType: 'USER',
-        resourceId: result.user.id,
-        userId: result.user.id,
-        ipAddress,
-        userAgent,
-        metadata: { email: emailLower, twoFARequired: result.requiresTwoFA || false },
-      }).catch((err) => logger.error('Audit log failed for LOGIN', { error: err.message }));
+      await logAuditEvent('LOGIN', 'USER', result.user.id, result.user.id, { email: emailLower, twoFARequired: result.requiresTwoFA || false }, req);
 
       if (result.requiresTwoFA) {
         return res.status(200).json({
@@ -187,21 +202,7 @@ router.patch('/password-change', requireAuth, async (req, res) => {
     }
 
     const result = await auth.changePassword(req.user.id, currentPassword, newPassword);
-
-    const ipAddress = req.ip || req.connection.remoteAddress;
-    const userAgent = req.get('user-agent');
-
-    // Audit log — password changed
-    await AuditLogModule.createAuditLog({
-      action: 'PASSWORD_CHANGE',
-      resourceType: 'USER',
-      resourceId: req.user.id,
-      userId: req.user.id,
-      ipAddress,
-      userAgent,
-      metadata: { reason: 'user_change_via_auth' },
-    }).catch((err) => logger.error('Audit log failed for PASSWORD_CHANGE', { error: err.message }));
-
+    await logAuditEvent('PASSWORD_CHANGE', 'USER', req.user.id, req.user.id, { reason: 'user_change_via_auth' }, req);
     res.json(result);
   } catch (err) {
     logger.error('Password change error', { error: err.message });
@@ -221,19 +222,7 @@ router.post('/admin-session', async (req, res) => {
       logger.warn('[Admin] Running in development mode - cookies are not secure. Enable HTTPS for production.');
     }
 
-    const ipAddress = req.ip || req.connection.remoteAddress;
-    const userAgent = req.get('user-agent');
-
-    // Audit log — admin session created
-    await AuditLogModule.createAuditLog({
-      action: 'ADMIN_SESSION_CREATE',
-      resourceType: 'ADMIN_SESSION',
-      resourceId: user.id,
-      userId: user.id,
-      ipAddress,
-      userAgent,
-      metadata: { adminLevel: user.adminLevel },
-    }).catch((err) => logger.error('Audit log failed for ADMIN_SESSION_CREATE', { error: err.message }));
+    await logAuditEvent('ADMIN_SESSION_CREATE', 'ADMIN_SESSION', user.id, user.id, { adminLevel: user.adminLevel }, req);
 
     res.cookie('adminToken', tok, { httpOnly: true, secure, sameSite: 'strict', maxAge: 15 * 60 * 1000 });
     res.cookie('adminCsrf', csrfToken, { httpOnly: true, secure, sameSite: 'strict', maxAge: 15 * 60 * 1000 });
@@ -327,21 +316,7 @@ router.post('/unlock', requireAuth, requireRole('ADMIN'), async (req, res) => {
     if (!email) return res.status(400).json({ error: 'Email requis' });
 
     const { email: unlockedEmail, userId } = await auth.unlockAccount(email, bruteForceMiddleware);
-
-    const ipAddress = req.ip || req.connection.remoteAddress;
-    const userAgent = req.get('user-agent');
-
-    // Audit log — admin unlock account
-    await AuditLogModule.createAuditLog({
-      action: 'ACCOUNT_UNLOCK',
-      resourceType: 'USER',
-      resourceId: userId || unlockedEmail,
-      userId: req.user.id,
-      ipAddress,
-      userAgent,
-      metadata: { unlockedEmail, reason: reason || 'manual unlock' },
-    }).catch((err) => logger.error('Audit log failed for ACCOUNT_UNLOCK', { error: err.message }));
-
+    await logAuditEvent('ACCOUNT_UNLOCK', 'USER', userId || unlockedEmail, req.user.id, { unlockedEmail, reason: reason || 'manual unlock' }, req);
     logger.info('[Admin] Account unlocked', { email: unlockedEmail, adminId: req.user.id });
     res.json({ ok: true, message: `Compte déverrouillé pour ${unlockedEmail}`, email: unlockedEmail });
   } catch (err) {
