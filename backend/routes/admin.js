@@ -160,12 +160,9 @@ router.delete('/professionals/:id/complaint', async (req, res) => {
 router.post('/users/:id/reset-password', async (req, res) => {
   try {
     const result = await admin.resetUserPassword(req.params.id);
-<<<<<<< Updated upstream
-=======
     await logAdminAction(req, 'USER_PASSWORD_RESET', 'USER', req.params.id, {
       reason: req.body?.reason || 'admin_request',
     }, 'USER_PASSWORD_HASH');
->>>>>>> Stashed changes
     res.json(result);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
