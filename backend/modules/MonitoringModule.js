@@ -120,7 +120,8 @@ class MonitoringModule {
     const metrics = this.monitoring.getMetrics();
     const conversions = metrics.business.conversions || 0;
     const quotes = metrics.business.quotes || 1;
-    const conversionRate = quotes > 0 ? ((conversions / quotes) * 100).toFixed(2) : '0';
+    const rate = quotes > 0 ? (conversions / quotes) * 100 : 0;
+    const conversionRate = rate === 0 ? '0' : rate.toFixed(2);
 
     return {
       payments: metrics.business.payments,
