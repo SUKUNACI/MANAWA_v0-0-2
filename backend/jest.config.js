@@ -35,7 +35,6 @@ module.exports = {
   setupFiles: ['./tests/setup.js'],
   clearMocks: true,
   testTimeout: 20000,
-  forceExit: true,
   maxWorkers: 1,
   // Q113: Coverage gate — pipeline fails if any metric drops below 75%
   // Note: 28 BD-dependent files excluded from coverage; gate adjusted to reflect testable codebase
