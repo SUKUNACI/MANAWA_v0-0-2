@@ -31,7 +31,7 @@ const writeLimiter = rateLimit({
   message: { error: 'Trop de requêtes, réessayez dans une minute' },
 });
 
-// POST /api/notifications/register-token
+// POST /register-token
 router.post('/register-token', writeLimiter, requireAuth,
   [
     body('token').trim().notEmpty().withMessage('token required'),
@@ -49,16 +49,7 @@ router.post('/register-token', writeLimiter, requireAuth,
       if (detectedType === 'FCM' && token.length < 100) return res.status(400).json({ error: 'Token FCM invalide' });
       if (detectedType === 'APNs' && !/^[a-f0-9]{64}$/.test(token)) return res.status(400).json({ error: 'Token APNs invalide' });
 
-      const pushToken = await prisma.pushToken.upsert({
-        where: { token },
-        update: { userId: req.user.id, isActive: true, deviceId: deviceId || null, lastUsed: new Date() },
-        create: { userId: req.user.id, token, platform: detectedType === 'APNs' ? 'iOS' : 'Android', type: detectedType, deviceId: deviceId || null, isActive: true },
-      });
-
-      if (detectedType === 'EXPO') {
-        await prisma.user.update({ where: { id: req.user.id }, data: { expoPushToken: token } });
-      }
-
+      const pushToken = await notificationsModule.registerToken(req.user.id, token, detectedType, deviceId);
       res.json({ registered: true, token: pushToken.id, type: detectedType, message: `Token ${detectedType} enregistré avec succès` });
     } catch (err) {
       next(err);
@@ -66,32 +57,27 @@ router.post('/register-token', writeLimiter, requireAuth,
   }
 );
 
-// DELETE /api/notifications/unregister-token
+// DELETE /unregister-token
 router.delete('/unregister-token', writeLimiter, requireAuth, handleValidationErrors, async (req, res, next) => {
   try {
-    await prisma.pushToken.updateMany({ where: { userId: req.user.id }, data: { isActive: false } });
-    await prisma.user.update({ where: { id: req.user.id }, data: { expoPushToken: null } });
+    await notificationsModule.unregisterAllTokens(req.user.id);
     res.json({ unregistered: true, message: 'Tous les tokens ont été désactivés' });
   } catch (err) {
     next(err);
   }
 });
 
-// GET /api/notifications/tokens
+// GET /tokens
 router.get('/tokens', readLimiter, requireAuth, handleValidationErrors, async (req, res, next) => {
   try {
-    const tokens = await prisma.pushToken.findMany({
-      where: { userId: req.user.id },
-      select: { id: true, platform: true, type: true, isActive: true, deviceId: true, lastUsed: true, createdAt: true },
-      orderBy: { createdAt: 'desc' },
-    });
-    res.json({ tokens, total: tokens.length, active: tokens.filter(t => t.isActive).length });
+    const result = await notificationsModule.getTokens(req.user.id);
+    res.json(result);
   } catch (err) {
     next(err);
   }
 });
 
-// GET /api/notifications/history
+// GET /history
 router.get('/history', readLimiter, requireAuth,
   [
     ...validatePageBasedPaginationQuery(),
@@ -112,7 +98,7 @@ router.get('/history', readLimiter, requireAuth,
   }
 );
 
-// PATCH /api/notifications/read-all
+// PATCH /read-all
 router.patch('/read-all', writeLimiter, requireAuth, handleValidationErrors, async (req, res, next) => {
   try {
     await notificationsModule.markAllAsRead(req.user.id);
@@ -122,7 +108,7 @@ router.patch('/read-all', writeLimiter, requireAuth, handleValidationErrors, asy
   }
 });
 
-// PATCH /api/notifications/:id/read
+// PATCH /:id/read
 router.patch('/:id/read', writeLimiter, requireAuth,
   [param('id').trim().notEmpty().withMessage('id requis')],
   handleValidationErrors,
@@ -138,7 +124,7 @@ router.patch('/:id/read', writeLimiter, requireAuth,
   }
 );
 
-// POST /api/notifications/:id/archive
+// POST /:id/archive
 router.post('/:id/archive', writeLimiter, requireAuth,
   [param('id').trim().notEmpty().withMessage('id requis')],
   handleValidationErrors,
@@ -146,7 +132,7 @@ router.post('/:id/archive', writeLimiter, requireAuth,
     try {
       const notification = await prisma.notification.findUnique({ where: { id: req.params.id }, select: { userId: true } });
       if (!notification || notification.userId !== req.user.id) return res.status(404).json({ error: 'Notification introuvable' });
-      await prisma.notification.update({ where: { id: req.params.id }, data: { isArchived: true } });
+      await notificationsModule.archive(req.params.id);
       res.json({ archived: true, message: 'Notification archivée' });
     } catch (err) {
       next(err);
@@ -154,17 +140,17 @@ router.post('/:id/archive', writeLimiter, requireAuth,
   }
 );
 
-// POST /api/notifications/archive-all
+// POST /archive-all
 router.post('/archive-all', writeLimiter, requireAuth, handleValidationErrors, async (req, res, next) => {
   try {
-    const result = await prisma.notification.updateMany({ where: { userId: req.user.id, isArchived: false }, data: { isArchived: true } });
-    res.json({ archived: result.count, message: `${result.count} notifications archivées` });
+    const count = await notificationsModule.archiveAll(req.user.id);
+    res.json({ archived: count, message: `${count} notifications archivées` });
   } catch (err) {
     next(err);
   }
 });
 
-// POST /api/notifications/:id/unarchive
+// POST /:id/unarchive
 router.post('/:id/unarchive', writeLimiter, requireAuth,
   [param('id').trim().notEmpty().withMessage('id requis')],
   handleValidationErrors,
@@ -172,7 +158,7 @@ router.post('/:id/unarchive', writeLimiter, requireAuth,
     try {
       const notification = await prisma.notification.findUnique({ where: { id: req.params.id }, select: { userId: true } });
       if (!notification || notification.userId !== req.user.id) return res.status(404).json({ error: 'Notification introuvable' });
-      await prisma.notification.update({ where: { id: req.params.id }, data: { isArchived: false } });
+      await notificationsModule.unarchive(req.params.id);
       res.json({ archived: false, message: 'Notification restaurée' });
     } catch (err) {
       next(err);

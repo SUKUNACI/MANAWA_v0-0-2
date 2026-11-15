@@ -200,6 +200,175 @@ class NotificationsModule {
       return [];
     }
   }
+
+  /**
+   * Archive notification
+   * @param {string} notificationId - Notification ID
+   * @returns {Promise<object>} Updated notification
+   */
+  async archive(notificationId) {
+    try {
+      return await this.prisma.notification.update({
+        where: { id: notificationId },
+        data: { isArchived: true },
+      });
+    } catch (err) {
+      logger.warn('[NotificationsModule] Failed to archive notification', {
+        notificationId,
+        error: err.message,
+      });
+      throw err;
+    }
+  }
+
+  /**
+   * Unarchive notification
+   * @param {string} notificationId - Notification ID
+   * @returns {Promise<object>} Updated notification
+   */
+  async unarchive(notificationId) {
+    try {
+      return await this.prisma.notification.update({
+        where: { id: notificationId },
+        data: { isArchived: false },
+      });
+    } catch (err) {
+      logger.warn('[NotificationsModule] Failed to unarchive notification', {
+        notificationId,
+        error: err.message,
+      });
+      throw err;
+    }
+  }
+
+  /**
+   * Archive all unarchived notifications for user
+   * @param {string} userId - User ID
+   * @returns {Promise<number>} Count of archived notifications
+   */
+  async archiveAll(userId) {
+    try {
+      const result = await this.prisma.notification.updateMany({
+        where: { userId, isArchived: false },
+        data: { isArchived: true },
+      });
+      return result.count;
+    } catch (err) {
+      logger.warn('[NotificationsModule] Failed to archive all notifications', {
+        userId,
+        error: err.message,
+      });
+      throw err;
+    }
+  }
+
+  /**
+   * Register push token (Expo, FCM, APNs)
+   * @param {string} userId - User ID
+   * @param {string} token - Push token
+   * @param {string} type - Token type (EXPO, FCM, APNs)
+   * @param {string|null} deviceId - Optional device identifier
+   * @returns {Promise<object>} Created push token record
+   */
+  async registerToken(userId, token, type, deviceId = null) {
+    try {
+      const pushToken = await this.prisma.pushToken.upsert({
+        where: { token },
+        update: {
+          userId,
+          isActive: true,
+          deviceId: deviceId || null,
+          lastUsed: new Date(),
+        },
+        create: {
+          userId,
+          token,
+          platform: type === 'APNs' ? 'iOS' : 'Android',
+          type,
+          deviceId: deviceId || null,
+          isActive: true,
+        },
+      });
+
+      if (type === 'EXPO') {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { expoPushToken: token },
+        });
+      }
+
+      logger.info('[NotificationsModule] Token registered', { userId, type });
+      return pushToken;
+    } catch (err) {
+      logger.error('[NotificationsModule] Failed to register token', {
+        userId,
+        error: err.message,
+      });
+      throw err;
+    }
+  }
+
+  /**
+   * Unregister all push tokens for user
+   * @param {string} userId - User ID
+   * @returns {Promise<number>} Count of deactivated tokens
+   */
+  async unregisterAllTokens(userId) {
+    try {
+      const result = await this.prisma.pushToken.updateMany({
+        where: { userId },
+        data: { isActive: false },
+      });
+
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { expoPushToken: null },
+      });
+
+      logger.info('[NotificationsModule] All tokens unregistered', { userId });
+      return result.count;
+    } catch (err) {
+      logger.error('[NotificationsModule] Failed to unregister tokens', {
+        userId,
+        error: err.message,
+      });
+      throw err;
+    }
+  }
+
+  /**
+   * Get all push tokens for user
+   * @param {string} userId - User ID
+   * @returns {Promise<Array>} Push token list
+   */
+  async getTokens(userId) {
+    try {
+      const tokens = await this.prisma.pushToken.findMany({
+        where: { userId },
+        select: {
+          id: true,
+          platform: true,
+          type: true,
+          isActive: true,
+          deviceId: true,
+          lastUsed: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      return {
+        tokens,
+        total: tokens.length,
+        active: tokens.filter(t => t.isActive).length,
+      };
+    } catch (err) {
+      logger.error('[NotificationsModule] Failed to get tokens', {
+        userId,
+        error: err.message,
+      });
+      throw err;
+    }
+  }
 }
 
 module.exports = NotificationsModule;
