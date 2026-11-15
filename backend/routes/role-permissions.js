@@ -65,12 +65,12 @@ router.post('/grant', adminLimiter, [body('roleId').notEmpty().withMessage('role
   }
 });
 
-router.post('/revoke', adminLimiter, [body('roleId').notEmpty().withMessage('roleId requis'), body('section').notEmpty().withMessage('section requise')], async (req, res, next) => {
+router.post('/revoke', adminLimiter, [body('roleId').notEmpty().withMessage('roleId requis'), body('section').notEmpty().withMessage('section requise'), body('actions').isArray().notEmpty().withMessage('actions doit être un tableau non vide')], async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
 
   try {
-    const result = await rolePermission.revokePermission(req.body.roleId, req.body.section, req.user.id);
+    const result = await rolePermission.revokePermission(req.body.roleId, req.body.section, req.body.actions, req.user.id);
     res.json(result);
   } catch (err) {
     if (err.status) res.status(err.status).json({ error: err.message });

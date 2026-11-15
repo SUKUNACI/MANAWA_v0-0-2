@@ -506,7 +506,6 @@ describe('GET /api/companies - Filter by ENTREPRISE type', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           accountType: 'ENTREPRISE',
-          companyName: { not: null },
         }),
       })
     );

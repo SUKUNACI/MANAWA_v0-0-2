@@ -178,7 +178,7 @@ describe('POST /compute', () => {
       .set('Authorization', `Bearer ${proToken()}`);
 
     expect(res.status).toBe(404);
-    expect(res.body.code).toBe('PRO_PROFILE_NOT_FOUND');
+    expect(res.body.code).toBe('PRO_NOT_FOUND');
   });
 
   it('200 recalcul réussi avec nouveaux badges', async () => {

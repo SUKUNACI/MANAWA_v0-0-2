@@ -205,7 +205,7 @@ class SubscriptionModule {
       return {
         activated: true,
         tier,
-        amount: 0,
+        finalAmount: 0,
         message: 'Abonnement activé sans frais',
       };
     }

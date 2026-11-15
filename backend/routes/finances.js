@@ -45,36 +45,6 @@ router.get('/summary', adminLimiter, requireAuth, requirePermission('finances'),
     const result = await finance.getSummary();
     res.json(result);
   } catch (err) {
-          quote: {
-            include: {
-              project: true,
-              professional: {
-                include: {
-                  user: {
-                    select: {
-                      email: true,
-                      firstName: true,
-                      lastName: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.payment.count({ where }),
-      prisma.payment.aggregate({
-        where,
-        _sum: { amount: true },
-        _count: true,
-      }),
-    ]);
-
-    res.json({
     next(err);
   }
 });

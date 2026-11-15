@@ -166,11 +166,25 @@ class RolePermissionModule {
   }
 
   /**
-   * POST /revoke — Revoke permissions from a role
+   * POST /revoke — Revoke specific actions from a role
    */
-  async revokePermission(roleId, section, changedByAdminId) {
-    if (!roleId || !section) {
-      const err = new Error('roleId et section sont requis');
+  async revokePermission(roleId, section, actions, changedByAdminId) {
+    if (!roleId || !section || !actions) {
+      const err = new Error('roleId, section et actions sont requis');
+      err.status = 400;
+      throw err;
+    }
+
+    if (!Array.isArray(actions) || actions.length === 0) {
+      const err = new Error('actions doit être un tableau non vide');
+      err.status = 400;
+      throw err;
+    }
+
+    const VALID_ACTIONS = ['create', 'read', 'update', 'delete'];
+    const invalidActions = actions.filter(a => !VALID_ACTIONS.includes(a));
+    if (invalidActions.length > 0) {
+      const err = new Error(`Actions valides: ${VALID_ACTIONS.join(', ')}`);
       err.status = 400;
       throw err;
     }
@@ -193,14 +207,22 @@ class RolePermissionModule {
       canDelete: currentPerm.canDelete,
     };
 
-    // For now, just set all to false (or specify which actions to revoke)
-    // This is a simplified revoke - full logic would track specific actions
-    const newPermissions = {
-      canCreate: false,
-      canRead: false,
-      canUpdate: false,
-      canDelete: false,
-    };
+    // Build new permissions by revoking specific actions
+    const newPermissions = { ...previousPermissions };
+    actions.forEach(action => {
+      if (action === 'create') newPermissions.canCreate = false;
+      if (action === 'read') newPermissions.canRead = false;
+      if (action === 'update') newPermissions.canUpdate = false;
+      if (action === 'delete') newPermissions.canDelete = false;
+    });
+
+    // Check that at least ONE permission remains after revoke
+    const hasAtLeastOne = Object.values(newPermissions).some(v => v === true);
+    if (!hasAtLeastOne) {
+      const err = new Error('Au moins une action doit rester après révocation');
+      err.status = 400;
+      throw err;
+    }
 
     // Log change
     await this.prisma.rolePermissionHistory.create({
@@ -214,16 +236,17 @@ class RolePermissionModule {
       },
     });
 
-    // Update (or delete) permission
-    await this.prisma.rolePermission.delete({
+    // Update permission
+    await this.prisma.rolePermission.update({
       where: { adminRoleTypeId_section: { adminRoleTypeId: roleId, section } },
+      data: newPermissions,
     });
 
     return {
       success: true,
       roleId,
       section,
-      actionsRevoked: ['create', 'read', 'update', 'delete'],
+      actionsRevoked: actions,
       revokedAt: new Date(),
       revokedBy: changedByAdminId,
     };
@@ -239,11 +262,6 @@ class RolePermissionModule {
       where: { adminRoleTypeId: roleId },
       skip,
       take: limit,
-      include: {
-        changedByAdmin: {
-          select: { id: true, firstName: true, lastName: true, email: true },
-        },
-      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -251,12 +269,20 @@ class RolePermissionModule {
       where: { adminRoleTypeId: roleId },
     });
 
-    // Parse JSON strings
+    // Get admin info for all history entries
+    const adminIds = [...new Set(history.map(h => h.changedByAdminId))];
+    const admins = await this.prisma.user.findMany({
+      where: { id: { in: adminIds } },
+      select: { id: true, firstName: true, lastName: true, email: true },
+    });
+    const adminMap = Object.fromEntries(admins.map(a => [a.id, a]));
+
+    // Parse JSON strings and enrich with admin info
     const parsed = history.map(h => ({
       ...h,
       previousPermissions: JSON.parse(h.previousPermissions),
       newPermissions: JSON.parse(h.newPermissions),
-      changedBy: h.changedByAdmin,
+      changedBy: adminMap[h.changedByAdminId],
     }));
 
     return {

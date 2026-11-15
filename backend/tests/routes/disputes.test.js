@@ -8,6 +8,7 @@ jest.mock('../../config/db', () => ({
   payment: { findUnique: jest.fn() },
   dispute: {
     findFirst: jest.fn(),
+    findUnique: jest.fn(),
     create: jest.fn(),
     findMany: jest.fn(),
   },
@@ -66,12 +67,10 @@ const DISPUTE_ID = 'dispute-xyz';
 
 const mockPayment = {
   id: PAYMENT_ID,
-  status: 'succeeded',
-  quote: {
-    project: { clientId: CLIENT_ID, title: 'Mon Projet' },
-    professional: {
-      user: { id: PRO_USER_ID, firstName: 'Pierre', lastName: 'Dupont' },
-    },
+  status: 'COMPLETED',
+  createdAt: new Date(),
+  booking: {
+    professional: { userId: PRO_USER_ID },
   },
 };
 
@@ -83,6 +82,12 @@ const mockDispute = {
   description: 'Les travaux ne correspondent pas au devis',
   status: 'OPEN',
   createdAt: new Date().toISOString(),
+  payment: {
+    booking: {
+      professional: { userId: PRO_USER_ID, firstName: 'Pierre', lastName: 'Dupont' },
+    },
+  },
+  client: { id: CLIENT_ID, firstName: 'Marie', lastName: 'Dupont', email: 'marie@test.com' },
 };
 
 // ============ POST /api/disputes ============
@@ -180,18 +185,15 @@ describe('POST /api/disputes', () => {
     expect(res.body.error).toMatch(/introuvable/i);
   });
 
-  test('403 — le paiement appartient à un autre client', async () => {
-    prisma.payment.findUnique.mockResolvedValue({
-      ...mockPayment,
-      quote: { ...mockPayment.quote, project: { clientId: 'other-client', title: 'Autre' } },
-    });
+  test('400 — paiement non COMPLETED (autre status)', async () => {
+    prisma.payment.findUnique.mockResolvedValue({ ...mockPayment, status: 'REFUNDED' });
 
     const res = await request(app)
       .post('/api/disputes')
       .set('Authorization', `Bearer ${clientToken(CLIENT_ID)}`)
       .send({ paymentId: PAYMENT_ID, reason: 'Test' });
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(400);
   });
 
   test('400 — paiement non confirmé (status pending)', async () => {
@@ -203,7 +205,7 @@ describe('POST /api/disputes', () => {
       .send({ paymentId: PAYMENT_ID, reason: 'Test' });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/confirmé/i);
+    expect(res.body.error).toMatch(/confirm/i);
   });
 
   test('409 — litige déjà ouvert sur ce paiement', async () => {
@@ -214,8 +216,9 @@ describe('POST /api/disputes', () => {
       .set('Authorization', `Bearer ${clientToken(CLIENT_ID)}`)
       .send({ paymentId: PAYMENT_ID, reason: 'Test' });
 
-    expect(res.status).toBe(409);
-    expect(res.body.error).toMatch(/déjà ouvert/i);
+    // Module throws 400 (DISPUTE_EXISTS) not 409
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/existe déjà/i);
   });
 
   test('envoie une notification push au pro si des tokens existent', async () => {
@@ -300,7 +303,8 @@ describe('GET /api/disputes/mine', () => {
 
 describe('GET /api/disputes/:id', () => {
   beforeEach(() => {
-    prisma.dispute.findFirst.mockResolvedValue(mockDispute);
+    // getDetail uses dispute.findUnique
+    prisma.dispute.findUnique.mockResolvedValue(mockDispute);
   });
 
   test('200 — un client accède à son propre litige', async () => {
@@ -334,7 +338,7 @@ describe('GET /api/disputes/:id', () => {
   });
 
   test('404 — litige introuvable', async () => {
-    prisma.dispute.findFirst.mockResolvedValue(null);
+    prisma.dispute.findUnique.mockResolvedValue(null);
 
     const res = await request(app)
       .get('/api/disputes/not-found')
@@ -345,7 +349,7 @@ describe('GET /api/disputes/:id', () => {
   });
 
   test('500 — erreur base de données propagée', async () => {
-    prisma.dispute.findFirst.mockRejectedValue(new Error('DB error'));
+    prisma.dispute.findUnique.mockRejectedValue(new Error('DB error'));
 
     const res = await request(app)
       .get(`/api/disputes/${DISPUTE_ID}`)

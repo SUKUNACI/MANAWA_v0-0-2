@@ -245,7 +245,7 @@ describe('POST /tickets/:id/messages', () => {
     const res = await request(app)
       .post('/api/support/tickets/ticket-1/messages')
       .set('Authorization', `Bearer ${clientToken()}`)
-      .send({ message: '<script>alert("xss")</script>' });
+      .send({ message: '<img src=x onerror=alert(1)>' });
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/XSS/i);

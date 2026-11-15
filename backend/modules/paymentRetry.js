@@ -38,34 +38,36 @@ class PaymentRetryModule {
   }
 
   /**
-   * Count retry attempts from audit logs
+   * Count retry attempts from audit logs or payment metadata
    */
-  async countRetryAttempts(paymentId) {
-    const retries = await this.prisma.paymentAuditLog.findMany({
-      where: { paymentId, reason: 'retry' },
-    });
-
-    return retries.length;
+  async countRetryAttempts(payment) {
+    if (!payment.auditLogs) {
+      return 0;
+    }
+    return payment.auditLogs.filter(log => log.reason === 'retry').length;
   }
 
   /**
    * Reapply promo code if applicable
    */
   async reapplyPromoCode(payment, professional) {
-    let promoCodeId = null;
+    let promo = null;
 
-    if (payment.metadata && payment.metadata.promoCodeId) {
-      const promoCode = await this.prisma.promoCode.findUnique({
-        where: { id: payment.metadata.promoCodeId },
-      });
+    if (payment.metadata) {
+      const metadata = typeof payment.metadata === 'string' ? JSON.parse(payment.metadata) : payment.metadata;
+      if (metadata.promoCodeId) {
+        const promoCode = await this.prisma.promoCode.findUnique({
+          where: { id: metadata.promoCodeId },
+        });
 
-      // Check if promo is still valid
-      if (promoCode && promoCode.active && (!promoCode.validUntil || new Date() <= promoCode.validUntil)) {
-        promoCodeId = promoCode.id;
+        // Check if promo is still valid
+        if (promoCode && promoCode.active && (!promoCode.validUntil || new Date() <= promoCode.validUntil)) {
+          promo = promoCode;
+        }
       }
     }
 
-    return promoCodeId;
+    return promo;
   }
 
   /**
@@ -98,7 +100,7 @@ class PaymentRetryModule {
     await this.canRetryPayment(payment);
 
     // Check retry count
-    const retryCount = await this.countRetryAttempts(paymentId);
+    const retryCount = await this.countRetryAttempts(payment);
     if (retryCount >= MAX_RETRY_ATTEMPTS) {
       const err = new Error('Maximum de tentatives atteint (3)');
       err.status = 400;
@@ -106,14 +108,13 @@ class PaymentRetryModule {
     }
 
     // Reapply promo
-    const promoCodeId = await this.reapplyPromoCode(payment, payment.quote.professional);
+    const promo = await this.reapplyPromoCode(payment, payment.quote.professional);
 
     let amount = payment.amount;
     let discountAmount = 0;
 
     // Recalculate if promo reapplied
-    if (promoCodeId) {
-      const promo = await this.prisma.promoCode.findUnique({ where: { id: promoCodeId } });
+    if (promo) {
       if (promo.discountType === 'PERCENT') {
         discountAmount = Math.floor(payment.amount * (promo.discountValue / 100));
       } else {
@@ -123,16 +124,23 @@ class PaymentRetryModule {
     }
 
     // Call GeniusPay
-    const geniusPayResponse = await geniuspay.createPayment({
-      amount,
-      reference: paymentId,
-      description: `Retry payment ${paymentId}`,
-      customer: {
-        email: payment.quote.professional.user.email,
-        firstName: payment.quote.professional.user.firstName,
-        lastName: payment.quote.professional.user.lastName,
-      },
-    });
+    let geniusPayResponse;
+    try {
+      geniusPayResponse = await geniuspay.createPayment({
+        amount,
+        reference: paymentId,
+        description: `Retry payment ${paymentId}`,
+        customer: {
+          email: payment.quote.professional.user.email,
+          firstName: payment.quote.professional.user.firstName,
+          lastName: payment.quote.professional.user.lastName,
+        },
+      });
+    } catch (err) {
+      const error = new Error('Impossible de réessayer le paiement');
+      error.status = 500;
+      throw error;
+    }
 
     if (!geniusPayResponse || !geniusPayResponse.reference) {
       const err = new Error('Impossible de réessayer le paiement');
@@ -147,7 +155,7 @@ class PaymentRetryModule {
         status: 'pending',
         geniuspayRef: geniusPayResponse.reference,
         amount,
-        metadata: promoCodeId ? { ...payment.metadata, promoCodeId } : payment.metadata,
+        metadata: promo ? { ...payment.metadata, promoCodeId: promo.id } : payment.metadata,
       },
     });
 
@@ -169,7 +177,7 @@ class PaymentRetryModule {
         geniuspayRef: updatedPayment.geniuspayRef,
         amount: updatedPayment.amount,
         retryAttempt: retryCount + 1,
-        appliedPromoCode: promoCodeId ? true : null,
+        appliedPromoCode: promo ? promo.code : null,
         discountAmount: discountAmount || null,
       },
     };

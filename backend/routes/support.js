@@ -1,59 +1,32 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const { param, body, query, validationResult } = require('express-validator');
-const prisma = require('../config/db');
-const { buildPaginationQuery } = require('../utils/sorting-helper');
-const { getSortableFields } = require('../config/sortable-fields');
+const { param, body } = require('express-validator');
 const { requireAuth } = require('../middleware/auth');
-const { sendPushNotification } = require('../config/pushNotifications');
 const { handleValidationErrors } = require('../middleware/validateInput');
+const SupportModule = require('../modules/support');
+const prisma = require('../config/db');
 
 const router = express.Router();
+const support = new SupportModule(prisma);
 
 router.use(requireAuth);
 
-// Rate limiters
-// 5 tickets max par heure, 20 messages par heure
-const createTicketLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 5,
-  keyGenerator: (req) => req.user?.id || req.ip,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Trop de tickets créés, réessayez dans une heure' },
-});
+const createTicketLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 5, keyGenerator: (req) => req.user?.id || req.ip, standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de tickets créés, réessayez dans une heure' } });
+const ticketMessageLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, keyGenerator: (req) => req.user?.id || req.ip, standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de messages envoyés, réessayez dans une heure' } });
+const readLimiter = rateLimit({ windowMs: 60 * 1000, max: 100, keyGenerator: (req) => req.user?.id || req.ip, standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de requêtes, réessayez dans une minute' } });
 
-const ticketMessageLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 20,
-  keyGenerator: (req) => req.user?.id || req.ip,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Trop de messages envoyés, réessayez dans une heure' },
-});
-
-const readLimiter = rateLimit({
-  windowMs: 60 * 1000, max: 100, keyGenerator: (req) => req.user?.id || req.ip,
-  standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de requêtes, réessayez dans une minute' },
-});
-
-// GET /api/support/tickets — mes tickets
-router.get('/tickets', handleValidationErrors, async (req, res, next) => {
+// GET /api/support/tickets
+router.get('/tickets', readLimiter, handleValidationErrors, async (req, res, next) => {
   try {
-    const tickets = await prisma.supportTicket.findMany({
-      where: { userId: req.user.id },
-      orderBy: { updatedAt: 'desc' },
-      include: {
-        messages: { orderBy: { createdAt: 'desc' }, take: 1 },
-      },
-    });
+    const tickets = await support.listTickets(req.user.id);
     res.json(tickets);
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
   }
 });
 
-// POST /api/support/tickets — créer un ticket
+// POST /api/support/tickets
 router.post('/tickets', createTicketLimiter,
   [
     body('category').trim().notEmpty().isLength({ max: 100 }).withMessage('category required'),
@@ -64,110 +37,46 @@ router.post('/tickets', createTicketLimiter,
   async (req, res, next) => {
   try {
     const { category, subject, message } = req.body;
-    if (!category || !subject || !message) {
-      return res.status(400).json({ error: 'Catégorie, sujet et message sont requis' });
-    }
-
-    const ticket = await prisma.supportTicket.create({
-      data: {
-        userId: req.user.id,
-        category,
-        subject,
-        messages: {
-          create: { senderId: req.user.id, content: message, isAdmin: false },
-        },
-      },
-      include: { messages: true },
-    });
-
+    const ticket = await support.createTicket(req.user.id, { category, subject, message });
     res.status(201).json(ticket);
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
   }
 });
 
-// GET /api/support/tickets/:id — détail d'un ticket avec messages
-router.get('/tickets/:id', async (req, res, next) => {
+// GET /api/support/tickets/:id
+router.get('/tickets/:id', readLimiter, async (req, res, next) => {
   try {
-    const ticket = await prisma.supportTicket.findFirst({
-      where: { id: req.params.id, userId: req.user.id },
-      include: {
-        messages: { orderBy: { createdAt: 'asc' } },
-      },
-    });
-    if (!ticket) return res.status(404).json({ error: 'Ticket non trouvé' });
+    const ticket = await support.getTicket(req.params.id, req.user.id);
     res.json(ticket);
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
   }
 });
 
-// POST /api/support/tickets/:id/messages — répondre à un ticket
-router.post('/tickets/:id/messages', ticketMessageLimiter, async (req, res, next) => {
+// POST /api/support/tickets/:id/messages
+router.post('/tickets/:id/messages', ticketMessageLimiter,
+  [body('message').trim().notEmpty().isLength({ min: 1, max: 5000 }).withMessage('message required, max 5000 chars')],
+  handleValidationErrors,
+  async (req, res, next) => {
   try {
-    const ticket = await prisma.supportTicket.findFirst({
-      where: { id: req.params.id, userId: req.user.id },
-    });
-    if (!ticket) return res.status(404).json({ error: 'Ticket non trouvé' });
-    if (ticket.status === 'CLOSED') return res.status(400).json({ error: 'Ce ticket est fermé' });
-
-    const { message } = req.body;
-    if (!message) return res.status(400).json({ error: 'Message requis' });
-
-    // Validate message length
-    if (message && message.length > 5000) {
-      return res.status(400).json({ error: 'Message trop long' });
-    }
-
-    // Security: XSS detection
-    const xssPatterns = /<script|<img|<iframe|onerror|onload|onclick/i;
-    if (message && xssPatterns.test(message)) {
-      return res.status(400).json({ error: 'Contenu invalide (XSS detected)' });
-    }
-
-    // Security: SQL injection detection
-    const sqlPatterns = /'; DROP|DELETE FROM|INSERT INTO|UNION SELECT/i;
-    if (message && sqlPatterns.test(message)) {
-      return res.status(400).json({ error: 'Contenu invalide' });
-    }
-
-    // Security: null bytes
-    if (message && (message.includes('\x00') || message.includes('\0'))) {
-      return res.status(400).json({ error: 'Contenu invalide' });
-    }
-
-    const msg = await prisma.supportMessage.create({
-      data: { ticketId: ticket.id, senderId: req.user.id, content: message, isAdmin: false },
-    });
-
-    await prisma.supportTicket.update({ where: { id: ticket.id }, data: { status: 'OPEN' } });
-
+    const msg = await support.addMessage(req.params.id, req.user.id, req.body.message);
     res.status(201).json(msg);
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
   }
 });
 
-// PATCH /api/support/tickets/:id — mettre à jour le statut d'un ticket
+// PATCH /api/support/tickets/:id
 router.patch('/tickets/:id', async (req, res, next) => {
   try {
-    const ticket = await prisma.supportTicket.findFirst({
-      where: { id: req.params.id, userId: req.user.id },
-    });
-    if (!ticket) return res.status(404).json({ error: 'Ticket non trouvé' });
-
-    const { status } = req.body;
-    if (!status || !['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(status)) {
-      return res.status(400).json({ error: 'Statut invalide' });
-    }
-
-    const updated = await prisma.supportTicket.update({
-      where: { id: req.params.id },
-      data: { status },
-    });
-
+    const updated = await support.updateStatus(req.params.id, req.user.id, req.body.status);
     res.json(updated);
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
   }
 });

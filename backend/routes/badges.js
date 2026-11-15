@@ -1,90 +1,45 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const { param, validationResult } = require('express-validator');
-const prisma = require('../config/db');
+const { param } = require('express-validator');
 const { requireAuth, requireRole, optionalAuth } = require('../middleware/auth');
-const { BADGES, computeBadges } = require('../utils/badges');
 const { handleValidationErrors } = require('../middleware/validateInput');
+const { BADGES, computeBadges } = require('../utils/badges');
+const BadgeModule = require('../modules/badge');
+const prisma = require('../config/db');
 const logger = require('../utils/logger');
-const { buildPaginationQuery } = require('../utils/sorting-helper');
-const { getSortableFields } = require('../config/sortable-fields');
 
 const router = express.Router();
 
-// Rate limiters
 const readLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 100, // 100 requests per minute
-  keyGenerator: (req) => req.user?.id || req.ip,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Trop de requêtes, réessayez dans une minute' },
+  windowMs: 60 * 1000, max: 100, keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de requetes, reessayez dans une minute' },
 });
 
-/**
- * GET /api/badges/:proId
- * Public (optionalAuth) — retourne les badges d'un professionnel avec métadonnées.
- * Lance un recalcul non-bloquant en arrière-plan, puis retourne les badges existants.
- */
+const badge = new BadgeModule(prisma, computeBadges, BADGES);
+
+// GET /api/badges/:proId
 router.get('/:proId', readLimiter, optionalAuth,
-  [
-    param('proId').trim().notEmpty().withMessage('proId requis'),
-  ],
+  [param('proId').trim().notEmpty().withMessage('proId requis')],
   handleValidationErrors,
   async (req, res, next) => {
-  try {
-    const pro = await prisma.professional.findUnique({
-      where: { id: req.params.proId },
-      select: { id: true },
-    });
-    if (!pro) return res.status(404).json({ error: 'Professionnel introuvable', code: 'PRO_NOT_FOUND' });
-
-    // Recalcul non-bloquant
-    computeBadges(pro.id).catch(() => {});
-
-    // Retourner les badges actuellement en base
-    const badges = await prisma.professionalBadge.findMany({
-      where: { professionalId: pro.id },
-      orderBy: { earnedAt: 'asc' },
-    });
-
-    res.json(badges.map(b => ({ ...b, ...BADGES[b.badgeKey] })).filter(b => b.label));
-  } catch (err) {
-    logger.error('GET /api/badges/:proId failed', { proId: req.params.proId, error: err.message });
-    res.status(500).json({ error: 'Erreur lors de la récupération des badges', code: 'BADGE_FETCH_ERROR' });
+    try {
+      const badges = await badge.getBadgesForPro(req.params.proId);
+      res.json(badges);
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ error: err.message, code: err.code });
+      logger.error('GET /api/badges/:proId failed', { proId: req.params.proId, error: err.message });
+      res.status(500).json({ error: 'Erreur lors de la recuperation des badges', code: 'BADGE_FETCH_ERROR' });
+    }
   }
-});
+);
 
-/**
- * POST /api/badges/compute
- * Authentifié (PROFESSIONAL) — force le recalcul et retourne les badges nouvellement débloqués.
- */
+// POST /api/badges/compute
 router.post('/compute', requireAuth, requireRole('PROFESSIONAL'), handleValidationErrors, async (req, res, next) => {
   try {
-    const pro = await prisma.professional.findUnique({
-      where: { userId: req.user.id },
-      select: { id: true },
-    });
-    if (!pro) {
-      logger.error('POST /api/badges/compute - professional profile not found', { userId: req.user.id });
-      return res.status(404).json({ error: 'Profil professionnel introuvable', code: 'PRO_PROFILE_NOT_FOUND' });
-    }
-
-    // Badges actuels avant recalcul
-    const before = await prisma.professionalBadge.findMany({
-      where: { professionalId: pro.id },
-      select: { badgeKey: true },
-    });
-    const beforeKeys = new Set(before.map(b => b.badgeKey));
-
-    // Recalcul complet
-    const allBadges = await computeBadges(pro.id);
-
-    // Nouvellement débloqués = présents après mais absents avant
-    const newBadges = allBadges.filter(b => !beforeKeys.has(b.badgeKey));
-
-    res.json({ badges: allBadges, newBadges });
+    const result = await badge.computeForPro(req.user.id);
+    res.json(result);
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message, code: err.code });
     logger.error('POST /api/badges/compute failed', { userId: req.user.id, error: err.message });
     res.status(500).json({ error: 'Erreur lors du recalcul des badges', code: 'BADGE_COMPUTE_ERROR' });
   }

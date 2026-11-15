@@ -1,26 +1,22 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const { param, query, validationResult } = require('express-validator');
-const prisma = require('../config/db');
-const { buildPaginationQuery } = require('../utils/sorting-helper');
-const { getSortableFields } = require('../config/sortable-fields');
+const { param, query } = require('express-validator');
 const { requireAuth, requirePermission } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
-const { applyPageBasedPagination, validatePageBasedPaginationQuery, buildPaginatedResponse } = require('../utils/pagination-helper');
+const { applyPageBasedPagination, validatePageBasedPaginationQuery } = require('../utils/pagination-helper');
+const CompanyModule = require('../modules/company');
+const prisma = require('../config/db');
 
 const router = express.Router();
 
-// Rate limiters
 const adminLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 20, // 20 requests per minute
-  keyGenerator: (req) => req.user?.id || req.ip,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Trop de requêtes, réessayez dans une minute' },
+  windowMs: 60 * 1000, max: 20, keyGenerator: (req) => req.user?.id || req.ip,
+  standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de requetes, reessayez dans une minute' },
 });
 
-// GET /api/companies - List all companies
+const company = new CompanyModule(prisma);
+
+// GET /api/companies
 router.get('/', adminLimiter, requireAuth, requirePermission('companies'),
   [
     ...validatePageBasedPaginationQuery(),
@@ -28,90 +24,31 @@ router.get('/', adminLimiter, requireAuth, requirePermission('companies'),
   ],
   handleValidationErrors,
   async (req, res, next) => {
-  try {
-    const { search } = req.query;
-    const { limit, skip, offset } = applyPageBasedPagination(req.query, 'companies');
-
-    let where = {};
-    if (search) {
-      where = {
-        OR: [
-          { companyName: { contains: search, mode: 'insensitive' } },
-          { contact: { contains: search, mode: 'insensitive' } },
-        ],
-      };
+    try {
+      const { search } = req.query;
+      const { limit, skip, offset } = applyPageBasedPagination(req.query, 'companies');
+      const { companies, total } = await company.list({ search, limit, skip });
+      const page = Math.floor(offset / limit) + 1;
+      res.json({ companies, total, page, totalPages: Math.ceil(total / limit) });
+    } catch (err) {
+      next(err);
     }
-
-    const [companies, total] = await Promise.all([
-      prisma.professional.findMany({
-        where: {
-          ...where,
-          accountType: 'ENTREPRISE',
-          companyName: { not: null },
-        },
-        select: {
-          id: true,
-          companyName: true,
-          user: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-              phone: true,
-            },
-          },
-          trades: true,
-          trustScore: true,
-          createdAt: true,
-        },
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.professional.count({
-        where: {
-          ...where,
-          accountType: 'ENTREPRISE',
-          companyName: { not: null },
-        },
-      }),
-    ]);
-
-    const page = Math.floor(offset / limit) + 1;
-    res.json({
-      companies,
-      total,
-      page,
-      totalPages: Math.ceil(total / limit),
-    });
-  } catch (err) {
-    next(err);
   }
-});
+);
 
-// GET /api/companies/:id - Get company detail
+// GET /api/companies/:id
 router.get('/:id', requireAuth,
-  [
-    param('id').trim().notEmpty().withMessage('id requis'),
-  ],
+  [param('id').trim().notEmpty().withMessage('id requis')],
   handleValidationErrors,
   async (req, res, next) => {
-  try {
-    const company = await prisma.professional.findUnique({
-      where: { id: req.params.id },
-      include: {
-        user: true,
-        reviews: { take: 5 },
-      },
-    });
-
-    if (!company) return res.status(404).json({ error: 'Entreprise introuvable' });
-
-    res.json(company);
-  } catch (err) {
-    next(err);
+    try {
+      const result = await company.getProfile(req.params.id);
+      res.json(result);
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ error: err.message });
+      next(err);
+    }
   }
-});
+);
 
 module.exports = router;

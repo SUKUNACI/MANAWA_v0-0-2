@@ -23,6 +23,14 @@ const FinanceModule = require('./finance');
 const SubscriptionModule = require('./subscription');
 const PaymentRetryModule = require('./paymentRetry');
 const RolePermissionModule = require('./rolePermission');
+const PortfolioModule = require('./portfolio');
+const DisputeModule = require('./dispute');
+const ReviewModule = require('./review');
+const SupportModule = require('./support');
+const VideoCallModule = require('./videoCall');
+const BadgeModule = require('./badge');
+const CompanyModule = require('./company');
+const ReferralModule = require('./referral');
 
 /**
  * Create module instances with Prisma dependency injection
@@ -50,6 +58,14 @@ function createModules(prisma, stripe = null) {
     subscription: new SubscriptionModule(prisma),
     paymentRetry: new PaymentRetryModule(prisma),
     rolePermission: new RolePermissionModule(prisma),
+    portfolio: new PortfolioModule(prisma),
+    dispute: new DisputeModule(prisma),
+    review: new ReviewModule(prisma),
+    support: new SupportModule(prisma),
+    videoCall: new VideoCallModule(prisma),
+    badge: new BadgeModule(prisma),
+    company: new CompanyModule(prisma),
+    referral: new ReferralModule(prisma),
   };
 }
 
@@ -72,5 +88,13 @@ module.exports = {
   SubscriptionModule,
   PaymentRetryModule,
   RolePermissionModule,
+  PortfolioModule,
+  DisputeModule,
+  ReviewModule,
+  SupportModule,
+  VideoCallModule,
+  BadgeModule,
+  CompanyModule,
+  ReferralModule,
   createModules,
 };

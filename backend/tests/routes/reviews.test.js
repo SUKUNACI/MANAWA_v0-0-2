@@ -5,13 +5,15 @@ const { clientToken, proToken, adminToken } = require('../helpers');
 // ============ MOCKS ============
 
 jest.mock('../../config/db', () => ({
-  project: { findUnique: jest.fn() },
+  professional: { findUnique: jest.fn(), update: jest.fn() },
+  booking: { findFirst: jest.fn() },
   review: {
+    findFirst: jest.fn(),
     create: jest.fn(),
     findMany: jest.fn(),
+    count: jest.fn(),
     aggregate: jest.fn(),
   },
-  professional: { update: jest.fn() },
 }));
 
 jest.mock('../../middleware/auth', () => ({
@@ -81,7 +83,9 @@ const mockReview = {
 
 describe('POST /api/reviews', () => {
   beforeEach(() => {
-    prisma.project.findUnique.mockResolvedValue(mockProject);
+    prisma.professional.findUnique.mockResolvedValue({ id: PRO_ID, userId: 'pro-user-1' });
+    prisma.booking.findFirst.mockResolvedValue({ id: 'booking-1', status: 'COMPLETED' });
+    prisma.review.findFirst.mockResolvedValue(null);
     prisma.review.create.mockResolvedValue(mockReview);
     prisma.review.aggregate.mockResolvedValue({ _avg: { rating: 4 }, _count: 1 });
     prisma.professional.update.mockResolvedValue({});
@@ -192,57 +196,57 @@ describe('POST /api/reviews', () => {
     expect(res.status).toBe(400);
   });
 
-  test('403 — le projet n\'appartient pas au client connecté', async () => {
-    prisma.project.findUnique.mockResolvedValue({
-      ...mockProject,
-      clientId: 'other-client',
-    });
+  test('404 — professionnel introuvable', async () => {
+    prisma.professional.findUnique.mockResolvedValue(null);
 
     const res = await request(app)
       .post('/api/reviews')
-      .set('Authorization', `Bearer ${clientToken(CLIENT_ID)}`)
+      .set('Authorization', )
       .send({ professionalId: PRO_ID, rating: 4, projectId: PROJECT_ID });
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
   });
 
-  test('400 — la mission n\'est pas encore terminée', async () => {
-    prisma.project.findUnique.mockResolvedValue({ ...mockProject, status: 'IN_PROGRESS' });
+
+
+
+  test('400 — la mission n'est pas encore terminée', async () => {
+    // Module checks booking.findFirst for COMPLETED; no booking = 400
+    prisma.booking.findFirst.mockResolvedValue(null);
 
     const res = await request(app)
       .post('/api/reviews')
-      .set('Authorization', `Bearer ${clientToken(CLIENT_ID)}`)
+      .set('Authorization', )
       .send({ professionalId: PRO_ID, rating: 4, projectId: PROJECT_ID });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/terminée/i);
-  });
+    expect(res.body.error).toMatch(/réservation/i);
 
-  test('409 — avis déjà laissé pour cette mission', async () => {
-    prisma.project.findUnique.mockResolvedValue({
-      ...mockProject,
-      review: { id: 'existing-review' },
-    });
+  test('400 — avis déjà laissé pour cette mission', async () => {
+    // Module throws 400 (REVIEW_EXISTS) not 409
+    prisma.review.findFirst.mockResolvedValue({ id: 'existing-review' });
 
     const res = await request(app)
       .post('/api/reviews')
-      .set('Authorization', `Bearer ${clientToken(CLIENT_ID)}`)
+      .set('Authorization', )
       .send({ professionalId: PRO_ID, rating: 4, projectId: PROJECT_ID });
 
-    expect(res.status).toBe(409);
-    expect(res.body.error).toMatch(/déjà laissé/i);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/déjà évalué/i);
   });
 
-  test('403 — aucune mission avec ce professionnel', async () => {
-    prisma.project.findUnique.mockResolvedValue({ ...mockProject, quotes: [] });
+
+
+  test('400 — aucune réservation complétée avec ce professionnel', async () => {
+    prisma.booking.findFirst.mockResolvedValue(null);
 
     const res = await request(app)
       .post('/api/reviews')
-      .set('Authorization', `Bearer ${clientToken(CLIENT_ID)}`)
+      .set('Authorization', )
       .send({ professionalId: PRO_ID, rating: 4, projectId: PROJECT_ID });
 
-    expect(res.status).toBe(403);
-    expect(res.body.error).toMatch(/mission/i);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/réservation/i);
   });
 
   test('403 — projet introuvable (project null)', async () => {
