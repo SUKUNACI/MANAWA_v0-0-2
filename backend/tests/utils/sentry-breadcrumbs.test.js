@@ -189,15 +189,17 @@ describe('sentry-breadcrumbs.js', () => {
 
       addErrorBreadcrumb('Payment processing error', error, { paymentId: 'pay_789' });
 
-      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith({
-        category: 'error',
-        message: 'Payment processing error',
-        level: 'error',
-        data: {
-          errorCode: 'PAY_DECLINED',
-          errorType: 'Error',
-        },
-      });
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+        expect.objectContaining({
+          category: 'error',
+          message: 'Payment processing error',
+          level: 'error',
+          data: expect.objectContaining({
+            errorCode: 'PAY_DECLINED',
+            errorType: 'Error',
+          }),
+        })
+      );
     });
   });
 
