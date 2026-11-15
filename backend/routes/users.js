@@ -1,17 +1,15 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const { body, query, validationResult } = require('express-validator');
-const bcrypt = require('bcryptjs');
+const { body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const upload = require('../config/upload');
 const { verifyMagicBytes } = require('../config/upload');
 const { uploadBuffer } = require('../config/cloudinary');
-const { requireAuth, requireRole } = require('../middleware/auth');
-const { buildPaginationQuery } = require('../utils/sorting-helper');
-const { getSortableFields } = require('../config/sortable-fields');
-const logger = require('../utils/logger');
+const { requireAuth } = require('../middleware/auth');
+const UserModule = require('../modules/user');
 
 const router = express.Router();
+const userModule = new UserModule(prisma);
 
 // Rate limiters
 const readLimiter = rateLimit({
@@ -27,111 +25,47 @@ const uploadLimiter = rateLimit({
   standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de téléchargements, réessayez dans une minute' },
 });
 
-// PATCH /api/users/me
 router.patch('/me',
   requireAuth,
   [
-    body('firstName').optional().trim().notEmpty().isLength({ max: 50 }).matches(/^[^<>&"'/\\]+$/).withMessage('Prénom invalide'),
-    body('lastName').optional().trim().notEmpty().isLength({ max: 50 }).matches(/^[^<>&"'/\\]+$/).withMessage('Nom invalide'),
-    body('phone').optional({ nullable: true }).trim().matches(/^\+?[0-9\s\-().]{6,20}$/),
-    body('city').optional({ nullable: true }).trim().isLength({ max: 100 }).escape(),
+    body('firstName').optional().trim().notEmpty().withMessage('Prénom requis').isLength({ max: 50 }).withMessage('Prénom max 50 caractères').matches(/^[^<>&"'/\\]+$/).withMessage('Prénom invalide'),
+    body('lastName').optional().trim().notEmpty().withMessage('Nom requis').isLength({ max: 50 }).withMessage('Nom max 50 caractères').matches(/^[^<>&"'/\\]+$/).withMessage('Nom invalide'),
+    body('phone').optional({ nullable: true }).trim().matches(/^\+?[0-9\s\-().]{6,20}$/).withMessage('Téléphone invalide'),
+    body('city').optional({ nullable: true }).trim().isLength({ max: 100 }).withMessage('Ville max 100 caractères').escape(),
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
 
     try {
-      const { firstName, lastName, phone, city } = req.body;
-
-      const nameFields = req.user.role === 'PROFESSIONAL' ? {} : { firstName, lastName };
-
-      const user = await prisma.user.update({
-        where: { id: req.user.id },
-        data: { ...nameFields, phone, city },
-        include: { professional: true },
-      });
-
-      const { passwordHash: _, ...userSafe } = user;
-      res.json(userSafe);
+      const result = await userModule.updateProfile(req.user.id, req.body, req.user.role);
+      res.json(result);
     } catch (err) {
+      if (err.status) return res.status(err.status).json({ error: err.message });
       next(err);
     }
   }
 );
 
-// OPTIMIZATION #31: Fix N+1 - Use distinct() instead of manual loop
-// GET /api/users/me/recently-viewed
 router.get('/me/recently-viewed', requireAuth, async (req, res, next) => {
   try {
-    // Use distinct to get unique professionals, avoiding N+1 from manual deduplication
-    const views = await prisma.profileView.findMany({
-      where: { viewerId: req.user.id },
-      include: {
-        professional: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-                phone: true,
-                avatarUrl: true,
-                city: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    });
-    const seen = new Set();
-    const unique = views.filter((v) => {
-      if (seen.has(v.professionalId)) return false;
-      seen.add(v.professionalId);
-      return true;
-    });
-    res.json(unique.slice(0, 10).map((v) => v.professional));
+    const result = await userModule.getRecentlyViewed(req.user.id);
+    res.json(result);
   } catch (err) {
     next(err);
   }
 });
 
 // OPTIMIZATION #31: Fix N+1 - Simplify includes and use select for minimal fields
-// GET /api/users/me/following
 router.get('/me/following', requireAuth, async (req, res, next) => {
   try {
-    // Optimize: Use select to limit user fields returned, not full include
-    const follows = await prisma.follow.findMany({
-      where: { followerId: req.user.id },
-      include: {
-        professional: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-                phone: true,
-                avatarUrl: true,
-                city: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    });
-    res.json(follows.map((f) => f.professional));
+    const result = await userModule.getFollowing(req.user.id);
+    res.json(result);
   } catch (err) {
     next(err);
   }
 });
 
-// POST /api/users/me/avatar
 router.post('/me/avatar', requireAuth, upload.single('avatar'), verifyMagicBytes, async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Photo requise' });
@@ -146,28 +80,16 @@ router.post('/me/avatar', requireAuth, upload.single('avatar'), verifyMagicBytes
 
 router.delete('/me',
   requireAuth,
-  body('password').notEmpty().withMessage('Mot de passe requis'),
+  [body('password').notEmpty().withMessage('Mot de passe requis')],
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
 
     try {
-      const user = await prisma.user.findUnique({
-        where: { id: req.user.id },
-        select: { passwordHash: true },
-      });
-      const valid = await bcrypt.compare(req.body.password, user.passwordHash);
-      if (!valid) return res.status(401).json({ error: 'Mot de passe incorrect' });
-
-      await prisma.user.update({
-        where: { id: req.user.id },
-        data: { deletedAt: new Date() },
-      });
-      await prisma.pushToken.deleteMany({ where: { userId: req.user.id } });
-      await prisma.refreshToken.deleteMany({ where: { userId: req.user.id } });
-
-      res.json({ deleted: true });
+      const result = await userModule.deleteAccount(req.user.id, req.body.password);
+      res.json(result);
     } catch (err) {
+      if (err.status) return res.status(err.status).json({ error: err.message });
       next(err);
     }
   }
@@ -177,29 +99,17 @@ router.patch('/me/password',
   requireAuth,
   [
     body('currentPassword').notEmpty().withMessage('Mot de passe actuel requis'),
-    body('newPassword').isLength({ min: 8 }).withMessage('Le nouveau mot de passe doit contenir au moins 8 caractères'),
+    body('newPassword').isLength({ min: 8 }).withMessage('au moins 8 caractères'),
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
 
     try {
-      const user = await prisma.user.findUnique({
-        where: { id: req.user.id },
-        select: { passwordHash: true },
-      });
-      const valid = await bcrypt.compare(req.body.currentPassword, user.passwordHash);
-      if (!valid) return res.status(401).json({ error: 'Mot de passe actuel incorrect' });
-
-      const passwordHash = await bcrypt.hash(req.body.newPassword, 12);
-      await prisma.user.update({
-        where: { id: req.user.id },
-        data: { passwordHash },
-      });
-      await prisma.refreshToken.deleteMany({ where: { userId: req.user.id } });
-
-      res.json({ changed: true });
+      const result = await userModule.changePassword(req.user.id, req.body.currentPassword, req.body.newPassword);
+      res.json(result);
     } catch (err) {
+      if (err.status) return res.status(err.status).json({ error: err.message });
       next(err);
     }
   }

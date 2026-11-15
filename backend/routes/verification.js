@@ -1,16 +1,14 @@
 const express = require('express');
-const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
-const { buildPaginationQuery } = require('../utils/sorting-helper');
-const { getSortableFields } = require('../config/sortable-fields');
 const { sendVerificationEmail } = require('../config/mailer');
 const { sendVerificationSms } = require('../config/sms');
 const { requireAuth } = require('../middleware/auth');
-const { handleValidationErrors } = require('../middleware/validateInput');
+const VerificationModule = require('../modules/verification');
 
 const router = express.Router();
+const verification = new VerificationModule(prisma);
 
 // Rate limiters
 const otpLimiter = rateLimit({
@@ -21,168 +19,79 @@ const otpLimiter = rateLimit({
   message: { error: 'Trop de demandes de code, réessayez dans 15 minutes' },
 });
 
-const readLimiter = rateLimit({
-  windowMs: 60 * 1000, max: 100, keyGenerator: (req) => req.user?.id || req.ip,
-  standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de requêtes, réessayez dans une minute' },
-});
-
-const { randomInt } = require('crypto');
-
-function generateCode() {
-  return randomInt(100000, 1000000).toString();
-}
-
-// POST /api/verification/email/send
-router.post('/email/send', requireAuth, otpLimiter, handleValidationErrors, async (req, res, next) => {
+router.post('/email/send', requireAuth, otpLimiter, async (req, res, next) => {
   try {
-    const code = generateCode();
-    const expiry = new Date(Date.now() + 15 * 60 * 1000);
-
-    const user = await prisma.user.update({
-      where: { id: req.user.id },
-      data: { emailVerifyCode: code, emailVerifyExpiry: expiry },
-    });
-
-    await sendVerificationEmail(user.email, code, 'verify');
-    res.json({ message: 'Code envoyé' });
+    const result = await verification.sendEmailVerification(req.user.id);
+    res.json(result);
   } catch (err) {
     next(err);
   }
 });
 
-// POST /api/verification/email/confirm
 router.post('/email/confirm', requireAuth,
   [
-    body('code').trim().notEmpty().isLength({ min: 6, max: 6 }).isNumeric().withMessage('code must be 6 digits'),
+    body('code').trim().notEmpty().withMessage('Code requis').isLength({ min: 6, max: 6 }).withMessage('Code 6 chiffres').isNumeric().withMessage('Code must be numeric'),
   ],
-  handleValidationErrors,
   async (req, res, next) => {
-  try {
-    const { code } = req.body;
-    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
 
-    if (!user.emailVerifyCode || user.emailVerifyCode !== code) {
-      return res.status(400).json({ error: 'Code incorrect' });
+    try {
+      const result = await verification.confirmEmailVerification(req.user.id, req.body.code);
+      res.json(result);
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ error: err.message });
+      next(err);
     }
-    if (new Date() > user.emailVerifyExpiry) {
-      return res.status(400).json({ error: 'Code expiré, demandez-en un nouveau' });
-    }
-
-    await prisma.user.update({
-      where: { id: req.user.id },
-      data: { emailVerified: true, emailVerifyCode: null, emailVerifyExpiry: null },
-    });
-    res.json({ verified: true });
-  } catch (err) {
-    next(err);
   }
-});
+);
 
-// POST /api/verification/phone/send
 router.post('/phone/send', requireAuth, otpLimiter, async (req, res, next) => {
   try {
-    const { phone } = req.body;
-    if (!phone) return res.status(400).json({ error: 'Numéro de téléphone requis' });
-
-    const code = generateCode();
-    const expiry = new Date(Date.now() + 15 * 60 * 1000);
-
-    await prisma.user.update({
-      where: { id: req.user.id },
-      data: { phone, phoneOtpCode: code, phoneOtpExpiry: expiry, phoneVerified: false },
-    });
-
-    await sendVerificationSms(phone, code);
-    res.json({ message: 'Code envoyé' });
+    const result = await verification.sendPhoneVerification(req.user.id, req.body.phone);
+    res.json(result);
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
   }
 });
 
-// POST /api/verification/phone/confirm
 router.post('/phone/confirm', requireAuth, async (req, res, next) => {
   try {
-    const { code } = req.body;
-    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
-
-    if (!user.phoneOtpCode || user.phoneOtpCode !== code) {
-      return res.status(400).json({ error: 'Code incorrect' });
-    }
-    if (new Date() > user.phoneOtpExpiry) {
-      return res.status(400).json({ error: 'Code expiré, demandez-en un nouveau' });
-    }
-
-    await prisma.user.update({
-      where: { id: req.user.id },
-      data: { phoneVerified: true, phoneOtpCode: null, phoneOtpExpiry: null },
-    });
-    res.json({ verified: true });
+    const result = await verification.confirmPhoneVerification(req.user.id, req.body.code);
+    res.json(result);
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
   }
 });
 
-// POST /api/verification/password/request-reset
 router.post('/password/request-reset', otpLimiter, async (req, res, next) => {
   try {
-    const { email } = req.body;
-    const user = await prisma.user.findUnique({ where: { email } });
-
-    if (!user) return res.json({ message: 'Si ce compte existe, un code a été envoyé.' });
-
-    if (!user.emailVerified) {
-      return res.status(400).json({ error: "Votre email doit d'abord être vérifié avant de pouvoir réinitialiser le mot de passe. Connectez-vous et vérifiez votre email depuis Sécurité & confidentialité." });
-    }
-
-    const code = generateCode();
-    const expiry = new Date(Date.now() + 15 * 60 * 1000);
-    await prisma.user.update({ where: { id: user.id }, data: { passwordResetCode: code, passwordResetExpiry: expiry } });
-
-    await sendVerificationEmail(email, code, 'reset');
-    res.json({ message: 'Si ce compte existe, un code a été envoyé.' });
+    const result = await verification.requestPasswordReset(req.body.email);
+    res.json(result);
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
   }
 });
 
-// POST /api/verification/password/reset
 router.post('/password/reset', otpLimiter, async (req, res, next) => {
   try {
-    const { email, code, newPassword } = req.body;
-    if (!newPassword || newPassword.length < 8) {
-      return res.status(400).json({ error: 'Le mot de passe doit faire au moins 8 caractères' });
-    }
-
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || !user.passwordResetCode || user.passwordResetCode !== code) {
-      return res.status(400).json({ error: 'Code incorrect' });
-    }
-    if (new Date() > user.passwordResetExpiry) {
-      return res.status(400).json({ error: 'Code expiré, recommencez la demande' });
-    }
-
-    const isSamePassword = await bcrypt.compare(newPassword, user.passwordHash);
-    if (isSamePassword) {
-      return res.status(400).json({ error: "Le nouveau mot de passe doit être différent de l'ancien" });
-    }
-
-    const passwordHash = await bcrypt.hash(newPassword, 10);
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { passwordHash, passwordResetCode: null, passwordResetExpiry: null },
-    });
-    res.json({ reset: true });
+    const result = await verification.resetPassword(req.body.email, req.body.code, req.body.newPassword);
+    res.json(result);
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
   }
 });
 
-// GET /api/verification/status
 router.get('/status', requireAuth, async (req, res, next) => {
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
-    res.json({ emailVerified: user.emailVerified, phoneVerified: user.phoneVerified, phone: user.phone });
+    const result = await verification.getVerificationStatus(req.user.id);
+    res.json(result);
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
   }
 });

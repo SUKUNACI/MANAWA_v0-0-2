@@ -1,5 +1,7 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const { sendVerificationEmail } = require('../config/mailer');
+const { sendVerificationSms } = require('../config/sms');
 
 class VerificationModule {
   constructor(prisma) {
@@ -25,10 +27,9 @@ class VerificationModule {
       data: { emailVerifyCode: code, emailVerifyExpiry: expiry },
     });
 
-    // In production, call sendVerificationEmail(user.email, code, 'verify')
-    // For tests, return code in dev mode
+    await sendVerificationEmail(user.email, code, 'verify');
 
-    return { message: 'Code de vérification envoyé', devCode: code };
+    return { message: 'Code de vérification envoyé' };
   }
 
   /**
@@ -76,7 +77,7 @@ class VerificationModule {
       data: { phone, phoneOtpCode: code, phoneOtpExpiry: expiry, phoneVerified: false },
     });
 
-    // In production, call sendVerificationSms(phone, code)
+    await sendVerificationSms(phone, code);
 
     return { message: 'Code OTP envoyé par SMS' };
   }
@@ -135,7 +136,7 @@ class VerificationModule {
       data: { passwordResetCode: code, passwordResetExpiry: expiry },
     });
 
-    // In production, call sendVerificationEmail(email, code, 'reset')
+    await sendVerificationEmail(email, code, 'reset');
 
     return { message: 'Si ce compte existe, un code a été envoyé.' };
   }
