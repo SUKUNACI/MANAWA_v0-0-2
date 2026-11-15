@@ -67,6 +67,133 @@ const translations = {
     // Business
     'business.project_unavailable': 'Ce projet n\'est pas disponible',
 
+    // Erreurs supplémentaires Auth
+    'auth.session_expired':     'Votre session a expiré',
+    'auth.invalid_token':       'Token de session invalide',
+    'auth.token_revoked':       'Votre token a été révoqué',
+    'auth.credentials_invalid': 'Identifiants invalides',
+    'auth.mfa_failed':          'Erreur authentification multi-facteurs',
+    'auth.permission_denied':   'Permission refusée',
+    'auth.role_required':       'Rôle insuffisant pour cette action',
+    'auth.account_locked':      'Compte verrouillé temporairement',
+    'auth.account_not_verified':'Compte non vérifié',
+    'auth.email_not_confirmed': 'Email non confirmé',
+
+    // Erreurs supplémentaires Validation
+    'validation.invalid_url':   'URL invalide',
+    'validation.invalid_date':  'Date invalide',
+    'validation.future_date':   'La date doit être dans le futur',
+    'validation.past_date':     'La date doit être dans le passé',
+    'validation.invalid_range': 'Valeur hors plage autorisée',
+    'validation.must_be_unique':'Cette valeur doit être unique',
+    'validation.pattern_mismatch':'Format ne correspond pas',
+    'validation.required_field':'Ce champ ne peut pas être vide',
+    'validation.invalid_selection':'Sélection invalide',
+    'validation.conflicts_with':'Entre en conflit avec {field}',
+
+    // Erreurs Database
+    'database.connection_failed':'Impossible de se connecter à la base de données',
+    'database.query_failed':    'Erreur lors de l\'exécution de la requête',
+    'database.transaction_failed':'Transaction échouée',
+    'database.duplicate_key':   'Cette clé existe déjà',
+    'database.constraint_violation':'Violation de contrainte',
+    'database.record_not_found':'Enregistrement introuvable',
+    'database.timeout':         'Délai d\'attente base de données dépassé',
+    'database.corruption':      'Corruption de données détectée',
+
+    // Erreurs Recherche
+    'search.no_results':        'Aucun résultat trouvé',
+    'search.query_invalid':     'Requête de recherche invalide',
+    'search.index_unavailable': 'Index de recherche indisponible',
+    'search.timeout':           'Recherche expirée',
+    'search.malformed':         'Syntaxe de recherche incorrecte',
+
+    // Erreurs Fichiers
+    'file.not_found':           'Fichier introuvable',
+    'file.access_denied':       'Accès au fichier refusé',
+    'file.corrupted':           'Fichier corrompu',
+    'file.unsupported_format':  'Format de fichier non supporté',
+    'file.scanning_failed':     'Impossible d\'analyser le fichier',
+    'file.virus_detected':      'Virus détecté dans le fichier',
+    'file.encryption_failed':   'Erreur lors du chiffrement du fichier',
+    'file.compression_failed':  'Erreur lors de la compression',
+
+    // Erreurs API/Intégration
+    'api.unauthorized':         'Clé API non autorisée',
+    'api.rate_limited':         'Limite d\'appels API atteinte',
+    'api.invalid_request':      'Requête API invalide',
+    'api.invalid_response':     'Réponse API invalide',
+    'api.service_unavailable':  'Service API indisponible',
+    'api.timeout':              'Service API timeout',
+    'api.connection_error':     'Erreur de connexion API',
+    'api.authentication_failed':'Authentification API échouée',
+
+    // Erreurs Paiement (détaillées)
+    'payment.card_invalid':     'Carte bancaire invalide',
+    'payment.card_expired':     'Carte bancaire expirée',
+    'payment.insufficient_balance':'Solde insuffisant',
+    'payment.transaction_denied':'Transaction refusée',
+    'payment.fraud_detected':   'Fraude détectée',
+    'payment.daily_limit_exceeded':'Limite journalière dépassée',
+    'payment.monthly_limit_exceeded':'Limite mensuelle dépassée',
+    'payment.duplicate_transaction':'Transaction dupliquée détectée',
+    'payment.currency_mismatch':'Devise incompatible',
+    'payment.processing_error': 'Erreur de traitement du paiement',
+    'payment.refund_failed':    'Remboursement échoué',
+    'payment.capture_failed':   'Capture du paiement échouée',
+    'payment.verification_failed':'Vérification du paiement échouée',
+
+    // Erreurs Booking/Réservation
+    'booking.already_booked':   'Créneau déjà réservé',
+    'booking.invalid_date':     'Date de réservation invalide',
+    'booking.no_availability':  'Pas de disponibilité',
+    'booking.cancellation_failed':'Impossible d\'annuler',
+    'booking.modification_failed':'Impossible de modifier',
+    'booking.past_date':        'Impossible de réserver une date passée',
+    'booking.overlapping':      'Réservation chevauchante',
+
+    // Erreurs Notifications
+    'notification.send_failed': 'Erreur lors de l\'envoi de la notification',
+    'notification.invalid_target':'Destination de notification invalide',
+    'notification.delivery_failed':'Livraison de notification échouée',
+
+    // Erreurs Système
+    'system.maintenance':       'Système en maintenance',
+    'system.overloaded':        'Serveur surchargé',
+    'system.error':             'Erreur système',
+    'system.config_error':      'Erreur de configuration',
+    'system.dependency_failed': 'Dépendance système échouée',
+    'system.disk_full':         'Espace disque insuffisant',
+    'system.memory_error':      'Erreur mémoire système',
+    'system.cpu_error':         'Problème processeur détecté',
+
+    // Erreurs Entreprise
+    'business.invalid_state':   'État invalide',
+    'business.operation_not_allowed':'Opération non autorisée',
+    'business.quota_exceeded':  'Quota dépassé',
+    'business.limit_reached':   'Limite atteinte',
+    'business.insufficient_credits':'Crédits insuffisants',
+    'business.subscription_required':'Abonnement requis',
+    'business.plan_not_supported':'Plan non supporté',
+
+    // Erreurs Réseau
+    'network.connection_lost':  'Connexion perdue',
+    'network.timeout':          'Délai d\'attente réseau dépassé',
+    'network.dns_failed':       'Résolution DNS échouée',
+    'network.ssl_error':        'Erreur SSL/TLS',
+    'network.certificate_error':'Erreur de certificat',
+    'network.proxy_error':      'Erreur du proxy',
+
+    // Messages génériques
+    'error.unknown':            'Erreur inconnue',
+    'error.unexpected':         'Erreur inattendue',
+    'error.try_again':          'Veuillez réessayer',
+    'error.contact_support':    'Contactez le support',
+    'error.check_connection':   'Vérifiez votre connexion',
+    'error.retry_later':        'Réessayez ultérieurement',
+    'error.refresh_page':       'Actualisez la page',
+    'error.clear_cache':        'Videz le cache et réessayez',
+
     // Général
     'server.error':             'Une erreur est survenue, veuillez réessayer',
     'rate_limit.exceeded':      'Trop de requêtes, réessayez dans quelques minutes',
@@ -133,6 +260,133 @@ const translations = {
 
     // Business
     'business.project_unavailable': 'This project is not available',
+
+    // Additional Auth Errors
+    'auth.session_expired':     'Your session has expired',
+    'auth.invalid_token':       'Invalid session token',
+    'auth.token_revoked':       'Your token has been revoked',
+    'auth.credentials_invalid': 'Invalid credentials',
+    'auth.mfa_failed':          'Multi-factor authentication failed',
+    'auth.permission_denied':   'Permission denied',
+    'auth.role_required':       'Insufficient role for this action',
+    'auth.account_locked':      'Account temporarily locked',
+    'auth.account_not_verified':'Account not verified',
+    'auth.email_not_confirmed': 'Email not confirmed',
+
+    // Additional Validation Errors
+    'validation.invalid_url':   'Invalid URL',
+    'validation.invalid_date':  'Invalid date',
+    'validation.future_date':   'Date must be in the future',
+    'validation.past_date':     'Date must be in the past',
+    'validation.invalid_range': 'Value out of allowed range',
+    'validation.must_be_unique':'This value must be unique',
+    'validation.pattern_mismatch':'Format does not match',
+    'validation.required_field':'This field cannot be empty',
+    'validation.invalid_selection':'Invalid selection',
+    'validation.conflicts_with':'Conflicts with {field}',
+
+    // Database Errors
+    'database.connection_failed':'Failed to connect to database',
+    'database.query_failed':    'Query execution failed',
+    'database.transaction_failed':'Transaction failed',
+    'database.duplicate_key':   'This key already exists',
+    'database.constraint_violation':'Constraint violation',
+    'database.record_not_found':'Record not found',
+    'database.timeout':         'Database timeout exceeded',
+    'database.corruption':      'Data corruption detected',
+
+    // Search Errors
+    'search.no_results':        'No results found',
+    'search.query_invalid':     'Invalid search query',
+    'search.index_unavailable': 'Search index unavailable',
+    'search.timeout':           'Search timed out',
+    'search.malformed':         'Search syntax error',
+
+    // File Errors
+    'file.not_found':           'File not found',
+    'file.access_denied':       'File access denied',
+    'file.corrupted':           'File corrupted',
+    'file.unsupported_format':  'Unsupported file format',
+    'file.scanning_failed':     'Unable to scan file',
+    'file.virus_detected':      'Virus detected in file',
+    'file.encryption_failed':   'File encryption failed',
+    'file.compression_failed':  'File compression failed',
+
+    // API/Integration Errors
+    'api.unauthorized':         'API key not authorized',
+    'api.rate_limited':         'API call limit reached',
+    'api.invalid_request':      'Invalid API request',
+    'api.invalid_response':     'Invalid API response',
+    'api.service_unavailable':  'API service unavailable',
+    'api.timeout':              'API service timeout',
+    'api.connection_error':     'API connection error',
+    'api.authentication_failed':'API authentication failed',
+
+    // Detailed Payment Errors
+    'payment.card_invalid':     'Invalid card',
+    'payment.card_expired':     'Card expired',
+    'payment.insufficient_balance':'Insufficient balance',
+    'payment.transaction_denied':'Transaction denied',
+    'payment.fraud_detected':   'Fraud detected',
+    'payment.daily_limit_exceeded':'Daily limit exceeded',
+    'payment.monthly_limit_exceeded':'Monthly limit exceeded',
+    'payment.duplicate_transaction':'Duplicate transaction detected',
+    'payment.currency_mismatch':'Currency mismatch',
+    'payment.processing_error': 'Payment processing error',
+    'payment.refund_failed':    'Refund failed',
+    'payment.capture_failed':   'Payment capture failed',
+    'payment.verification_failed':'Payment verification failed',
+
+    // Booking/Reservation Errors
+    'booking.already_booked':   'Time slot already booked',
+    'booking.invalid_date':     'Invalid booking date',
+    'booking.no_availability':  'No availability',
+    'booking.cancellation_failed':'Unable to cancel',
+    'booking.modification_failed':'Unable to modify',
+    'booking.past_date':        'Cannot book past date',
+    'booking.overlapping':      'Overlapping booking',
+
+    // Notification Errors
+    'notification.send_failed': 'Failed to send notification',
+    'notification.invalid_target':'Invalid notification target',
+    'notification.delivery_failed':'Notification delivery failed',
+
+    // System Errors
+    'system.maintenance':       'System under maintenance',
+    'system.overloaded':        'Server overloaded',
+    'system.error':             'System error',
+    'system.config_error':      'Configuration error',
+    'system.dependency_failed': 'System dependency failed',
+    'system.disk_full':         'Insufficient disk space',
+    'system.memory_error':      'System memory error',
+    'system.cpu_error':         'CPU problem detected',
+
+    // Business Errors
+    'business.invalid_state':   'Invalid state',
+    'business.operation_not_allowed':'Operation not allowed',
+    'business.quota_exceeded':  'Quota exceeded',
+    'business.limit_reached':   'Limit reached',
+    'business.insufficient_credits':'Insufficient credits',
+    'business.subscription_required':'Subscription required',
+    'business.plan_not_supported':'Plan not supported',
+
+    // Network Errors
+    'network.connection_lost':  'Connection lost',
+    'network.timeout':          'Network timeout exceeded',
+    'network.dns_failed':       'DNS resolution failed',
+    'network.ssl_error':        'SSL/TLS error',
+    'network.certificate_error':'Certificate error',
+    'network.proxy_error':      'Proxy error',
+
+    // Generic Messages
+    'error.unknown':            'Unknown error',
+    'error.unexpected':         'Unexpected error',
+    'error.try_again':          'Please try again',
+    'error.contact_support':    'Contact support',
+    'error.check_connection':   'Check your connection',
+    'error.retry_later':        'Try again later',
+    'error.refresh_page':       'Refresh the page',
+    'error.clear_cache':        'Clear cache and try again',
 
     // General
     'server.error':             'An error occurred, please try again',
