@@ -9,7 +9,7 @@
     "migrate": "prisma migrate dev",
     "studio": "prisma studio",
     "postinstall": "prisma generate",
-    "test": "jest --runInBand --forceExit",
+    "test": "jest --runInBand --detectOpenHandles --forceExit",
     "test:watch": "jest --watch --runInBand",
     "test:e2e": "jest --config=tests/e2e/jest.config.js --runInBand --forceExit",
     "test:e2e:watch": "jest --config=tests/e2e/jest.config.js --watch",
