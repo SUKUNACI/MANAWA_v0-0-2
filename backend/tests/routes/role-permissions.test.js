@@ -805,4 +805,32 @@ describe('POST /api/role-permissions/rollback/:roleId/:historyId', () => {
 
     expect(res.status).toBe(403);
   });
+
+  test('401 — token expiré', async () => {
+    const res = await request(app)
+      .post(`/api/role-permissions/rollback/${ROLE_ID}/${HISTORY_ID}`)
+      .set('Authorization', `Bearer ${makeExpiredToken()}`)
+      .send({});
+
+    expect(res.status).toBe(401);
+  });
+
+  test('200 — /all-sections returns sections', async () => {
+    const res = await request(app)
+      .get('/api/role-permissions/all-sections')
+      .set('Authorization', `Bearer ${makeSuperAdminToken()}`);
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.sections)).toBe(true);
+  });
+
+  test('404 — GET /:roleId with non-existent role', async () => {
+    prisma.adminRoleType.findUnique.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get(`/api/role-permissions/non-existent-id`)
+      .set('Authorization', `Bearer ${makeSuperAdminToken()}`);
+
+    expect(res.status).toBe(404);
+  });
 });

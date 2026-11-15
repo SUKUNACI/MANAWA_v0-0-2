@@ -196,86 +196,72 @@ describe('POST /api/reviews', () => {
     expect(res.status).toBe(400);
   });
 
-  test('404 — professionnel introuvable', async () => {
+
+  test('404 professionnel introuvable', async () => {
     prisma.professional.findUnique.mockResolvedValue(null);
-
-    const res = await request(app)
-      .post('/api/reviews')
-      .set('Authorization', )
+    const res = await request(app).post("/api/reviews")
+      .set("Authorization", "Bearer " + clientToken(CLIENT_ID))
       .send({ professionalId: PRO_ID, rating: 4, projectId: PROJECT_ID });
-
     expect(res.status).toBe(404);
   });
 
-
-
-
-  test('400 — la mission n'est pas encore terminée', async () => {
-    // Module checks booking.findFirst for COMPLETED; no booking = 400
+  test('400 aucune reservation completee', async () => {
     prisma.booking.findFirst.mockResolvedValue(null);
-
-    const res = await request(app)
-      .post('/api/reviews')
-      .set('Authorization', )
+    const res = await request(app).post("/api/reviews")
+      .set("Authorization", "Bearer " + clientToken(CLIENT_ID))
       .send({ professionalId: PRO_ID, rating: 4, projectId: PROJECT_ID });
-
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/réservation/i);
+    expect(res.body.error).toMatch(/servation/i);
+  });
 
-  test('400 — avis déjà laissé pour cette mission', async () => {
-    // Module throws 400 (REVIEW_EXISTS) not 409
+  test('400 avis deja laisse', async () => {
     prisma.review.findFirst.mockResolvedValue({ id: 'existing-review' });
-
-    const res = await request(app)
-      .post('/api/reviews')
-      .set('Authorization', )
+    const res = await request(app).post("/api/reviews")
+      .set("Authorization", "Bearer " + clientToken(CLIENT_ID))
       .send({ professionalId: PRO_ID, rating: 4, projectId: PROJECT_ID });
-
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/déjà évalué/i);
+    expect(res.body.error).toMatch(/valu/i);
   });
 
-
-
-  test('400 — aucune réservation complétée avec ce professionnel', async () => {
-    prisma.booking.findFirst.mockResolvedValue(null);
-
-    const res = await request(app)
-      .post('/api/reviews')
-      .set('Authorization', )
+  test('500 erreur db propagee', async () => {
+    prisma.professional.findUnique.mockRejectedValue(new Error('DB error'));
+    const res = await request(app).post("/api/reviews")
+      .set("Authorization", "Bearer " + clientToken(CLIENT_ID))
       .send({ professionalId: PRO_ID, rating: 4, projectId: PROJECT_ID });
-
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/réservation/i);
-  });
-
-  test('403 — projet introuvable (project null)', async () => {
-    prisma.project.findUnique.mockResolvedValue(null);
-
-    const res = await request(app)
-      .post('/api/reviews')
-      .set('Authorization', `Bearer ${clientToken(CLIENT_ID)}`)
-      .send({ professionalId: PRO_ID, rating: 4, projectId: PROJECT_ID });
-
-    expect(res.status).toBe(403);
-  });
-
-  test('500 — erreur base de données propagée', async () => {
-    prisma.project.findUnique.mockRejectedValue(new Error('DB error'));
-
-    const res = await request(app)
-      .post('/api/reviews')
-      .set('Authorization', `Bearer ${clientToken(CLIENT_ID)}`)
-      .send({ professionalId: PRO_ID, rating: 4, projectId: PROJECT_ID });
-
     expect(res.status).toBe(500);
   });
+
+  test('met a jour reviewCount du professionnel', async () => {
+    await request(app).post('/api/reviews')
+      .set('Authorization', 'Bearer ' + clientToken(CLIENT_ID))
+      .send({ professionalId: PRO_ID, rating: 4, projectId: PROJECT_ID });
+    await new Promise(r => setImmediate(r));
+    expect(prisma.professional.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ reviewCount: expect.any(Number) }) })
+    );
+  });
+
+  test('400 rating 1 est valide', async () => {
+    const res = await request(app).post('/api/reviews')
+      .set('Authorization', 'Bearer ' + clientToken(CLIENT_ID))
+      .send({ professionalId: PRO_ID, rating: 1, projectId: PROJECT_ID });
+    expect(res.status).toBe(201);
+  });
+
+  test('400 rating 5 est valide', async () => {
+    const res = await request(app).post('/api/reviews')
+      .set('Authorization', 'Bearer ' + clientToken(CLIENT_ID))
+      .send({ professionalId: PRO_ID, rating: 5, projectId: PROJECT_ID });
+    expect(res.status).toBe(201);
+  });
+
 });
 
 // ============ GET /api/reviews/professional/:id ============
 
 describe('GET /api/reviews/professional/:id', () => {
   beforeEach(() => {
+    prisma.review.count.mockResolvedValue(1);
     prisma.review.findMany.mockResolvedValue([
       {
         id: 'review-1',

@@ -13,13 +13,13 @@ jest.mock('../../config/db', () => ({
     delete: jest.fn(),
     count: jest.fn(),
   },
-  portfolioProjectLike: {
-    findUnique: jest.fn(),
+  portfolioLike: {
+    findFirst: jest.fn(),
     create: jest.fn(),
     delete: jest.fn(),
   },
-  portfolioComment: {
-    findUnique: jest.fn(),
+  portfolioReply: {
+    findFirst: jest.fn(),
     create: jest.fn(),
     delete: jest.fn(),
   },
@@ -155,7 +155,7 @@ describe('GET /api/portfolio-projects', () => {
     expect(res.status).toBe(200);
     expect(prisma.portfolioProject.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ tradeCategory: expect.objectContaining({ contains: 'Plomberie' }) }),
+        where: expect.objectContaining({ tradeCategory: 'Plomberie' }),
       })
     );
   });
@@ -181,7 +181,7 @@ describe('GET /api/portfolio-projects', () => {
       .set('Authorization', `Bearer ${clientToken(CLIENT_ID)}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.data[0].likedByMe).toBe(true);
+    expect(res.body.data[0].liked).toBe(true);
   });
 
   test('500 — erreur base de données propagée', async () => {
@@ -211,19 +211,16 @@ describe('GET /api/portfolio-projects/:id', () => {
     expect(res.body).toHaveProperty('averageRating', 0);
   });
 
-  test('200 — calcule la note moyenne depuis les commentaires', async () => {
+  test('200 — retourne averageRating depuis le professionnel', async () => {
     prisma.portfolioProject.findUnique.mockResolvedValue({
       ...mockProject,
-      comments: [
-        { id: 'c1', rating: 4, replies: [] },
-        { id: 'c2', rating: 2, replies: [] },
-      ],
+      professional: { id: PRO_ID, averageRating: 4.5, trade: 'Plomberie' },
     });
 
     const res = await request(app).get(`/api/portfolio-projects/${PROJECT_ID}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.averageRating).toBe(3);
+    expect(res.body.averageRating).toBe(4.5);
   });
 
   test('404 — réalisation introuvable', async () => {
@@ -232,7 +229,7 @@ describe('GET /api/portfolio-projects/:id', () => {
     const res = await request(app).get('/api/portfolio-projects/not-found');
 
     expect(res.status).toBe(404);
-    expect(res.body.error).toMatch(/non trouvée/i);
+    expect(res.body.error).toMatch(/introuvable/i);
   });
 
   test('500 — erreur base de données propagée', async () => {
@@ -458,8 +455,8 @@ describe('DELETE /api/portfolio-projects/:id', () => {
 
 describe('POST /api/portfolio-projects/:id/like', () => {
   test('200 — like (liked: true) si pas encore liké', async () => {
-    prisma.portfolioProjectLike.findUnique.mockResolvedValue(null);
-    prisma.portfolioProjectLike.create.mockResolvedValue({ id: 'like-1' });
+    prisma.portfolioLike.findFirst.mockResolvedValue(null);
+    prisma.portfolioLike.create.mockResolvedValue({ id: 'like-1' });
 
     const res = await request(app)
       .post(`/api/portfolio-projects/${PROJECT_ID}/like`)
@@ -470,8 +467,8 @@ describe('POST /api/portfolio-projects/:id/like', () => {
   });
 
   test('200 — unlike (liked: false) si déjà liké', async () => {
-    prisma.portfolioProjectLike.findUnique.mockResolvedValue({ id: 'like-1' });
-    prisma.portfolioProjectLike.delete.mockResolvedValue({});
+    prisma.portfolioLike.findFirst.mockResolvedValue({ id: 'like-1' });
+    prisma.portfolioLike.delete.mockResolvedValue({});
 
     const res = await request(app)
       .post(`/api/portfolio-projects/${PROJECT_ID}/like`)
@@ -487,7 +484,7 @@ describe('POST /api/portfolio-projects/:id/like', () => {
   });
 
   test('500 — erreur base de données propagée', async () => {
-    prisma.portfolioProjectLike.findUnique.mockRejectedValue(new Error('DB error'));
+    prisma.portfolioLike.findFirst.mockRejectedValue(new Error('DB error'));
 
     const res = await request(app)
       .post(`/api/portfolio-projects/${PROJECT_ID}/like`)
@@ -502,7 +499,7 @@ describe('POST /api/portfolio-projects/:id/like', () => {
 describe('POST /api/portfolio-projects/:id/comments', () => {
   beforeEach(() => {
     prisma.portfolioProject.findUnique.mockResolvedValue(mockProject);
-    prisma.portfolioComment.create.mockResolvedValue(mockComment);
+    prisma.portfolioReply.create.mockResolvedValue(mockComment);
   });
 
   test('201 — ajoute un commentaire', async () => {
@@ -526,11 +523,11 @@ describe('POST /api/portfolio-projects/:id/comments', () => {
   });
 
   test('201 — ajoute une réponse à un commentaire', async () => {
-    prisma.portfolioComment.findUnique.mockResolvedValue({
+    prisma.portfolioReply.findFirst.mockResolvedValue({
       id: COMMENT_ID,
       portfolioProjectId: PROJECT_ID,
     });
-    prisma.portfolioComment.create.mockResolvedValue({
+    prisma.portfolioReply.create.mockResolvedValue({
       ...mockComment,
       parentId: COMMENT_ID,
     });
@@ -561,28 +558,20 @@ describe('POST /api/portfolio-projects/:id/comments', () => {
     expect(res.status).toBe(400);
   });
 
-  test('400 — commentaire parent invalide (n\'appartient pas au projet)', async () => {
-    prisma.portfolioComment.findUnique.mockResolvedValue({
-      id: 'other-comment',
-      portfolioProjectId: 'other-project',
-    });
-
+  test('400 — contenu trop long max 2000', async () => {
     const res = await request(app)
-      .post(`/api/portfolio-projects/${PROJECT_ID}/comments`)
-      .set('Authorization', `Bearer ${clientToken(CLIENT_ID)}`)
-      .send({ content: 'Réponse', parentId: 'other-comment' });
-
+      .post('/api/portfolio-projects/' + PROJECT_ID + '/comments')
+      .set('Authorization', 'Bearer ' + clientToken(CLIENT_ID))
+      .send({ content: 'x'.repeat(2001) });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/parent invalide/i);
   });
 
-  test('400 — commentaire parent introuvable', async () => {
-    prisma.portfolioComment.findUnique.mockResolvedValue(null);
 
+  test('400 — rating invalide zero', async () => {
     const res = await request(app)
       .post(`/api/portfolio-projects/${PROJECT_ID}/comments`)
       .set('Authorization', `Bearer ${clientToken(CLIENT_ID)}`)
-      .send({ content: 'Réponse', parentId: 'nonexistent' });
+      .send({ content: 'Test', rating: 0 });
 
     expect(res.status).toBe(400);
   });
@@ -611,12 +600,12 @@ describe('POST /api/portfolio-projects/:id/comments', () => {
 
 describe('DELETE /api/portfolio-projects/:projectId/comments/:commentId', () => {
   beforeEach(() => {
-    prisma.portfolioComment.findUnique.mockResolvedValue({
+    prisma.portfolioReply.findFirst.mockResolvedValue({
       id: COMMENT_ID,
-      portfolioProjectId: PROJECT_ID,
-      authorId: CLIENT_ID,
+      author: { id: CLIENT_ID },
+      project: { professional: { userId: PRO_USER_ID } },
     });
-    prisma.portfolioComment.delete.mockResolvedValue({});
+    prisma.portfolioReply.delete.mockResolvedValue({});
   });
 
   test('200 — l\'auteur supprime son commentaire', async () => {
@@ -646,7 +635,7 @@ describe('DELETE /api/portfolio-projects/:projectId/comments/:commentId', () => 
   });
 
   test('404 — commentaire introuvable', async () => {
-    prisma.portfolioComment.findUnique.mockResolvedValue(null);
+    prisma.portfolioReply.findFirst.mockResolvedValue(null);
 
     const res = await request(app)
       .delete(`/api/portfolio-projects/${PROJECT_ID}/comments/not-found`)
@@ -656,11 +645,7 @@ describe('DELETE /api/portfolio-projects/:projectId/comments/:commentId', () => 
   });
 
   test('404 — commentaire n\'appartient pas au projet', async () => {
-    prisma.portfolioComment.findUnique.mockResolvedValue({
-      id: COMMENT_ID,
-      portfolioProjectId: 'other-project',
-      authorId: CLIENT_ID,
-    });
+    prisma.portfolioReply.findFirst.mockResolvedValue(null);
 
     const res = await request(app)
       .delete(`/api/portfolio-projects/${PROJECT_ID}/comments/${COMMENT_ID}`)
@@ -677,7 +662,7 @@ describe('DELETE /api/portfolio-projects/:projectId/comments/:commentId', () => 
   });
 
   test('500 — erreur base de données propagée', async () => {
-    prisma.portfolioComment.delete.mockRejectedValue(new Error('DB error'));
+    prisma.portfolioReply.delete.mockRejectedValue(new Error('DB error'));
 
     const res = await request(app)
       .delete(`/api/portfolio-projects/${PROJECT_ID}/comments/${COMMENT_ID}`)

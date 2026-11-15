@@ -425,4 +425,82 @@ describe('POST /payments/:paymentId/retry — unit tests', () => {
     expect(res.status).toBe(500);
     expect(res.body.error).toContain('Impossible de réessayer');
   });
+
+  test('should handle error with status code from module', async () => {
+    const payment = makePayment({ status: 'pending' }); // Not failed status
+    prisma.payment.findUnique.mockResolvedValue(payment);
+
+    const res = await request(app)
+      .post(`/payments/${payment.id}/retry`)
+      .set('Authorization', `Bearer ${TOKEN}`)
+      .send({});
+
+    // Module throws error with status 400 when payment is not in failed state
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('ne peut pas être réessayé');
+  });
+
+  test('should handle error without status code (pass to next middleware)', async () => {
+    const payment = makePayment();
+    prisma.payment.findUnique.mockResolvedValue(payment);
+    geniuspayMock.createPayment.mockRejectedValue(new Error('Unhandled error'));
+
+    const res = await request(app)
+      .post(`/payments/${payment.id}/retry`)
+      .set('Authorization', `Bearer ${TOKEN}`)
+      .send({});
+
+    expect(res.status).toBe(500);
+  });
+
+  test('should return 403 when professional cannot retry (wrong user)', async () => {
+    const payment = makePayment();
+    const wrongProToken = makeToken({ id: 'wrong-pro-id', role: 'PROFESSIONAL' });
+    prisma.payment.findUnique.mockResolvedValue(payment);
+
+    const res = await request(app)
+      .post(`/payments/${payment.id}/retry`)
+      .set('Authorization', `Bearer ${wrongProToken}`)
+      .send({});
+
+    // Module validates ownership and throws 403
+    expect(res.status).toBe(403);
+  });
+
+  test('should return success with multiple promo reapplications', async () => {
+    const promoCodeId = uuidv4();
+    const payment = makePayment({
+      amount: 2000,
+      metadata: JSON.stringify({ promoCodeId }),
+    });
+    prisma.payment.findUnique.mockResolvedValue(payment);
+    prisma.promoCode.findUnique.mockResolvedValue({
+      id: promoCodeId,
+      code: 'BIGDISCOUNT',
+      active: true,
+      validUntil: null,
+      discountType: 'PERCENT',
+      discountValue: 25, // 25% discount
+    });
+    geniuspayMock.createPayment.mockResolvedValue({
+      reference: 'GP_REF_DISCOUNT',
+      payment_link: 'https://pay.example.com/GP_REF_DISCOUNT',
+    });
+    prisma.payment.update.mockResolvedValue({
+      ...payment,
+      status: 'pending',
+      amount: 1500, // 2000 - 500 = 1500
+      geniuspayRef: 'GP_REF_DISCOUNT',
+    });
+    prisma.paymentAuditLog.create.mockResolvedValue({});
+
+    const res = await request(app)
+      .post(`/payments/${payment.id}/retry`)
+      .set('Authorization', `Bearer ${TOKEN}`)
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.discountAmount).toBe(500);
+  });
 });
