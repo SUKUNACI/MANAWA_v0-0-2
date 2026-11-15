@@ -9,8 +9,10 @@ const rateLimit = require('express-rate-limit');
 const prisma = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const logger = require('../utils/logger');
+const AnalyticsEventsModule = require('../modules/analyticsEvents');
 
 const router = express.Router();
+const analyticsEvents = new AnalyticsEventsModule(prisma);
 
 const eventsLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -52,18 +54,7 @@ router.post(
       }
 
       const { type, page, metadata, sessionId } = req.body;
-
-      await prisma.userEvent.create({
-        data: {
-          userId: req.user?.id || null,
-          sessionId: sessionId || null,
-          type,
-          page: page || null,
-          metadata: metadata || null,
-          ipAddress: req.ip,
-          userAgent: req.headers['user-agent'] || null,
-        },
-      });
+      await analyticsEvents.trackEvent(type, page, metadata, sessionId, req.user?.id || null, req.ip, req.headers['user-agent']);
 
       res.status(201).json({ success: true });
     } catch (err) {
@@ -93,21 +84,9 @@ router.post(
       }
 
       const { events } = req.body;
-      const userId = req.user.id;
+      const result = await analyticsEvents.trackBatchEvents(events, req.user.id, req.ip, req.headers['user-agent']);
 
-      await prisma.userEvent.createMany({
-        data: events.map(e => ({
-          userId,
-          sessionId: e.sessionId || null,
-          type: e.type,
-          page: e.page || null,
-          metadata: e.metadata || null,
-          ipAddress: req.ip,
-          userAgent: req.headers['user-agent'] || null,
-        })),
-      });
-
-      res.status(201).json({ success: true, count: events.length });
+      res.status(201).json({ success: true, count: result.count });
     } catch (err) {
       logger.error('[Events] Failed to batch track', { error: err.message });
       res.status(500).json({ error: 'Failed to batch track events' });
@@ -130,34 +109,9 @@ router.get(
   async (req, res) => {
     try {
       const { from, to } = req.query;
+      const summary = await analyticsEvents.getEventsSummary(from, to);
 
-      const where = {};
-      if (from || to) {
-        where.createdAt = {};
-        if (from) where.createdAt.gte = new Date(from);
-        if (to) where.createdAt.lte = new Date(to);
-      }
-
-      const events = await prisma.userEvent.groupBy({
-        by: ['type'],
-        where,
-        _count: { type: true },
-        orderBy: { _count: { type: 'desc' } },
-      });
-
-      const total = events.reduce((s, e) => s + e._count.type, 0);
-
-      res.json({
-        success: true,
-        data: {
-          total,
-          byType: events.map(e => ({
-            type: e.type,
-            count: e._count.type,
-            percentage: parseFloat(((e._count.type / total) * 100).toFixed(2)),
-          })),
-        },
-      });
+      res.json({ success: true, data: summary });
     } catch (err) {
       logger.error('[Events] Failed to summarize', { error: err.message });
       res.status(500).json({ error: 'Failed to summarize events' });
@@ -190,10 +144,7 @@ router.post(
       }
 
       const { name, category, value, unit, dimensions } = req.body;
-
-      const metric = await prisma.customMetric.create({
-        data: { name, category, value, unit: unit || null, dimensions: dimensions || null },
-      });
+      const metric = await analyticsEvents.recordMetric(name, category, value, unit, dimensions);
 
       res.status(201).json({ success: true, data: { metric } });
     } catch (err) {
@@ -227,58 +178,9 @@ router.get(
       }
 
       const { name, category, from, to, page = 1, limit = 100 } = req.query;
-      const skip = (parseInt(page) - 1) * parseInt(limit);
+      const result = await analyticsEvents.queryMetrics(name, category, from, to, parseInt(page), parseInt(limit));
 
-      const where = {};
-      if (name) where.name = name;
-      if (category) where.category = category;
-      if (from || to) {
-        where.recordedAt = {};
-        if (from) where.recordedAt.gte = new Date(from);
-        if (to) where.recordedAt.lte = new Date(to);
-      }
-
-      const [metrics, total] = await Promise.all([
-        prisma.customMetric.findMany({
-          where,
-          skip,
-          take: parseInt(limit),
-          orderBy: { recordedAt: 'desc' },
-        }),
-        prisma.customMetric.count({ where }),
-      ]);
-
-      // Build summary: mean, min, max per metric name
-      const aggregated = {};
-      metrics.forEach(m => {
-        if (!aggregated[m.name]) {
-          aggregated[m.name] = { name: m.name, unit: m.unit, values: [] };
-        }
-        aggregated[m.name].values.push(m.value);
-      });
-
-      const summary = Object.values(aggregated).map(a => ({
-        name: a.name,
-        unit: a.unit,
-        count: a.values.length,
-        mean: parseFloat((a.values.reduce((s, v) => s + v, 0) / a.values.length).toFixed(4)),
-        min: Math.min(...a.values),
-        max: Math.max(...a.values),
-      }));
-
-      res.json({
-        success: true,
-        data: {
-          metrics,
-          summary,
-          pagination: {
-            page: parseInt(page),
-            limit: parseInt(limit),
-            total,
-            pages: Math.ceil(total / parseInt(limit)),
-          },
-        },
-      });
+      res.json({ success: true, data: result });
     } catch (err) {
       logger.error('[Metrics] Failed to list metrics', { error: err.message });
       res.status(500).json({ error: 'Failed to list metrics' });
@@ -310,84 +212,15 @@ router.get(
       const { userId } = req.params;
       const { from, to } = req.query;
 
-      const where = { userId };
-      if (from || to) {
-        where.createdAt = {};
-        if (from) where.createdAt.gte = new Date(from);
-        if (to) where.createdAt.lte = new Date(to);
-      }
-
-      const [user, events] = await Promise.all([
-        prisma.user.findUnique({
-          where: { id: userId },
-          select: {
-            id: true, email: true, firstName: true, lastName: true,
-            role: true, createdAt: true, lastLoginAt: true,
-          },
-        }),
-        prisma.userEvent.findMany({
-          where,
-          orderBy: { createdAt: 'asc' },
-          take: 500,
-        }),
-      ]);
-
-      if (!user) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-
-      // Group events into sessions (30 min inactivity = new session)
-      const SESSION_GAP_MS = 30 * 60 * 1000;
-      const sessions = [];
-      let currentSession = null;
-
-      for (const event of events) {
-        const ts = new Date(event.createdAt).getTime();
-
-        if (!currentSession || ts - currentSession.lastTs > SESSION_GAP_MS) {
-          currentSession = {
-            sessionId: event.sessionId || `auto-${sessions.length + 1}`,
-            startedAt: event.createdAt,
-            lastTs: ts,
-            events: [],
-          };
-          sessions.push(currentSession);
+      try {
+        const result = await analyticsEvents.getUserJourney(userId, from, to);
+        res.json({ success: true, data: result });
+      } catch (err) {
+        if (err.message === 'User not found') {
+          return res.status(404).json({ error: 'User not found' });
         }
-
-        currentSession.lastTs = ts;
-        currentSession.events.push({
-          type: event.type,
-          page: event.page,
-          metadata: event.metadata,
-          createdAt: event.createdAt,
-        });
+        throw err;
       }
-
-      // Milestone detection
-      const eventTypes = new Set(events.map(e => e.type));
-      const milestones = {
-        registered: true,
-        searched: eventTypes.has('search'),
-        viewedProfile: eventTypes.has('profile_view'),
-        sentQuote: eventTypes.has('quote_sent'),
-        acceptedQuote: eventTypes.has('quote_accepted'),
-        createdBooking: eventTypes.has('booking_created'),
-        madePayment: eventTypes.has('payment_success'),
-        leftReview: eventTypes.has('review_submitted'),
-        upgradedSubscription: eventTypes.has('subscription_upgraded'),
-      };
-
-      res.json({
-        success: true,
-        data: {
-          user,
-          totalEvents: events.length,
-          totalSessions: sessions.length,
-          milestones,
-          completedMilestones: Object.values(milestones).filter(Boolean).length,
-          sessions,
-        },
-      });
     } catch (err) {
       logger.error('[Journey] Failed to get journey', { error: err.message });
       res.status(500).json({ error: 'Failed to get user journey' });
