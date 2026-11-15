@@ -278,10 +278,11 @@ class RolePermissionModule {
     const adminMap = Object.fromEntries(admins.map(a => [a.id, a]));
 
     // Parse JSON strings and enrich with admin info
+    const safeJsonParse = (val) => { if (val == null) return null; try { return JSON.parse(val); } catch { return null; } };
     const parsed = history.map(h => ({
       ...h,
-      previousPermissions: JSON.parse(h.previousPermissions),
-      newPermissions: JSON.parse(h.newPermissions),
+      previousPermissions: safeJsonParse(h.previousPermissions),
+      newPermissions: safeJsonParse(h.newPermissions),
       changedBy: adminMap[h.changedByAdminId],
     }));
 

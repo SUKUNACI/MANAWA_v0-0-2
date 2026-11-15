@@ -17,6 +17,68 @@ const paymentLimiter = rateLimit({
   standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de requêtes, réessayez dans une minute' },
 });
 
+// ─── Tier configuration ────────────────────────────────────────────────────────
+// These are exported so other routes (quotes, analytics, projects) can reuse
+// the same tier logic without duplicating it.
+
+const TIERS = {
+  GRATUIT:   { label: 'Gratuit',   price: 0,     maxQuotesPerMonth: 5,    maxTrades: 2, projectsDelayMs: 48 * 60 * 60 * 1000 },
+  ESSENTIEL: { label: 'Essentiel', price: 2500,  maxQuotesPerMonth: 20,   maxTrades: 4, projectsDelayMs: 24 * 60 * 60 * 1000 },
+  PRO:       { label: 'Pro',       price: 5000,  maxQuotesPerMonth: null, maxTrades: 6, projectsDelayMs: 0 },
+  ELITE:     { label: 'Elite',     price: 10000, maxQuotesPerMonth: null, maxTrades: 10, projectsDelayMs: 0 },
+};
+
+/**
+ * Returns the effective subscription tier for a professional.
+ * Priority: active trial > active paid subscription > GRATUIT.
+ *
+ * @param {object|null} subscription - The professional's subscription row (may be null).
+ * @param {object}      pro          - The professional row; must have `trialEndsAt`.
+ * @returns {string} One of 'GRATUIT' | 'ESSENTIEL' | 'PRO' | 'ELITE'.
+ */
+function getActiveTier(subscription, pro) {
+  // Trial takes priority over paid subscription
+  if (pro && pro.trialEndsAt && new Date(pro.trialEndsAt) > new Date()) {
+    return 'PRO';
+  }
+
+  if (
+    subscription &&
+    subscription.status === 'ACTIVE' &&
+    subscription.expiresAt &&
+    new Date(subscription.expiresAt) > new Date()
+  ) {
+    // Default to ESSENTIEL if tier field is null but subscription is active
+    return subscription.tier || 'ESSENTIEL';
+  }
+
+  return 'GRATUIT';
+}
+
+/**
+ * Returns the configuration object for a given tier.
+ * Optionally applies dynamic pricing (from app config) over the defaults.
+ *
+ * @param {string}      tier          - Tier key ('GRATUIT', 'ESSENTIEL', 'PRO', 'ELITE').
+ * @param {object|null} dynamicPrices - Optional price overrides { essentiel, pro, elite }.
+ * @returns {object} A copy of the tier config with any dynamic prices merged in.
+ */
+function getTierConfig(tier, dynamicPrices) {
+  const base = TIERS[tier] || TIERS.GRATUIT;
+  const config = { ...base };
+
+  if (dynamicPrices && config.price > 0) {
+    const key = tier.toLowerCase();
+    if (dynamicPrices[key] != null) {
+      config.price = dynamicPrices[key];
+    }
+  }
+
+  return config;
+}
+
+// ─── Routes ────────────────────────────────────────────────────────────────────
+
 router.get('/me', subscriptionReadLimiter, requireAuth, requireRole('PROFESSIONAL'), async (req, res, next) => {
   try {
     const result = await subscription.getCurrentStatus(req.user.id);
@@ -77,3 +139,6 @@ router.get('/error', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.getActiveTier = getActiveTier;
+module.exports.getTierConfig = getTierConfig;
+module.exports.TIERS = TIERS;

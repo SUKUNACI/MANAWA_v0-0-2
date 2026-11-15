@@ -39,19 +39,6 @@ router.get('/all-sections', async (req, res, next) => {
   }
 });
 
-router.get('/:roleId', [param('roleId').trim().notEmpty().withMessage('roleId requis')], async (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
-
-  try {
-    const result = await rolePermission.getRolePermissions(req.params.roleId);
-    res.json(result);
-  } catch (err) {
-    if (err.status) res.status(err.status).json({ error: err.message });
-    else next(err);
-  }
-});
-
 router.post('/grant', adminLimiter, [body('roleId').notEmpty().withMessage('roleId requis'), body('section').notEmpty().withMessage('section requise'), body('actions').isArray().withMessage('actions doit être un tableau')], async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
@@ -78,6 +65,8 @@ router.post('/revoke', adminLimiter, [body('roleId').notEmpty().withMessage('rol
   }
 });
 
+// GET /history/:roleId must be registered BEFORE GET /:roleId to prevent the
+// wildcard param from intercepting the "history" segment as a roleId value.
 router.get('/history/:roleId', [param('roleId').notEmpty().withMessage('roleId requis')], async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
@@ -98,6 +87,20 @@ router.post('/rollback/:roleId/:historyId', adminLimiter, [param('roleId').notEm
 
   try {
     const result = await rolePermission.rollbackPermissions(req.params.roleId, req.params.historyId, req.body.reason || '', req.user.id);
+    res.json(result);
+  } catch (err) {
+    if (err.status) res.status(err.status).json({ error: err.message });
+    else next(err);
+  }
+});
+
+// GET /:roleId — wildcard, must stay AFTER all specific GET routes above
+router.get('/:roleId', [param('roleId').trim().notEmpty().withMessage('roleId requis')], async (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
+
+  try {
+    const result = await rolePermission.getRolePermissions(req.params.roleId);
     res.json(result);
   } catch (err) {
     if (err.status) res.status(err.status).json({ error: err.message });
