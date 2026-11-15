@@ -183,7 +183,7 @@ describe('sentry-breadcrumbs.js', () => {
   });
 
   describe('addErrorBreadcrumb', () => {
-    test('should add error breadcrumb with error details', () => {
+    test('should add error breadcrumb with error details (no PII)', () => {
       const error = new Error('Payment failed');
       error.code = 'PAY_DECLINED';
 
@@ -193,12 +193,10 @@ describe('sentry-breadcrumbs.js', () => {
         category: 'error',
         message: 'Payment processing error',
         level: 'error',
-        data: expect.objectContaining({
+        data: {
           errorCode: 'PAY_DECLINED',
-          errorMessage: 'Payment failed',
           errorType: 'Error',
-          paymentId: 'pay_789',
-        }),
+        },
       });
     });
   });
