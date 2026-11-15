@@ -4,7 +4,7 @@ describe('AuditLogModule', () => {
   let AuditLogModule;
 
   beforeAll(() => {
-    jest.doMock('../../src/modules/AuditLogModule', () => {
+    jest.doMock('../../modules/AuditLogModule', () => {
       return {
         createAuditLog: jest.fn(async (data) => {
           const { action, resourceType, resourceId, userId, ipAddress, userAgent, metadata = {} } = data;
@@ -44,7 +44,7 @@ describe('AuditLogModule', () => {
       };
     });
 
-    AuditLogModule = require('../../src/modules/AuditLogModule');
+    AuditLogModule = require('../../modules/AuditLogModule');
   });
 
   describe('createAuditLog', () => {
