@@ -51,7 +51,7 @@ class ExperimentsModule {
       data: { name, description, trafficPercentage, variants, status: 'DRAFT' },
     });
     logger.info(`Experiment created: ${experiment.id}`);
-    return { experiment };
+    return experiment;
   }
 
   async updateStatus(id, status) {
@@ -63,21 +63,24 @@ class ExperimentsModule {
       data: { status },
     });
     logger.info(`Experiment ${id} status updated to ${status}`);
-    return { experiment: updated };
+    return updated;
   }
 
   async getResults(id, variant1, variant2) {
-    const experiment = await this.prisma.experiment.findUnique({ where: { id } });
+    const experiment = await this.prisma.experiment.findUnique({
+      where: { id },
+      include: { _count: { select: { assignments: true } } },
+    });
     if (!experiment) throw new Error(`Experiment ${id} not found`);
 
-    const results = await this.prisma.experimentResult.findMany({
-      where: { experimentId: id },
-    });
-    
-    const stats = await this.calculateExperimentStats(experiment, results);
-    const significance = this.testSignificance(results, variant1, variant2);
+    const stats = await this.calculateExperimentStats(this.prisma, id);
 
-    return { results, stats, significant: significance };
+    let significance = null;
+    if (variant1 && variant2) {
+      significance = await this.testSignificance(this.prisma, id, variant1, variant2);
+    }
+
+    return { experiment, stats, significance, totalAssignments: experiment._count.assignments };
   }
 
   async deleteExperiment(id) {
@@ -85,10 +88,9 @@ class ExperimentsModule {
     if (!experiment) throw new Error(`Experiment ${id} not found`);
     if (experiment.status === 'ACTIVE') throw new Error('Cannot delete an active experiment');
 
-    await this.prisma.experimentResult.deleteMany({ where: { experimentId: id } });
     await this.prisma.experiment.delete({ where: { id } });
     logger.info(`Experiment ${id} deleted`);
-    return { message: 'Experiment deleted' };
+    return undefined;
   }
 }
 
