@@ -1,15 +1,14 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const { body, param, query, validationResult } = require('express-validator');
+const { body, param, query } = require('express-validator');
 const prisma = require('../config/db');
+const NotificationTemplateModule = require('../modules/notification-template');
 const { requireAuth } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
-const logger = require('../utils/logger');
-const { buildPaginationQuery } = require('../utils/sorting-helper');
-const { getSortableFields } = require('../config/sortable-fields');
 const { applyPageBasedPagination, validatePageBasedPaginationQuery, buildPaginatedResponse } = require('../utils/pagination-helper');
 
 const router = express.Router();
+const notificationTemplateModule = new NotificationTemplateModule(prisma);
 
 // Rate limiters
 const readLimiter = rateLimit({
@@ -60,23 +59,15 @@ router.get(
       const isActive = req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined;
 
       // Build filter
-      const where = {};
-      if (language) where.language = language;
-      if (type) where.type = type;
-      if (isActive !== undefined) where.isActive = isActive;
+      const filters = {};
+      if (language) filters.language = language;
+      if (type) filters.type = type;
+      if (isActive !== undefined) filters.isActive = isActive;
 
-      // Get total count and templates in parallel
-      const [templates, total] = await Promise.all([
-        prisma.notificationTemplate.findMany({
-          where,
-          orderBy: [{ name: 'asc' }, { version: 'desc' }],
-          skip,
-          take: limit,
-        }),
-        prisma.notificationTemplate.count({ where }),
-      ]);
+      // Use module to list templates with pagination
+      const result = await notificationTemplateModule.list(filters, { limit, skip, offset });
 
-      res.json(buildPaginatedResponse(templates, limit, offset, total));
+      res.json(buildPaginatedResponse(result.templates, limit, offset, result.total));
     } catch (err) {
       next(err);
     }
@@ -96,21 +87,12 @@ router.get(
   handleValidationErrors,
   async (req, res, next) => {
     try {
-      const templates = await prisma.notificationTemplate.findMany({
-        where: { name: req.params.id },
-        orderBy: { version: 'desc' },
-      });
-
-      if (templates.length === 0) {
-        return res.status(404).json({ error: 'Template not found' });
-      }
-
-      res.json({
-        templates,
-        current: templates.find(t => t.isActive) || templates[0],
-        totalVersions: templates.length,
-      });
+      const result = await notificationTemplateModule.getById(req.params.id);
+      res.json(result);
     } catch (err) {
+      if (err.status === 404) {
+        return res.status(404).json({ error: err.message });
+      }
       next(err);
     }
   }
@@ -138,46 +120,22 @@ router.post(
     try {
       const { name, type, language, title, body, variables = [] } = req.body;
 
-      // Get current version
-      const latest = await prisma.notificationTemplate.findFirst({
-        where: { name },
-        orderBy: { version: 'desc' },
+      const template = await notificationTemplateModule.create({
+        name,
+        type,
+        language,
+        title,
+        body,
+        variables,
       });
-
-      const newVersion = (latest?.version || 0) + 1;
-
-      // Deactivate previous version if this is v1
-      if (newVersion === 1) {
-        await prisma.notificationTemplate.updateMany({
-          where: { name },
-          data: { isActive: false },
-        });
-      }
-
-      // Create new template
-      const template = await prisma.notificationTemplate.create({
-        data: {
-          name,
-          type,
-          language,
-          title,
-          body,
-          variables: variables,
-          version: newVersion,
-          isActive: true,
-          createdAt: new Date(),
-        },
-      });
-
-      logger.info(`[Templates] Created template ${name} v${newVersion}`);
 
       res.status(201).json({
         template,
-        message: `Template ${name} v${newVersion} created successfully`,
+        message: `Template ${name} v${template.version} created successfully`,
       });
     } catch (err) {
-      if (err.code === 'P2002') {
-        return res.status(409).json({ error: 'Template with this name already exists' });
+      if (err.status === 409) {
+        return res.status(409).json({ error: err.message });
       }
       next(err);
     }
@@ -205,46 +163,21 @@ router.patch(
       const templateName = req.params.id;
       const { title, body, variables } = req.body;
 
-      // Get current version
-      const current = await prisma.notificationTemplate.findFirst({
-        where: { name: templateName },
-        orderBy: { version: 'desc' },
+      const result = await notificationTemplateModule.update(templateName, {
+        title,
+        body,
+        variables,
       });
-
-      if (!current) {
-        return res.status(404).json({ error: 'Template not found' });
-      }
-
-      // Deactivate old version
-      await prisma.notificationTemplate.update({
-        where: { id: current.id },
-        data: { isActive: false },
-      });
-
-      // Create new version
-      const newVersion = current.version + 1;
-      const updated = await prisma.notificationTemplate.create({
-        data: {
-          name: current.name,
-          type: current.type,
-          language: current.language,
-          title: title || current.title,
-          body: body || current.body,
-          variables: variables || current.variables,
-          version: newVersion,
-          isActive: true,
-          createdAt: new Date(),
-        },
-      });
-
-      logger.info(`[Templates] Updated template ${templateName} to v${newVersion}`);
 
       res.json({
-        template: updated,
-        message: `Template ${templateName} updated to v${newVersion}`,
-        previousVersion: current.version,
+        template: result.template,
+        message: `Template ${templateName} updated to v${result.template.version}`,
+        previousVersion: result.previousVersion,
       });
     } catch (err) {
+      if (err.status === 404) {
+        return res.status(404).json({ error: err.message });
+      }
       next(err);
     }
   }
@@ -265,22 +198,16 @@ router.delete(
     try {
       const templateName = req.params.id;
 
-      const result = await prisma.notificationTemplate.updateMany({
-        where: { name: templateName },
-        data: { isActive: false },
-      });
-
-      if (result.count === 0) {
-        return res.status(404).json({ error: 'Template not found' });
-      }
-
-      logger.info(`[Templates] Disabled template ${templateName} (${result.count} versions)`);
+      const result = await notificationTemplateModule.delete(templateName);
 
       res.json({
-        message: `Template ${templateName} and all versions disabled`,
-        versionsAffected: result.count,
+        message: result.message,
+        versionsAffected: result.versionsAffected,
       });
     } catch (err) {
+      if (err.status === 404) {
+        return res.status(404).json({ error: err.message });
+      }
       next(err);
     }
   }
@@ -302,24 +229,15 @@ router.get(
   handleValidationErrors,
   async (req, res, next) => {
     try {
-      const limit = Math.min(50, parseInt(req.query.limit) || 20);
+      const limit = req.query.limit || 20;
 
-      const versions = await prisma.notificationTemplate.findMany({
-        where: { name: req.params.id },
-        orderBy: { version: 'desc' },
-        take: limit,
-      });
+      const result = await notificationTemplateModule.getVersions(req.params.id, limit);
 
-      if (versions.length === 0) {
-        return res.status(404).json({ error: 'Template not found' });
-      }
-
-      res.json({
-        name: req.params.id,
-        versions,
-        total: versions.length,
-      });
+      res.json(result);
     } catch (err) {
+      if (err.status === 404) {
+        return res.status(404).json({ error: err.message });
+      }
       next(err);
     }
   }
@@ -342,53 +260,18 @@ router.post(
   async (req, res, next) => {
     try {
       const templateName = req.params.id;
-      const revertVersion = parseInt(req.params.version);
+      const version = req.params.version;
 
-      // Find the version to revert to
-      const versionToRevert = await prisma.notificationTemplate.findFirst({
-        where: {
-          name: templateName,
-          version: revertVersion,
-        },
-      });
-
-      if (!versionToRevert) {
-        return res.status(404).json({ error: 'Version not found' });
-      }
-
-      // Deactivate all versions
-      await prisma.notificationTemplate.updateMany({
-        where: { name: templateName },
-        data: { isActive: false },
-      });
-
-      // Create copy as new version
-      const newVersion = (await prisma.notificationTemplate.findFirst({
-        where: { name: templateName },
-        orderBy: { version: 'desc' },
-      })).version + 1;
-
-      const reverted = await prisma.notificationTemplate.create({
-        data: {
-          name: templateName,
-          type: versionToRevert.type,
-          language: versionToRevert.language,
-          title: versionToRevert.title,
-          body: versionToRevert.body,
-          variables: versionToRevert.variables,
-          version: newVersion,
-          isActive: true,
-          createdAt: new Date(),
-        },
-      });
-
-      logger.info(`[Templates] Reverted ${templateName} to v${revertVersion}, now v${newVersion}`);
+      const result = await notificationTemplateModule.revert(templateName, version);
 
       res.json({
-        template: reverted,
-        message: `Template reverted from v${revertVersion} to v${newVersion}`,
+        template: result.template,
+        message: result.message,
       });
     } catch (err) {
+      if (err.status === 404) {
+        return res.status(404).json({ error: err.message });
+      }
       next(err);
     }
   }

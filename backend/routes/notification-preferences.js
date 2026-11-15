@@ -4,6 +4,7 @@ const { body } = require('express-validator');
 const { requireAuth } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
 const NotificationPreferencesModule = require('../modules/notification-preferences');
+const { PreferencesError } = require('../modules/notification-preferences');
 const prisma = require('../config/db');
 
 const router = express.Router();
@@ -46,8 +47,11 @@ router.patch('/me', writeLimiter, requireAuth,
       const updated = await preferencesModule.update(req.user.id, newPrefs);
       res.json({ preferences: updated.preferences, updatedAt: updated.updatedAt, message: 'Notification preferences updated' });
     } catch (err) {
-      if (err.message.includes('At least one') || err.message.includes('Invalid') || err.message.includes('must be')) {
-        return res.status(400).json({ error: err.message });
+      if (err instanceof PreferencesError) {
+        return res.status(err.status).json({
+          error: err.message,
+          code: err.code
+        });
       }
       next(err);
     }
@@ -69,8 +73,11 @@ router.patch('/me/:type', writeLimiter, requireAuth,
       const updated = await preferencesModule.updateType(req.user.id, type, { enabled, channels });
       res.json({ preferences: updated.preferences, updatedAt: updated.updatedAt, message: `Preferences for ${type} updated` });
     } catch (err) {
-      if (err.message.includes('Invalid')) {
-        return res.status(400).json({ error: err.message });
+      if (err instanceof PreferencesError) {
+        return res.status(err.status).json({
+          error: err.message,
+          code: err.code
+        });
       }
       next(err);
     }

@@ -3,11 +3,12 @@ const rateLimit = require('express-rate-limit');
 const { query } = require('express-validator');
 const { optionalAuth } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
-const SearchModule = require('../modules/search');
+const { createModules } = require('../modules');
 const prisma = require('../config/db');
 
 const router = express.Router();
-const searchModule = new SearchModule(prisma);
+const modules = createModules(prisma);
+const facetsModule = modules.searchFacets;
 
 const facetLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -35,10 +36,10 @@ router.get('/facets', facetLimiter, optionalAuth,
       const { q, city, trade, minRating, maxRating, minPrice, maxPrice } = req.query;
       const filters = { q: q || '', city: city || null, trade: trade || null, minRating: parseFloat(minRating) || 0, maxRating: parseFloat(maxRating) || 5, minPrice: parseFloat(minPrice) || 0, maxPrice: parseFloat(maxPrice) || 100000 };
 
-      const validation = searchModule.validateFacetFilters(filters);
+      const validation = facetsModule.validateFacetFilters(filters);
       if (!validation.valid) return res.status(400).json({ error: validation.errors[0] });
 
-      const facets = await searchModule.getFacets(filters);
+      const facets = await facetsModule.getFacets(filters);
       res.json({
         success: true,
         data: {
@@ -66,8 +67,8 @@ router.post('/facets/combined', facetLimiter, optionalAuth,
         return res.status(400).json({ error: 'filters object required in request body' });
       }
 
-      const filters = searchModule.normalizeFacetFilters(bodyFilters, q);
-      const facets = await searchModule.getFacets(filters);
+      const filters = facetsModule.normalizeFacetFilters(bodyFilters, q);
+      const facets = await facetsModule.getFacets(filters);
 
       res.json({
         success: true,
@@ -91,7 +92,7 @@ router.get('/facets/locations', facetLimiter, optionalAuth,
   async (req, res, next) => {
     try {
       const { q } = req.query;
-      const facets = await searchModule.getFacets({ q: q || '' });
+      const facets = await facetsModule.getFacets({ q: q || '' });
       res.json({
         success: true,
         data: { locations: facets.locations, total: facets.total, timestamp: new Date().toISOString() },
@@ -109,7 +110,7 @@ router.get('/facets/trades', facetLimiter, optionalAuth,
   async (req, res, next) => {
     try {
       const { q } = req.query;
-      const facets = await searchModule.getFacets({ q: q || '' });
+      const facets = await facetsModule.getFacets({ q: q || '' });
       res.json({
         success: true,
         data: { trades: facets.trades, total: facets.total, timestamp: new Date().toISOString() },
@@ -127,7 +128,7 @@ router.get('/facets/ratings', facetLimiter, optionalAuth,
   async (req, res, next) => {
     try {
       const { q } = req.query;
-      const facets = await searchModule.getFacets({ q: q || '' });
+      const facets = await facetsModule.getFacets({ q: q || '' });
       res.json({
         success: true,
         data: { ratings: facets.ratings, total: facets.total, timestamp: new Date().toISOString() },
@@ -145,7 +146,7 @@ router.get('/facets/prices', facetLimiter, optionalAuth,
   async (req, res, next) => {
     try {
       const { q } = req.query;
-      const facets = await searchModule.getFacets({ q: q || '' });
+      const facets = await facetsModule.getFacets({ q: q || '' });
       res.json({
         success: true,
         data: { priceRanges: facets.priceRanges, total: facets.total, timestamp: new Date().toISOString() },

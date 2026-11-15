@@ -44,6 +44,18 @@ const DEFAULT_PREFERENCES = {
   SYSTEM_ALERT: { email: true, push: true, sms: true },
 };
 
+/**
+ * Custom error class with status code and error code
+ */
+class PreferencesError extends Error {
+  constructor(message, status = 500, code = 'INTERNAL_ERROR') {
+    super(message);
+    this.status = status;
+    this.code = code;
+    this.name = 'PreferencesError';
+  }
+}
+
 class NotificationPreferencesModule {
   constructor(prisma) {
     this.prisma = prisma;
@@ -93,11 +105,16 @@ class NotificationPreferencesModule {
    * @param {string} userId - User ID
    * @param {object} newPrefs - New preference overrides
    * @returns {Promise<object>} Updated preferences record
+   * @throws {PreferencesError} If validation fails or update fails
    */
   async update(userId, newPrefs) {
     try {
       if (!newPrefs || Object.keys(newPrefs).length === 0) {
-        throw new Error('At least one preference to update required');
+        throw new PreferencesError(
+          'At least one preference to update required',
+          400,
+          'EMPTY_PREFERENCES'
+        );
       }
 
       // Validate structure
@@ -132,11 +149,19 @@ class NotificationPreferencesModule {
         return created;
       }
     } catch (err) {
+      // Re-throw PreferencesError as-is
+      if (err instanceof PreferencesError) {
+        throw err;
+      }
       logger.error('[PreferencesModule] Failed to update preferences', {
         userId,
         error: err.message,
       });
-      throw err;
+      throw new PreferencesError(
+        'Failed to update preferences',
+        500,
+        'UPDATE_FAILED'
+      );
     }
   }
 
@@ -146,11 +171,16 @@ class NotificationPreferencesModule {
    * @param {string} type - Notification type
    * @param {object} opts - { enabled?: boolean, channels?: Array<string> }
    * @returns {Promise<object>} Updated preferences record
+   * @throws {PreferencesError} If type is invalid or update fails
    */
   async updateType(userId, type, { enabled, channels } = {}) {
     try {
       if (!VALID_NOTIFICATION_TYPES.includes(type)) {
-        throw new Error(`Invalid notification type: ${type}`);
+        throw new PreferencesError(
+          `Invalid notification type: ${type}`,
+          400,
+          'INVALID_TYPE'
+        );
       }
 
       // Get current or create defaults
@@ -197,12 +227,20 @@ class NotificationPreferencesModule {
       logger.info('[PreferencesModule] Updated type', { userId, type });
       return result;
     } catch (err) {
+      // Re-throw PreferencesError as-is
+      if (err instanceof PreferencesError) {
+        throw err;
+      }
       logger.error('[PreferencesModule] Failed to update type', {
         userId,
         type,
         error: err.message,
       });
-      throw err;
+      throw new PreferencesError(
+        'Failed to update type',
+        500,
+        'UPDATE_TYPE_FAILED'
+      );
     }
   }
 
@@ -250,29 +288,49 @@ class NotificationPreferencesModule {
   /**
    * Validate preference structure
    * @param {object} prefs - Preferences to validate
-   * @throws {Error} If validation fails
+   * @throws {PreferencesError} If validation fails
    */
   validate(prefs) {
     if (!prefs || typeof prefs !== 'object') {
-      throw new Error('Preferences must be object');
+      throw new PreferencesError(
+        'Preferences must be object',
+        400,
+        'INVALID_STRUCTURE'
+      );
     }
 
     for (const [type, channels] of Object.entries(prefs)) {
       if (!VALID_NOTIFICATION_TYPES.includes(type)) {
-        throw new Error(`Invalid notification type: ${type}`);
+        throw new PreferencesError(
+          `Invalid notification type: ${type}`,
+          400,
+          'INVALID_TYPE'
+        );
       }
 
       if (!channels || typeof channels !== 'object') {
-        throw new Error(`${type} must be object with channels`);
+        throw new PreferencesError(
+          `${type} must be object with channels`,
+          400,
+          'INVALID_CHANNELS_STRUCTURE'
+        );
       }
 
       for (const [channel, enabled] of Object.entries(channels)) {
         if (!VALID_CHANNELS.includes(channel)) {
-          throw new Error(`Invalid channel: ${channel}`);
+          throw new PreferencesError(
+            `Invalid channel: ${channel}`,
+            400,
+            'INVALID_CHANNEL'
+          );
         }
 
         if (typeof enabled !== 'boolean') {
-          throw new Error(`${type}.${channel} must be boolean`);
+          throw new PreferencesError(
+            `${type}.${channel} must be boolean`,
+            400,
+            'INVALID_BOOLEAN_VALUE'
+          );
         }
       }
     }
@@ -312,3 +370,4 @@ class NotificationPreferencesModule {
 }
 
 module.exports = NotificationPreferencesModule;
+module.exports.PreferencesError = PreferencesError;
