@@ -429,4 +429,46 @@ describe('Finances routes - Error handling', () => {
     const callArgs = prisma.payment.findMany.mock.calls[0][0];
     expect(callArgs.take).toBe(NaN);
   });
+
+  test('should reject invalid status filter', async () => {
+    const res = await request(app)
+      .get('/api/finances')
+      .query({ status: 'INVALID_STATUS' })
+      .set('Authorization', `Bearer ${adminToken(ADMIN_ID)}`);
+
+    expect(res.status).toBe(400);
+  });
+
+  test('should reject invalid date format for startDate', async () => {
+    const res = await request(app)
+      .get('/api/finances')
+      .query({ startDate: 'not-a-date' })
+      .set('Authorization', `Bearer ${adminToken(ADMIN_ID)}`);
+
+    expect(res.status).toBe(400);
+  });
+
+  test('should handle all valid filters together', async () => {
+    const payment = mockPayment('pay-1', 100000, 'COMPLETED');
+    prisma.payment.findMany.mockResolvedValue([payment]);
+    prisma.payment.count.mockResolvedValue(1);
+    prisma.payment.aggregate.mockResolvedValue({
+      _sum: { amount: 100000 },
+      _count: 1,
+    });
+
+    const res = await request(app)
+      .get('/api/finances')
+      .query({
+        status: 'COMPLETED',
+        startDate: '2026-01-01',
+        endDate: '2026-12-31',
+        page: 1,
+        limit: 50,
+      })
+      .set('Authorization', `Bearer ${adminToken(ADMIN_ID)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.transactions).toHaveLength(1);
+  });
 });
