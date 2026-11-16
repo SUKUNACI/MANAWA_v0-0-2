@@ -1,6 +1,7 @@
 const admin = require('firebase-admin');
 const fs = require('fs');
 const path = require('path');
+const logger = require('../utils/logger');
 
 const serviceAccountPath = path.join(__dirname, '../../manawa-01-firebase-adminsdk-fbsvc-96ec269890.json');
 
