@@ -1,0 +1,15 @@
+{
+  "name": "manawa-root",
+  "version": "1.0.0",
+  "description": "MANAWA - Root wrapper for Render deployment",
+  "main": "backend/index.js",
+  "scripts": {
+    "start": "cd backend && npm start",
+    "install": "cd backend && npm install",
+    "test": "cd backend && npm test",
+    "migrate": "cd backend && npx prisma migrate deploy"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
