@@ -13,7 +13,6 @@
  *   POST   /unlock          (ADMIN uniquement)
  *   GET    /login-history   (auth requise)
  *   GET    /admin/user/:id/security (ADMIN uniquement)
- *   GET    /debug/check-columns
  */
 
 const request = require('supertest');
@@ -1085,32 +1084,6 @@ describe('GET /api/auth/admin/user/:id/security', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GET /api/auth/debug/check-columns
-// ═══════════════════════════════════════════════════════════════════════════════
-describe('GET /api/auth/debug/check-columns', () => {
-  test('200 ok:true quand user.findFirst réussit', async () => {
-    prisma.user.findFirst.mockResolvedValue({ id: 'u1', email: 'a@b.com' });
-
-    const res = await request(app).get('/api/auth/debug/check-columns');
-
-    expect(res.status).toBe(200);
-    expect(res.body.ok).toBe(true);
-    expect(Array.isArray(res.body.columns)).toBe(true);
-  });
-
-  test('200 ok:false quand une colonne est manquante (erreur Prisma)', async () => {
-    prisma.user.findFirst.mockRejectedValue(
-      new Error('column "emailVerified" does not exist')
-    );
-
-    const res = await request(app).get('/api/auth/debug/check-columns');
-
-    expect(res.status).toBe(200);
-    expect(res.body.ok).toBe(false);
-    expect(res.body.error).toBe('emailVerified');
-  });
-});
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // SECURITY: JWT validation
 // ═══════════════════════════════════════════════════════════════════════════════

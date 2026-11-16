@@ -260,23 +260,6 @@ router.post('/admin-renew', async (req, res) => {
     res.status(err.status || 401).json({ error: err.message || 'Session expirée' });
   }
 });
-
-// DEBUG: Check which columns exist in User table
-router.get('/debug/check-columns', async (req, res) => {
-  try {
-    const testCols = {
-      id: true, email: true, passwordHash: true, firstName: true, lastName: true,
-      role: true, emailVerified: true, suspended: true, adminLevel: true, deletedAt: true, lastLoginAt: true,
-    };
-    const user = await prisma.user.findFirst({ select: testCols });
-    res.json({ ok: true, found: !!user, columns: Object.keys(testCols) });
-  } catch (err) {
-    const match = err.message.match(/column "(.*)" does not exist/);
-    const missingColumn = match ? match[1] : 'unknown';
-    res.json({ ok: false, error: missingColumn, message: err.message.substring(0, 100) });
-  }
-});
-
 // POST /api/auth/setup-admin
 router.post('/setup-admin', requireAuth, requireRole('ADMIN'), async (req, res) => {
   try {
