@@ -25,7 +25,7 @@ router.post(
   handleValidationErrors,
   async (req, res) => {
     try {
-      const { quoteId, amount, isDeposit = false } = req.body;
+      const { quoteId, isDeposit = false } = req.body;
 
       const quote = await prisma.quote.findUnique({
         where: { id: quoteId },
@@ -40,18 +40,26 @@ router.post(
         return res.status(403).json({ error: 'Non autorisé' });
       }
 
+      // Calculate amount server-side from quote
+      const baseAmount = parseFloat(quote.amount) || 0;
+      if (baseAmount <= 0) {
+        return res.status(400).json({ error: 'Montant du devis invalide' });
+      }
+      const amount = isDeposit ? baseAmount * 0.5 : baseAmount;
+
       const existingPayment = await prisma.payment.findUnique({ where: { quoteId } });
       if (existingPayment && existingPayment.status === 'pending') {
         return res.status(400).json({ error: 'Paiement déjà en cours pour ce devis' });
       }
 
+      const idempotencyKey = `payment-${quoteId}-${isDeposit ? 'deposit' : 'full'}`;
       const payment = await prisma.payment.create({
         data: {
           quoteId,
           amount,
           isDeposit,
           status: 'pending',
-          idempotencyKey: `${quoteId}-${Date.now()}`,
+          idempotencyKey,
         },
       });
 
