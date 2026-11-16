@@ -4,6 +4,7 @@ const { CircuitBreaker } = require('../utils/circuit-breaker');
 const { AdaptiveRateLimiter } = require('../utils/rate-limiter-adaptive');
 const { getConfig } = require('./third-party-api-config');
 const logger = require('../utils/logger');
+const SecretAccessTracker = require('../modules/SecretAccessTracker');
 
 const MJ_API_KEY = process.env.MAILJET_API_KEY;
 const MJ_SECRET_KEY = process.env.MAILJET_SECRET_KEY;
@@ -224,4 +225,23 @@ async function send(options) {
   });
 }
 
-module.exports = { sendVerificationEmail, sendPackageSuspensionEmail, send, isConfigured, circuitBreaker, rateLimiter };
+/**
+ * Log Mailjet API access (secret tracking)
+ */
+const logMailjetAccess = async (userId, ipAddress, userAgent, action = 'send_email', metadata = {}) => {
+  try {
+    await SecretAccessTracker.logAccess({
+      secretId: process.env.MAILJET_API_KEY || 'MAILJET_API_KEY',
+      secretType: 'MAILJET_API_KEY',
+      action: 'ACCESS',
+      userId,
+      ipAddress,
+      userAgent,
+      reason: `mailjet_${action}`,
+    });
+  } catch (err) {
+    logger.error('[Mailer] Mailjet access log failed', { error: err.message, userId, action });
+  }
+};
+
+module.exports = { sendVerificationEmail, sendPackageSuspensionEmail, send, isConfigured, circuitBreaker, rateLimiter, logMailjetAccess };
