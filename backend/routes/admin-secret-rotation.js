@@ -1,5 +1,5 @@
 const express = require('express');
-const { requireSuperAdmin } = require('../middleware/auth');
+const { requireAdminOrSuper } = require('../middleware/auth');
 const SecretRotationModule = require('../modules/SecretRotationModule');
 const { ROTATION_CONFIG } = require('../config/ROTATION_SCHEDULE');
 const { sendSuccess, sendError } = require('../utils/error-response');
@@ -7,7 +7,7 @@ const prisma = require('../config/db');
 
 const router = express.Router();
 
-router.use(requireSuperAdmin);
+router.use(requireAdminOrSuper);
 
 /**
  * GET /admin/secret-rotation/schedules
