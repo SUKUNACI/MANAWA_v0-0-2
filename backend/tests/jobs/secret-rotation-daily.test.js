@@ -2,8 +2,6 @@ const secretRotationDailyJob = require('../../jobs/secret-rotation-daily');
 const { PrismaClient } = require('@prisma/client');
 const { ROTATION_STATUS } = require('../../config/ROTATION_SCHEDULE');
 
-// Set env vars for tests
-process.env.ROTATION_HASH_KEY = process.env.ROTATION_HASH_KEY || 'test_rotation_hash_key_12345';
 
 const prisma = new PrismaClient({
   datasources: {
