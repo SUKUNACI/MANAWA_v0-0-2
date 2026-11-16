@@ -3,6 +3,9 @@ const SecretRotationModule = require('../../modules/SecretRotationModule');
 const { PrismaClient } = require('@prisma/client');
 const { ROTATION_CONFIG, ROTATION_STATUS, ROTATION_TYPE } = require('../../config/ROTATION_SCHEDULE');
 
+// Set env vars for tests
+process.env.ROTATION_HASH_KEY = process.env.ROTATION_HASH_KEY || 'test_rotation_hash_key_12345';
+
 // Use shared Prisma instance from SecretRotationModule
 const prisma = new PrismaClient({
   datasources: {
