@@ -100,19 +100,17 @@ async function generatePdfJob(job) {
         fileSize: pdfBuffer.length,
       });
     } else if (type === 'invoice' && invoiceId) {
-      logger.info('[generatePdfJob] Invoice PDF generation not yet implemented', {
+      logger.warn('[generatePdfJob] Invoice PDF generation not implemented — skipping', {
         jobId: job.id,
         invoiceId,
       });
-      // TODO: Implement invoice PDF generation
-      throw new Error('Invoice PDF generation not yet implemented');
+      return { success: false, skipped: true, reason: 'invoice_pdf_not_implemented', jobId: job.id };
     } else if (type === 'booking_confirmation' && bookingId) {
-      logger.info('[generatePdfJob] Booking confirmation PDF generation not yet implemented', {
+      logger.warn('[generatePdfJob] Booking confirmation PDF generation not implemented — skipping', {
         jobId: job.id,
         bookingId,
       });
-      // TODO: Implement booking confirmation PDF generation
-      throw new Error('Booking confirmation PDF generation not yet implemented');
+      return { success: false, skipped: true, reason: 'booking_confirmation_pdf_not_implemented', jobId: job.id };
     } else {
       throw new Error(`Unsupported PDF type or missing ID: ${type}`);
     }

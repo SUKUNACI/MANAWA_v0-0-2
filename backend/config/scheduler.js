@@ -5,6 +5,7 @@
 
 const cron = require('node-cron');
 const secretRotationDailyJob = require('../jobs/secret-rotation-daily');
+const logger = require('../utils/logger');
 
 let scheduledJobs = [];
 
@@ -13,21 +14,21 @@ let scheduledJobs = [];
  */
 function initializeScheduler() {
   if (scheduledJobs.length > 0) {
-    console.warn('[SCHEDULER] Already initialized — skipping duplicate');
+    logger.warn('[SCHEDULER] Already initialized — skipping duplicate');
     return;
   }
-  console.log('[SCHEDULER] Initializing scheduled jobs...');
+  logger.info('[SCHEDULER] Initializing scheduled jobs...');
 
   const secretRotationSchedule = '0 2 * * *'; // 2 AM UTC
 
   const secretRotationJob = cron.schedule(secretRotationSchedule, async () => {
-    console.log(`[SCHEDULER] Running secret rotation job at ${new Date().toISOString()}`);
+    logger.info('[SCHEDULER] Running secret rotation job', { startedAt: new Date().toISOString() });
 
     try {
       const result = await secretRotationDailyJob();
-      console.log(`[SCHEDULER] Secret rotation job completed:`, result);
+      logger.info('[SCHEDULER] Secret rotation job completed', result);
     } catch (error) {
-      console.error('[SCHEDULER] Secret rotation job failed:', error.message);
+      logger.error('[SCHEDULER] Secret rotation job failed', { error: error.message });
     }
   });
 
@@ -37,9 +38,9 @@ function initializeScheduler() {
     task: secretRotationJob,
   });
 
-  console.log(`[SCHEDULER] ✅ Scheduled ${scheduledJobs.length} job(s)`);
-  scheduledJobs.forEach((job) => {
-    console.log(`  - ${job.name}: ${job.schedule}`);
+  logger.info('[SCHEDULER] Scheduled jobs initialized', {
+    count: scheduledJobs.length,
+    jobs: scheduledJobs.map(j => ({ name: j.name, schedule: j.schedule })),
   });
 }
 
@@ -47,15 +48,15 @@ function initializeScheduler() {
  * Stop all scheduled jobs
  */
 function stopScheduler() {
-  console.log('[SCHEDULER] Stopping all scheduled jobs...');
+  logger.info('[SCHEDULER] Stopping all scheduled jobs...', { count: scheduledJobs.length });
 
   scheduledJobs.forEach((job) => {
     job.task.stop();
-    console.log(`  - Stopped: ${job.name}`);
+    logger.info('[SCHEDULER] Stopped job', { name: job.name });
   });
 
   scheduledJobs = [];
-  console.log('[SCHEDULER] All jobs stopped');
+  logger.info('[SCHEDULER] All jobs stopped');
 }
 
 /**

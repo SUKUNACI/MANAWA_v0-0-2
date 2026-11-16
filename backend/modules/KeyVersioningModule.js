@@ -130,11 +130,10 @@ class KeyVersioningModule {
       throw new Error(`Key version not found: ${keyName} v${version}`);
     }
 
-    // TODO: Récupérer la clé réelle du secrets manager
-    // const key = await getKeyFromSecretsManager(keyName, version)
-    // return decrypt(key, encryptedData, keyVersion.algorithm)
-
-    return encryptedData; // Placeholder
+    // STUB: Secrets manager integration not yet implemented.
+    // Wire up AWS Secrets Manager, HashiCorp Vault, or similar to retrieve
+    // the actual key and call decrypt(key, encryptedData, keyVersion.algorithm).
+    return encryptedData;
   }
 
   /**

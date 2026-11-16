@@ -96,6 +96,7 @@ const adminDataInventoryRoutes = require('./routes/admin-data-inventory');
 const mobileRoutes = require('./routes/mobile');
 const i18nMiddleware = require('./middleware/i18n');
 const { mobileContextMiddleware } = require('./middleware/mobile-context');
+const logger = require('./utils/logger');
 
 // Firebase initialization
 const { initializeFirebase, getMessaging } = require('./config/firebase-admin');
@@ -133,7 +134,6 @@ if (process.env.NODE_ENV !== 'production') {
   );
 } else {
   // Production: never allow private IPs
-  const logger = require('./utils/logger');
   logger.info('[CORS] Production mode: private IPs restricted', { publicOrigins: process.env.CORS_ORIGINS || 'localhost only' });
 }
 
@@ -229,12 +229,12 @@ app.use((req, res, next) => {
   res.end = (chunk) => { if (chunk) brotli.write(chunk); brotli.end(); };
   next();
 });
-console.log('[Compression] Brotli natif Node.js + gzip activés (Q125)');
+logger.info('[Compression] Brotli natif Node.js + gzip activés (Q125)');
 
 // Q69: Response size limit middleware - check Content-Length < 5MB
 app.use(setResponseLimitHeaders);
 app.use(responseSizeLimitMiddleware);
-console.log('[Q69] Response size limit middleware registered (5MB max)');
+logger.info('[Q69] Response size limit middleware registered (5MB max)');
 
 // Initialize Firebase
 const firebaseApp = initializeFirebase();
@@ -242,9 +242,9 @@ if (firebaseApp) {
   try {
     const messaging = getMessaging();
     setMessaging(messaging);
-    console.log('[Server] Firebase Cloud Messaging initialized ✅');
+    logger.info('[Server] Firebase Cloud Messaging initialized');
   } catch (err) {
-    console.error('[Server] Firebase messaging initialization failed:', err.message);
+    logger.error('[Server] Firebase messaging initialization failed', { error: err.message });
   }
 }
 
@@ -448,7 +448,7 @@ const adminIPGuard = async (req, res, next) => {
     if (allowedIPs.length === 0) return next();
     const clientIP = (req.ip || '').replace(/^::ffff:/, '').replace(/^::1$/, '127.0.0.1');
     if (allowedIPs.includes(clientIP)) return next();
-    console.warn(`[AdminPanel] IP refusée : ${clientIP}`);
+    logger.warn('[AdminPanel] IP refusée', { clientIP });
     return res.status(403).send('Accès interdit');
   } catch { return res.status(503).send('Accès temporairement indisponible'); }
 };
@@ -539,7 +539,6 @@ if (process.env.SENTRY_DSN) {
 // ERROR #11: Return correct HTTP status codes (400/403/404)
 // Middleware global d'erreurs
 app.use((err, req, res, next) => {
-  const logger = require('./utils/logger');
   logger.error('Unhandled error', { stack: err.stack, message: err.message, status: err.status });
 
   // Determine the correct status code
@@ -551,145 +550,15 @@ app.use((err, req, res, next) => {
   res.status(statusCode).json({ error: 'Erreur interne du serveur' });
 });
 
-// Expiration automatique des devis — vérifie toutes les heures
 const prisma = require('./config/db');
 
-async function expireQuotes() {
-  try {
-    const { count } = await prisma.quote.updateMany({
-      where: {
-        status: 'PENDING',
-        expiresAt: { lt: new Date() },
-      },
-      data: { status: 'EXPIRED' },
-    });
-    if (count > 0) console.log(`[CRON] ${count} devis expiré(s)`);
-  } catch (err) {
-    console.error('[CRON] Erreur expiration devis:', err.message);
-  }
-}
-
-setInterval(expireQuotes, 60 * 60 * 1000);
-expireQuotes();
-
-// Nettoyage des refresh tokens expirés (toutes les 24h)
-async function cleanExpiredRefreshTokens() {
-  try {
-    const { count } = await prisma.refreshToken.deleteMany({
-      where: { expiresAt: { lt: new Date() } },
-    });
-    if (count > 0) console.log(`[CRON] ${count} refresh token(s) expiré(s) supprimé(s)`);
-  } catch (err) {
-    console.error('[CRON] Erreur nettoyage refresh tokens:', err.message);
-  }
-}
-
-setInterval(cleanExpiredRefreshTokens, 24 * 60 * 60 * 1000);
-cleanExpiredRefreshTokens();
-
-// Expiration automatique des paiements pending depuis plus de 1h
-const { logPaymentStatus } = require('./utils/paymentAudit');
-
-async function expirePendingPayments() {
-  try {
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    const expiredPayments = await prisma.payment.findMany({
-      where: { status: 'pending', createdAt: { lt: oneHourAgo } },
-      select: { id: true, status: true },
-    });
-    if (expiredPayments.length === 0) return;
-
-    await prisma.payment.updateMany({
-      where: { id: { in: expiredPayments.map(p => p.id) } },
-      data: { status: 'failed' },
-    });
-
-    for (const p of expiredPayments) {
-      await logPaymentStatus({ paymentId: p.id, fromStatus: 'pending', toStatus: 'failed', reason: 'cron_expiry' });
-    }
-
-    console.log(`[CRON] ${expiredPayments.length} paiement(s) pending expiré(s)`);
-  } catch (err) {
-    console.error('[CRON] Erreur expiration paiements:', err.message);
-  }
-}
-
-setInterval(expirePendingPayments, 60 * 60 * 1000);
-expirePendingPayments();
-
-// Réconciliation paiements pending < 1h avec GeniusPay (filet de sécurité)
-// Couvre les cas où : webhook manqué + client n'a pas retenté + paiement < 1h
-const geniuspay = require('./utils/geniuspay');
-
-async function reconcilePendingPayments() {
-  try {
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    // Seulement les pending récents (< 1h) — les plus anciens sont gérés par expirePendingPayments
-    const pendingPayments = await prisma.payment.findMany({
-      where: {
-        status: 'pending',
-        geniuspayRef: { not: null },
-        createdAt: { gte: oneHourAgo },
-      },
-      select: { id: true, status: true, geniuspayRef: true, amount: true },
-    });
-
-    if (pendingPayments.length === 0) return;
-    console.log(`[CRON] Réconciliation : ${pendingPayments.length} paiement(s) pending à vérifier`);
-
-    let synced = 0;
-    let failed = 0;
-
-    for (const payment of pendingPayments) {
-      try {
-        const gpResponse = await geniuspay.getPayment(payment.geniuspayRef);
-        const gpData = gpResponse?.data || gpResponse;
-        const realStatus = gpData?.status;
-
-        if (realStatus === 'completed' || realStatus === 'success') {
-          const receivedAmount = gpData?.amount || gpData?.paid_amount;
-          if (receivedAmount !== undefined && Math.abs(receivedAmount - payment.amount) > 1) {
-            await prisma.payment.update({
-              where: { id: payment.id },
-              data: { status: 'failed', metadata: JSON.stringify({ reason: 'amount_mismatch', expected: payment.amount, received: receivedAmount }) },
-            });
-            await logPaymentStatus({ paymentId: payment.id, fromStatus: 'pending', toStatus: 'failed', reason: 'amount_mismatch', metadata: { expected: payment.amount, received: receivedAmount } });
-            failed++;
-          } else {
-            await prisma.payment.update({ where: { id: payment.id }, data: { status: 'succeeded', completedAt: new Date() } });
-            await logPaymentStatus({ paymentId: payment.id, fromStatus: 'pending', toStatus: 'succeeded', reason: 'reconciliation' });
-            synced++;
-          }
-        } else if (realStatus === 'failed' || realStatus === 'cancelled' || realStatus === 'expired') {
-          await prisma.payment.update({ where: { id: payment.id }, data: { status: 'failed' } });
-          await logPaymentStatus({ paymentId: payment.id, fromStatus: 'pending', toStatus: 'failed', reason: 'reconciliation', metadata: { geniuspayStatus: realStatus } });
-          failed++;
-        }
-        // Si GeniusPay retourne encore 'pending' → on ne touche rien, on re-vérifie au prochain cron
-      } catch (err) {
-        // GeniusPay injoignable pour ce paiement — on ignore, on réessaiera au prochain tour
-        console.warn(`[CRON] Réconciliation — impossible de vérifier ${payment.geniuspayRef}: ${err.message}`);
-      }
-    }
-
-    if (synced > 0 || failed > 0) {
-      console.log(`[CRON] Réconciliation terminée — ${synced} confirmé(s), ${failed} échoué(s)`);
-    }
-  } catch (err) {
-    console.error('[CRON] Erreur réconciliation paiements:', err.message);
-  }
-}
-
-// Décalage de 30min par rapport aux autres crons pour éviter les pics simultanés
-setTimeout(() => {
-  reconcilePendingPayments();
-  setInterval(reconcilePendingPayments, 60 * 60 * 1000);
-}, 30 * 60 * 1000);
+// Inline cron jobs (quote expiry, token cleanup, payment expiry, payment reconciliation)
+const { initializeCronJobs } = require('./jobs/cron-jobs');
+initializeCronJobs();
 
 // ERROR #20: Add admin log retention policy - cleanup logs older than 90 days
 const ADMIN_LOG_RETENTION_DAYS = parseInt(process.env.ADMIN_LOG_RETENTION_DAYS || '90', 10);
 async function cleanupOldAdminLogs() {
-  const logger = require('./utils/logger');
   try {
     const cutoffDate = new Date(Date.now() - ADMIN_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000);
     const { count } = await prisma.adminLog.deleteMany({
@@ -703,7 +572,6 @@ async function cleanupOldAdminLogs() {
 // Q54: Webhook retry scheduler - runs every 30 minutes
 const { webhookRetryScheduler } = require('./jobs/webhook-retry-scheduler');
 async function scheduleWebhookRetries() {
-  const logger = require('./utils/logger');
   try {
     const result = await webhookRetryScheduler();
     logger.debug('[CRON] Webhook retry scheduler completed', result);
@@ -723,7 +591,7 @@ const { createDailyBackupBranch } = require('./utils/dbBackup');
 setInterval(createDailyBackupBranch, 24 * 60 * 60 * 1000);
 // Appel ASYNCHRONE et décalé (pas au boot, sinon timeout Render)
 setTimeout(() => {
-  createDailyBackupBranch().catch(err => console.error('[Backup] Startup error:', err.message));
+  createDailyBackupBranch().catch(err => logger.error('[Backup] Startup error', { error: err.message }));
 }, 5 * 60 * 1000);
 
 const { seedConfig, ensureSuperAdmin } = require('./utils/appConfig');
@@ -732,60 +600,54 @@ const PORT = process.env.PORT || 4000;
 
 async function startServer() {
   const { checkDatabaseHealth } = require('./utils/health-check');
-  const logger = require('./utils/logger');
 
   try {
     // ERROR #25: Validate environment variables at startup
     const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET', 'NODE_ENV'];
     const missingVars = requiredEnvVars.filter(v => !process.env[v]);
     if (missingVars.length > 0) {
-      console.error('❌ ERREUR: Variables d\'environnement manquantes:', missingVars.join(', '));
+      logger.error('FATAL: Missing required environment variables', { missing: missingVars });
       process.exit(1);
     }
 
-    console.log('⏳ Vérification de la connexion à la base de données...');
+    logger.info('Checking database connection...');
     const dbHealth = await checkDatabaseHealth();
 
     if (dbHealth.status !== 'healthy') {
-      console.error('❌ ERREUR: La base de données est injoignable!');
-      console.error('Erreur:', dbHealth.error);
-      console.error('\nActions à prendre:');
-      console.error('  1. Vérifier le statut de Supabase: https://supabase.com/dashboard');
-      console.error('  2. Vérifier DATABASE_URL dans .env');
-      console.error('  3. Vérifier la connexion réseau/firewall');
+      logger.error('Database unreachable at startup', { error: dbHealth.error });
       process.exit(1);
     }
 
-    console.log('✓ Connexion à la base de données établie');
+    logger.info('Database connection established');
 
     // Initialize Redis cache
-    console.log('⏳ Initialisation du cache Redis...');
+    logger.info('Initializing Redis cache...');
     await redis.initializeRedis();
     const cacheHealth = await redis.healthCheck();
-    console.log(`✓ Cache ${cacheHealth.mode}: ${cacheHealth.message}`);
+    logger.info('Cache initialized', { mode: cacheHealth.mode, message: cacheHealth.message });
 
     // Initialize job queue workers
-    console.log('⏳ Initialisation des workers de file d\'attente...');
+    logger.info('Initializing queue workers...');
     const { initializeWorkers, shutdownWorkers } = require('./jobs/workers');
     try {
       await initializeWorkers();
-      console.log('✓ Workers de file d\'attente initialisés');
+      logger.info('Queue workers initialized');
     } catch (err) {
-      console.error('⚠️  Erreur initialisation workers (non-bloquant):', err.message);
+      logger.error('Worker initialization failed (non-blocking)', { error: err.message });
     }
 
     // Q56: Initialize webhook queue
-    console.log('⏳ Initialisation de la queue webhook...');
+    logger.info('Initializing webhook queue...');
     try {
       const { initializeWebhookQueue } = require('./utils/webhook-queue-manager');
       await initializeWebhookQueue();
-      console.log('✓ Queue webhook initialisée');
+      logger.info('Webhook queue initialized');
     } catch (err) {
-      console.error('⚠️  Erreur initialisation webhook queue (non-bloquant):', err.message);
+      logger.error('Webhook queue initialization failed (non-blocking)', { error: err.message });
     }
 
     // Q71: Initialize default feature flags in DB
-    console.log('⏳ Initialisation des feature flags...');
+    logger.info('Initializing feature flags...');
     try {
       const { initializeDefaultFlags, subscribeToHotReload } = require('./config/feature-flags');
       const prismaClient = require('./config/db');
@@ -795,31 +657,30 @@ async function startServer() {
       if (redisSubscriber) {
         await subscribeToHotReload(redisSubscriber);
       }
-      console.log('✓ Feature flags initialisés');
+      logger.info('Feature flags initialized');
     } catch (err) {
-      console.error('⚠️  Erreur initialisation feature flags (non-bloquant):', err.message);
+      logger.error('Feature flags initialization failed (non-blocking)', { error: err.message });
     }
 
     // Q66: Initialize MeiliSearch
-    console.log('⏳ Initialisation de MeiliSearch...');
+    logger.info('Initializing MeiliSearch...');
     try {
       const { ensureIndices, healthCheck } = require('./config/meilisearch');
       const meilisearchHealth = await healthCheck();
       if (meilisearchHealth.status === 'ok') {
         await ensureIndices();
-        console.log('✓ MeiliSearch initialisé et indices créés');
+        logger.info('MeiliSearch initialized');
       } else {
-        console.error('⚠️  MeiliSearch indisponible (non-bloquant):', meilisearchHealth.error);
+        logger.error('MeiliSearch unavailable (non-blocking)', { error: meilisearchHealth.error });
       }
     } catch (err) {
-      console.error('⚠️  Erreur initialisation MeiliSearch (non-bloquant):', err.message);
+      logger.error('MeiliSearch initialization failed (non-blocking)', { error: err.message });
     }
 
     server.listen(PORT, () => {
-      console.log(`✓ Serveur MANAWA démarré sur le port ${PORT}`);
       logger.info('Server started', { port: PORT });
-      seedConfig().catch(err => console.error('[Config] Erreur seed:', err.message));
-      ensureSuperAdmin().catch(err => console.error('[Boot] Erreur ensureSuperAdmin:', err.message));
+      seedConfig().catch(err => logger.error('[Config] Seed error', { error: err.message }));
+      ensureSuperAdmin().catch(err => logger.error('[Boot] ensureSuperAdmin error', { error: err.message }));
 
       // Q66: Schedule daily MeiliSearch synchronization (1h after startup, then daily)
       setTimeout(() => {
@@ -849,29 +710,27 @@ async function startServer() {
 
     // Graceful shutdown
     process.on('SIGTERM', async () => {
-      console.log('⏳ Arrêt du serveur MANAWA...');
+      logger.info('Shutting down MANAWA server...');
       server.close(() => {
-        console.log('✓ Serveur arrêté');
+        logger.info('Server stopped');
       });
       try {
         const { shutdownWorkers } = require('./jobs/workers');
         await shutdownWorkers();
       } catch (err) {
-        console.error('Erreur lors de l\'arrêt des workers:', err.message);
+        logger.error('Error shutting down workers', { error: err.message });
       }
       await redis.disconnect();
       process.exit(0);
     });
   } catch (error) {
-    console.error('❌ Erreur lors du démarrage du serveur:', error.message);
+    logger.error('Server startup failed', { error: error.message });
     process.exit(1);
   }
 }
 
-// Force Render redeploy - COMPLIANCE Officer endpoints v1
 if (require.main === module) {
   startServer();
 }
-// Force rebuild v2
 
 module.exports = server;

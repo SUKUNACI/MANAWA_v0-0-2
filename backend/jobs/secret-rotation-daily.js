@@ -3,6 +3,7 @@ require('dotenv').config();
 const SecretRotationModule = require('../modules/SecretRotationModule');
 const { ROTATION_METHOD, ROTATION_STATUS } = require('../config/ROTATION_SCHEDULE');
 const Sentry = require('@sentry/node');
+const logger = require('../utils/logger');
 
 async function secretRotationDailyJob() {
   const startTime = Date.now();
@@ -19,11 +20,11 @@ async function secretRotationDailyJob() {
     results.total = duedSecrets.length;
 
     if (results.total === 0) {
-      console.log('[SECRET ROTATION] No secrets due for rotation');
+      logger.info('[SECRET ROTATION] No secrets due for rotation');
       return results;
     }
 
-    console.log(`[SECRET ROTATION] Found ${results.total} secrets due for rotation`);
+    logger.info('[SECRET ROTATION] Found secrets due for rotation', { count: results.total });
 
     for (const secret of duedSecrets) {
       try {
@@ -35,7 +36,7 @@ async function secretRotationDailyJob() {
 
           if (rotationResult.success) {
             results.autoRotated++;
-            console.log(`✅ [AUTO] Rotated: ${secret.secretName}`);
+            logger.info('[SECRET ROTATION] Auto-rotated secret', { secretName: secret.secretName });
 
             Sentry.addBreadcrumb({
               category: 'secret-rotation',
@@ -52,7 +53,7 @@ async function secretRotationDailyJob() {
               secret: secret.secretName,
               error: rotationResult.error,
             });
-            console.error(`❌ [AUTO] Failed: ${secret.secretName} - ${rotationResult.error}`);
+            logger.error('[SECRET ROTATION] Auto-rotation failed', { secretName: secret.secretName, error: rotationResult.error });
 
             Sentry.captureException(new Error(`Auto-rotation failed: ${secret.secretName}`), {
               tags: { rotation_method: 'auto' },
@@ -63,7 +64,7 @@ async function secretRotationDailyJob() {
           secret.rotationMethod === ROTATION_METHOD.MANUAL_WITH_APPROVAL
         ) {
           results.manualRequired++;
-          console.log(`📋 [MANUAL] Requires attention: ${secret.secretName}`);
+          logger.info('[SECRET ROTATION] Manual rotation required', { secretName: secret.secretName });
 
           await SecretRotationModule.logRotation({
             secretName: secret.secretName,
@@ -92,7 +93,7 @@ async function secretRotationDailyJob() {
           secret: secret.secretName,
           error: secretError.message,
         });
-        console.error(`❌ Error processing ${secret.secretName}:`, secretError.message);
+        logger.error('[SECRET ROTATION] Error processing secret', { secretName: secret.secretName, error: secretError.message });
 
         Sentry.captureException(secretError, {
           tags: { rotation_type: 'job_processing' },
@@ -101,8 +102,13 @@ async function secretRotationDailyJob() {
     }
 
     const duration = Date.now() - startTime;
-    console.log(`[SECRET ROTATION] Job completed in ${duration}ms`);
-    console.log(`  - Total: ${results.total}, Auto: ${results.autoRotated}, Manual: ${results.manualRequired}, Failed: ${results.failed}`);
+    logger.info('[SECRET ROTATION] Job completed', {
+      durationMs: duration,
+      total: results.total,
+      autoRotated: results.autoRotated,
+      manualRequired: results.manualRequired,
+      failed: results.failed,
+    });
 
     Sentry.addBreadcrumb({
       category: 'secret-rotation-job',
@@ -119,7 +125,7 @@ async function secretRotationDailyJob() {
 
     return results;
   } catch (error) {
-    console.error('[SECRET ROTATION] Job failed:', error.message);
+    logger.error('[SECRET ROTATION] Job failed', { error: error.message });
     Sentry.captureException(error, {
       tags: { rotation_type: 'job_failure' },
     });
@@ -130,9 +136,9 @@ async function secretRotationDailyJob() {
 async function alertAdminForManualRotation(secret) {
   try {
     const adminEmail = process.env.ADMIN_EMAIL || 'admin@manawa.com';
-    console.log(`📧 Alert: ${secret.secretName} requires manual rotation (${adminEmail})`);
+    logger.info('[SECRET ROTATION] Admin alert dispatched', { secretName: secret.secretName, adminEmail });
   } catch (error) {
-    console.error('Failed to alert admin:', error.message);
+    logger.error('[SECRET ROTATION] Failed to alert admin', { error: error.message });
     throw error;
   }
 }

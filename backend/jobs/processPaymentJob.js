@@ -228,8 +228,13 @@ async function processPaymentRefund(job, paymentId) {
 
     await job.progress(50);
 
-    // TODO: Call payment processor API to initiate refund
-    // This is where you'd integrate with Stripe, PayPal, etc.
+    // STUB: Payment processor API not integrated.
+    // Replace with Stripe, PayPal, or GeniusPay refund API call before going live.
+    logger.warn('[processPaymentRefund] Payment processor API bypassed — DB updated without actual refund', {
+      jobId: job.id,
+      paymentId,
+      amount: payment.amount,
+    });
 
     await job.progress(75);
 
