@@ -109,6 +109,8 @@ class SecretRotationModule {
       return {
         success: true,
         newSecret,
+        oldHash,
+        newHash,
         message: 'Secret generated. DEPLOYMENT TO PROVIDER REQUIRED',
       };
     } catch (error) {
