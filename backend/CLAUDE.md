@@ -1,24 +1,23 @@
 # Backend MANAWA — Principes de développement
 
-## ⚠️ RAPPORTS ARCHIVÉS
+## Règles de travail pour les corrections
 
-Les fichiers dans `docs/archive/backend-reports/` sont des rapports historiques et **ne sont pas des sources de vérité**. 
+1. **Examen du code réel** — Lire les fichiers source (`modules/`, `routes/`, `middleware/`), ne pas se fier aux rapports, commentaires ou noms de fichiers.
 
-Seuls le code et les tests font foi.
+2. **Vérification complète** — Ne marquer aucun défaut comme corrigé sans avoir exécuté les tests et vérifié le code modifié.
 
-## Sources de vérité
+3. **Chemin complet** — Pour chaque défaut, tracer: route → middleware → module métier → données → effets externes.
 
-1. **Code source** — `modules/`, `routes/`, `middleware/`, `config/`
-2. **Tests** — `tests/` avec exécution `npm test`
-3. **Comportement réel** — pas les commentaires, pas les noms de fichiers
+4. **Corrections à la source** — Pas de contournements qui laissent le défaut accessible ailleurs.
 
-Ne jamais créer de nouveaux rapports. Documenter seulement dans le code.
+5. **Tests obligatoires** — Un test qui ÉCHOUE avant le correctif, puis PASSE après. Cas autorisés ET interdits.
 
-## Corrections en cours
+6. **Un commit par défaut** — Après chaque correction vérifiée, commit avec message `fix(security): <point>`.
 
-Pour vérifier une correction:
-1. `git diff` pour voir le changement
-2. `npm test` pour exécuter les tests
-3. Lire les tests pour comprendre ce qui est testé
+7. **Pas de simulation** — Pas de fake succès de paiement, pas de simulation Redis, pas de modification de tests existants pour les faire passer.
 
-Un problème n'est résolu que si ses tests passent.
+8. **Limites de contexte** — Si le contexte est plein, arrêter proprement après un commit et signaler ce qui reste.
+
+9. **Blocages absolu** — Si un service externe (GeniusPay, Mailjet, DB) empêche la vérification, signaler exactement ce qui manque, pas "à faire".
+
+10. **Rapports archivés** — Les fichiers dans `docs/archive/backend-reports/` ne sont pas des sources de vérité. Seuls le code et les tests font foi.
