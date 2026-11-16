@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: manawa-api
+    runtime: node
+    rootDir: backend
+    startCommand: npm start
+    buildCommand: npm ci && npx prisma generate && npx prisma migrate deploy
+    plan: standard
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+
+    healthCheckPath: /api/health
+    healthCheckInterval: 30
+    healthCheckTimeout: 10
+    healthCheckFailureThreshold: 3
+
+databases:
+  - name: postgres
+    plan: starter
+    version: 15
+    databaseName: manawa
+
+  - name: redis
+    plan: starter
+    version: 7
