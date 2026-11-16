@@ -491,6 +491,7 @@ enum UserRole {
   CLIENT
   PROFESSIONAL
   ADMIN
+  SUPER_ADMIN
 }
 
 enum ProjectStatus {
