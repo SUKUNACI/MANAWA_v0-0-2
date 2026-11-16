@@ -13,9 +13,34 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const bruteForceMiddleware = require('../middleware/bruteForceMiddleware');
 const bruteForceConfig = require('../config/brute-force');
 const AuthModule = require('../modules/auth');
+const AuditLogModule = require('../modules/AuditLogModule');
 
 const router = express.Router();
 const auth = new AuthModule(prisma);
+
+// Extract request metadata for audit logging
+const getRequestMetadata = (req) => ({
+  ipAddress: req.ip || req.connection.remoteAddress,
+  userAgent: req.get('user-agent'),
+});
+
+// Helper for audit logging
+const logAuditEvent = async (action, resourceType, resourceId, userId, metadata, req) => {
+  const { ipAddress, userAgent } = getRequestMetadata(req);
+  try {
+    await AuditLogModule.createAuditLog({
+      action,
+      resourceType,
+      resourceId,
+      userId,
+      ipAddress,
+      userAgent,
+      metadata,
+    });
+  } catch (err) {
+    logger.error(`Audit log failed for ${action}`, { error: err.message });
+  }
+};
 
 // Rate limit per IP (register + login)
 const authLimiter = rateLimit({
@@ -81,8 +106,7 @@ router.post(
 
       const { email, password } = req.body;
       const emailLower = email.toLowerCase();
-      const ipAddress = req.ip || req.connection.remoteAddress;
-      const userAgent = req.get('user-agent');
+      const { ipAddress, userAgent } = getRequestMetadata(req);
 
       let result;
       try {
@@ -115,6 +139,9 @@ router.post(
       // Successful login — clear brute-force state
       await bruteForceMiddleware.clearFailedAttempts(emailLower);
       await bruteForceMiddleware.logLoginAttempt(result.user.id, emailLower, 'success', ipAddress, userAgent);
+
+      // Audit log — login successful
+      await logAuditEvent('LOGIN', 'USER', result.user.id, result.user.id, { email: emailLower, twoFARequired: result.requiresTwoFA || false }, req);
 
       if (result.requiresTwoFA) {
         return res.status(200).json({
@@ -163,6 +190,27 @@ router.post('/logout', async (req, res) => {
   }
 });
 
+// PATCH /api/auth/password-change
+router.patch('/password-change', requireAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'currentPassword et newPassword requis' });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'newPassword doit avoir au moins 8 caractères' });
+    }
+
+    const result = await auth.changePassword(req.user.id, currentPassword, newPassword);
+    await logAuditEvent('PASSWORD_CHANGE', 'USER', req.user.id, req.user.id, { reason: 'user_change_via_auth' }, req);
+    res.json(result);
+  } catch (err) {
+    logger.error('Password change error', { error: err.message });
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    res.status(500).json({ error: 'Erreur lors du changement de mot de passe', code: err.code || 'UNKNOWN_ERROR' });
+  }
+});
+
 // POST /api/auth/admin-session
 router.post('/admin-session', async (req, res) => {
   const { token } = req.body;
@@ -173,6 +221,9 @@ router.post('/admin-session', async (req, res) => {
     if (!secure) {
       logger.warn('[Admin] Running in development mode - cookies are not secure. Enable HTTPS for production.');
     }
+
+    await logAuditEvent('ADMIN_SESSION_CREATE', 'ADMIN_SESSION', user.id, user.id, { adminLevel: user.adminLevel }, req);
+
     res.cookie('adminToken', tok, { httpOnly: true, secure, sameSite: 'strict', maxAge: 15 * 60 * 1000 });
     res.cookie('adminCsrf', csrfToken, { httpOnly: true, secure, sameSite: 'strict', maxAge: 15 * 60 * 1000 });
     res.json({ user, token: tok, csrfToken });
@@ -264,8 +315,8 @@ router.post('/unlock', requireAuth, requireRole('ADMIN'), async (req, res) => {
     const { email, reason } = req.body;
     if (!email) return res.status(400).json({ error: 'Email requis' });
 
-    const { email: unlockedEmail } = await auth.unlockAccount(email, bruteForceMiddleware);
-
+    const { email: unlockedEmail, userId } = await auth.unlockAccount(email, bruteForceMiddleware);
+    await logAuditEvent('ACCOUNT_UNLOCK', 'USER', userId || unlockedEmail, req.user.id, { unlockedEmail, reason: reason || 'manual unlock' }, req);
     logger.info('[Admin] Account unlocked', { email: unlockedEmail, adminId: req.user.id });
     res.json({ ok: true, message: `Compte déverrouillé pour ${unlockedEmail}`, email: unlockedEmail });
   } catch (err) {

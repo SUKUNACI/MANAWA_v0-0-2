@@ -5,6 +5,7 @@ const { PrismaClient } = require('@prisma/client');
 const fs = require('fs');
 const path = require('path');
 const logger = require('../utils/logger');
+const SecretAccessTracker = require('../modules/SecretAccessTracker');
 
 /**
  * Backup Strategy Configuration
@@ -47,6 +48,17 @@ class BackupStrategy {
         bucket: this.backupBucket,
         region: process.env.AWS_REGION || 'us-east-1',
       });
+
+      // SECRET ACCESS LOG — AWS credentials accessed
+      SecretAccessTracker.logAccess({
+        secretId: process.env.AWS_ACCESS_KEY_ID || 'AWS_ACCESS_KEY_ID',
+        secretType: 'AWS_CREDENTIALS',
+        action: 'ACCESS',
+        userId: 'system',
+        ipAddress: 'internal',
+        userAgent: 'backup-strategy',
+        reason: 's3_client_initialization',
+      }).catch(err => logger.error('[Backup] Failed to log AWS access', { error: err.message }));
 
       return true;
     } catch (err) {
@@ -100,6 +112,17 @@ class BackupStrategy {
         s3Key: s3Key,
         size: fs.statSync(backupPath).size,
       };
+
+      // SECRET ACCESS LOG — AWS S3 backup uploaded (credentials used)
+      SecretAccessTracker.logAccess({
+        secretId: process.env.AWS_ACCESS_KEY_ID || 'AWS_ACCESS_KEY_ID',
+        secretType: 'AWS_CREDENTIALS',
+        action: 'ACCESS',
+        userId: 'system',
+        ipAddress: 'internal',
+        userAgent: 'backup-strategy',
+        reason: 'full_backup_upload_to_s3',
+      }).catch(err => logger.error('[Backup] Failed to log AWS access for upload', { error: err.message }));
 
       logger.info('[Backup] Full backup completed', {
         name: backupName,

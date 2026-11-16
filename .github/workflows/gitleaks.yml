@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main
+      - masterchef
   pull_request:
     branches:
       - main
+      - masterchef
 
 permissions:
   security-events: write

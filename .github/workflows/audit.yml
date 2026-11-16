@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - develop
+      - masterchef
     paths:
       - 'backend/package.json'
       - 'backend/package-lock.json'
@@ -13,6 +14,7 @@ on:
     branches:
       - main
       - develop
+      - masterchef
     paths:
       - 'backend/package.json'
       - 'backend/package-lock.json'

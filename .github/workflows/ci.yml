@@ -2,9 +2,9 @@ name: CI — MANAWA Backend
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, masterchef]
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, masterchef]
 
 permissions:
   contents: read
