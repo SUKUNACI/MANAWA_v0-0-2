@@ -5,12 +5,12 @@
  */
 
 const express = require('express');
-const { requireAuth, requireRole } = require('../middleware/auth');
+const { requireAuth, requireAdminOrSuper } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
 const router = express.Router();
 router.use(requireAuth);
-router.use(requireRole(['ADMIN', 'SUPER_ADMIN']));
+router.use(requireAdminOrSuper);
 
 // Static data inventory — ground truth of where PII lives in the schema
 const DATA_INVENTORY = [

@@ -6,13 +6,13 @@
 
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
-const { requireAuth, requireRole } = require('../middleware/auth');
+const { requireAuth, requireAdminOrSuper } = require('../middleware/auth');
 const prisma = require('../config/db');
 const logger = require('../utils/logger');
 
 const router = express.Router();
 router.use(requireAuth);
-router.use(requireRole(['ADMIN', 'SUPER_ADMIN']));
+router.use(requireAdminOrSuper);
 
 // Retention policy per entity type (days). -1 = keep forever
 const RETENTION_POLICIES = {

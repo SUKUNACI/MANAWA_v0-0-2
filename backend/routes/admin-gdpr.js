@@ -5,13 +5,13 @@
 
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
-const { requireAuth, requireRole } = require('../middleware/auth');
+const { requireAuth, requireAdminOrSuper } = require('../middleware/auth');
 const prisma = require('../config/db');
 const logger = require('../utils/logger');
 
 const router = express.Router();
 router.use(requireAuth);
-router.use(requireRole(['ADMIN', 'SUPER_ADMIN']));
+router.use(requireAdminOrSuper);
 
 // ─── GDPR Deletion Requests ───────────────────────────────────────────────────
 
@@ -95,7 +95,7 @@ router.post('/requests', [
  * Execute a GDPR hard delete: wipe all PII, then delete account
  * This is irreversible. Requires SUPER_ADMIN.
  */
-router.post('/requests/:id/execute', requireRole(['SUPER_ADMIN']), async (req, res) => {
+router.post('/requests/:id/execute', requireSuperAdmin, async (req, res) => {
   try {
     const request = await prisma.gdprDeletionRequest.findUnique({ where: { id: req.params.id } });
     if (!request)              return res.status(404).json({ error: 'Request not found' });

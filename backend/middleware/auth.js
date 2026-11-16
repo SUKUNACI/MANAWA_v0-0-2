@@ -118,7 +118,6 @@ async function optionalAuth(req, res, next) {
 
 function requireSuperAdmin(req, res, next) {
   if (!req.user) {
-    // Authenticate first if not already done, then re-check adminLevel
     return requireAuth(req, res, (err) => {
       if (err) return next(err);
       if (!req.user) return res.status(401).json({ error: 'Non authentifié' });
@@ -130,6 +129,16 @@ function requireSuperAdmin(req, res, next) {
   }
   if (req.user.adminLevel !== 'SUPER') {
     return res.status(403).json({ error: 'Accès réservé au super administrateur' });
+  }
+  next();
+}
+
+function requireAdminOrSuper(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Non authentifié' });
+  }
+  if (req.user.role !== 'ADMIN') {
+    return res.status(403).json({ error: 'Accès refusé — administrateur requis' });
   }
   next();
 }
@@ -160,4 +169,4 @@ async function requireEmailVerified(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth, requireAdminAuth, requireRole, optionalAuth, requireSuperAdmin, requirePermission, requireEmailVerified, requireRoleAccess };
+module.exports = { requireAuth, requireAdminAuth, requireRole, optionalAuth, requireSuperAdmin, requireAdminOrSuper, requirePermission, requireEmailVerified, requireRoleAccess };

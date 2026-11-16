@@ -6,14 +6,14 @@
 
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
-const { requireAuth, requireRole } = require('../middleware/auth');
+const { requireAuth, requireAdminOrSuper } = require('../middleware/auth');
 const prisma = require('../config/db');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
 
 const router = express.Router();
 router.use(requireAuth);
-router.use(requireRole(['ADMIN', 'SUPER_ADMIN']));
+router.use(requireAdminOrSuper);
 
 // ─── Anonymization ────────────────────────────────────────────────────────────
 

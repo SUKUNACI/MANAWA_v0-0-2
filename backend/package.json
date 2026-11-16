@@ -62,10 +62,12 @@
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "chai": "^6.3.0",
+    "embedded-postgres": "^18.6.0-beta.19",
     "eslint": "^8.57.1",
     "jest": "^30.5.2",
     "nodemon": "^3.1.14",
     "prisma": "^5.18.0",
+    "redis-mock": "^0.56.3",
     "supertest": "^7.2.2"
   },
   "overrides": {
