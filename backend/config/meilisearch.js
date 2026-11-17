@@ -21,7 +21,6 @@ const MEILISEARCH_API_KEY = process.env.MEILISEARCH_API_KEY || 'masterKey';
 let client = null;
 if (MEILISEARCH_URL) {
   try {
-    logger.info('[MeiliSearch] Initializing client', { url: MEILISEARCH_URL });
     client = new MeiliSearch({
       host: MEILISEARCH_URL,
       apiKey: MEILISEARCH_API_KEY,
@@ -34,20 +33,13 @@ if (MEILISEARCH_URL) {
         },
       },
     });
-    logger.info('[MeiliSearch] Client initialized successfully', { url: MEILISEARCH_URL });
+    logger.info('[MeiliSearch] Client initialized', { url: MEILISEARCH_URL });
   } catch (err) {
-    logger.error('[MeiliSearch] Failed to initialize client', {
-      error: err.message,
-      code: err.code,
-      errno: err.errno,
-      address: err.address,
-      port: err.port,
-      syscall: err.syscall,
-    });
+    logger.warn('[MeiliSearch] Failed to initialize client', { error: err.message });
     client = null;
   }
 } else {
-  logger.warn('[MeiliSearch] MEILISEARCH_URL not configured — search features disabled');
+  logger.warn('[MeiliSearch] URL not configured — search features disabled');
 }
 
 /**
@@ -126,11 +118,7 @@ const INDICES_CONFIG = {
  */
 async function ensureIndices() {
   try {
-    if (!client) {
-      logger.warn('[MeiliSearch] ensureIndices called but client is null — MeiliSearch disabled');
-      return false;
-    }
-    logger.info('[MeiliSearch] Starting indices verification...');
+    logger.info('[MeiliSearch] Vérification des indices...');
 
     for (const indexName of Object.keys(INDICES_CONFIG)) {
       const config = INDICES_CONFIG[indexName];
