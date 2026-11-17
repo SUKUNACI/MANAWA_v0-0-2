@@ -610,21 +610,27 @@ async function startServer() {
       process.exit(1);
     }
 
-    logger.info('Checking database connection...');
-    try {
-      const dbHealthPromise = checkDatabaseHealth();
-      const dbHealth = await Promise.race([
-        dbHealthPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('DB health check timeout')), 5000)),
-      ]);
+    // Skip startup health check if running on Render (it hangs on connection timeout)
+    // Health check will run on-demand via /api/health endpoint instead
+    if (process.env.RENDER) {
+      logger.info('Running on Render platform: deferring health check to endpoint');
+    } else {
+      logger.info('Checking database connection...');
+      try {
+        const dbHealthPromise = checkDatabaseHealth();
+        const dbHealth = await Promise.race([
+          dbHealthPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('DB health check timeout')), 5000)),
+        ]);
 
-      if (dbHealth.status !== 'healthy') {
-        logger.warn('Database unhealthy at startup (non-fatal)', { error: dbHealth.error });
-      } else {
-        logger.info('Database connection established');
+        if (dbHealth.status !== 'healthy') {
+          logger.warn('Database unhealthy at startup (non-fatal)', { error: dbHealth.error });
+        } else {
+          logger.info('Database connection established');
+        }
+      } catch (err) {
+        logger.warn('Database health check failed (non-fatal)', { error: err.message });
       }
-    } catch (err) {
-      logger.warn('Database health check failed (non-fatal)', { error: err.message });
     }
 
     // Initialize Redis cache
