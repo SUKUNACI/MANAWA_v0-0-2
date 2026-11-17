@@ -91,42 +91,45 @@ async function initializeRedis() {
     redisClient = redis.createClient({
       url: process.env.REDIS_URL,
       socket: {
-        connectTimeout: 2000,
+        connectTimeout: 1000,
         tls: true,
         rejectUnauthorized: false,
-        reconnectStrategy: () => {
-          logger.warn('[Redis] Connection failed, switching to in-memory cache');
-          useInMemory = true;
-          if (!inMemoryCache) inMemoryCache = new InMemoryCache();
-          return new Error('Redis disabled');
-        },
       },
     });
 
+    let connected = false;
+
     redisClient.on('error', (err) => {
-      logger.warn('[Redis] Connection error, using in-memory cache', { error: err.message });
-      useInMemory = true;
-      if (!inMemoryCache) inMemoryCache = new InMemoryCache();
+      if (!connected) {
+        logger.warn('[Redis] Initial connection failed, using in-memory cache', { error: err.message });
+        useInMemory = true;
+        connected = true;
+        if (!inMemoryCache) inMemoryCache = new InMemoryCache();
+      }
     });
 
     redisClient.on('connect', () => {
       logger.info('[Redis] Connected successfully ✅');
       useInMemory = false;
+      connected = true;
     });
 
     const connectPromise = redisClient.connect();
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Redis connection timeout after 3s')), 3000)
+      setTimeout(() => reject(new Error('Redis connection timeout')), 1500)
     );
 
     try {
       await Promise.race([connectPromise, timeoutPromise]);
+      if (!connected) {
+        throw new Error('Connection not established');
+      }
     } catch (err) {
-      logger.warn('[Redis] Connection timeout/failed, using in-memory cache', { error: err.message });
+      logger.warn('[Redis] Connection failed, disabling Redis', { error: err.message });
       useInMemory = true;
       if (!inMemoryCache) inMemoryCache = new InMemoryCache();
       try {
-        await redisClient.disconnect();
+        await redisClient.quit();
       } catch { /* ignore */ }
       redisClient = null;
     }
