@@ -599,122 +599,17 @@ const { seedConfig, ensureSuperAdmin } = require('./utils/appConfig');
 const PORT = process.env.PORT || 4000;
 
 async function startServer() {
-  const { checkDatabaseHealth } = require('./utils/health-check');
-
   try {
-    // ERROR #25: Validate environment variables at startup
+    // ERROR #25: Validate environment variables at startup (non-fatal on Render)
     const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET', 'NODE_ENV'];
     const missingVars = requiredEnvVars.filter(v => !process.env[v]);
     if (missingVars.length > 0) {
-      logger.error('FATAL: Missing required environment variables', { missing: missingVars });
-      process.exit(1);
-    }
-
-    // Skip startup health check if running on Render (it hangs on connection timeout)
-    // Health check will run on-demand via /api/health endpoint instead
-    if (process.env.RENDER) {
-      logger.info('Running on Render platform: deferring health check to endpoint');
-    } else {
-      logger.info('Checking database connection...');
-      try {
-        const dbHealthPromise = checkDatabaseHealth();
-        const dbHealth = await Promise.race([
-          dbHealthPromise,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('DB health check timeout')), 5000)),
-        ]);
-
-        if (dbHealth.status !== 'healthy') {
-          logger.warn('Database unhealthy at startup (non-fatal)', { error: dbHealth.error });
-        } else {
-          logger.info('Database connection established');
-        }
-      } catch (err) {
-        logger.warn('Database health check failed (non-fatal)', { error: err.message });
-      }
-    }
-
-    // Initialize Redis cache (non-blocking with 2s timeout on Render)
-    logger.info('Initializing Redis cache...');
-    try {
       if (process.env.RENDER) {
-        const redisPromise = redis.initializeRedis();
-        await Promise.race([
-          redisPromise,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Redis init timeout on Render')), 2000)),
-        ]);
+        logger.warn('⚠️  Missing env vars on Render (startup continues)', { missing: missingVars });
       } else {
-        await redis.initializeRedis();
+        logger.error('FATAL: Missing required environment variables', { missing: missingVars });
+        process.exit(1);
       }
-      const cacheHealth = await redis.healthCheck();
-      logger.info('Cache initialized', { mode: cacheHealth.mode, message: cacheHealth.message });
-    } catch (err) {
-      logger.warn('Cache initialization timeout/failed (non-blocking)', { error: err.message });
-    }
-
-    // Initialize job queue workers (non-blocking with timeout)
-    logger.info('Initializing queue workers...');
-    if (!process.env.RENDER) {
-      const { initializeWorkers, shutdownWorkers } = require('./jobs/workers');
-      try {
-        await initializeWorkers();
-        logger.info('Queue workers initialized');
-      } catch (err) {
-        logger.warn('Worker initialization failed (non-blocking)', { error: err.message });
-      }
-    } else {
-      logger.info('Skipping queue workers on Render platform');
-    }
-
-    // Q56: Initialize webhook queue (non-blocking with timeout)
-    logger.info('Initializing webhook queue...');
-    try {
-      const { initializeWebhookQueue } = require('./utils/webhook-queue-manager');
-      const webhookPromise = initializeWebhookQueue();
-      await Promise.race([
-        webhookPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Webhook queue timeout')), 2000)),
-      ]);
-      logger.info('Webhook queue initialized');
-    } catch (err) {
-      logger.warn('Webhook queue initialization timeout/failed (non-blocking)', { error: err.message });
-    }
-
-    // Q71: Initialize default feature flags in DB (non-blocking with timeout)
-    logger.info('Initializing feature flags...');
-    try {
-      const { initializeDefaultFlags, subscribeToHotReload } = require('./config/feature-flags');
-      const prismaClient = require('./config/db');
-      const flagPromise = initializeDefaultFlags(prismaClient);
-      await Promise.race([
-        flagPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Feature flags timeout')), 2000)),
-      ]);
-      const redisSubscriber = redis.getSubscriberClient ? redis.getSubscriberClient() : null;
-      if (redisSubscriber) {
-        await subscribeToHotReload(redisSubscriber);
-      }
-      logger.info('Feature flags initialized');
-    } catch (err) {
-      logger.warn('Feature flags initialization timeout/failed (non-blocking)', { error: err.message });
-    }
-
-    // Q66: Initialize MeiliSearch (non-blocking with timeout)
-    logger.info('Initializing MeiliSearch...');
-    try {
-      const { ensureIndices, healthCheck } = require('./config/meilisearch');
-      const meiliPromise = healthCheck();
-      const meilisearchHealth = await Promise.race([
-        meiliPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('MeiliSearch timeout')), 2000)),
-      ]);
-      if (meilisearchHealth.status === 'ok') {
-        await ensureIndices();
-        logger.info('MeiliSearch initialized');
-      } else {
-        logger.warn('MeiliSearch unavailable (non-blocking)', { error: meilisearchHealth.error });
-      }
-    } catch (err) {
-      logger.warn('MeiliSearch initialization timeout/failed (non-blocking)', { error: err.message });
     }
 
     server.listen(PORT, '0.0.0.0', () => {
