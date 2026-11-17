@@ -717,10 +717,18 @@ async function startServer() {
       logger.warn('MeiliSearch initialization timeout/failed (non-blocking)', { error: err.message });
     }
 
-    server.listen(PORT, () => {
-      logger.info('Server started', { port: PORT });
-      seedConfig().catch(err => logger.error('[Config] Seed error', { error: err.message }));
-      ensureSuperAdmin().catch(err => logger.error('[Boot] ensureSuperAdmin error', { error: err.message }));
+    server.listen(PORT, '0.0.0.0', () => {
+      logger.info('✅ Server listening', { port: PORT, host: '0.0.0.0' });
+
+      // Background initialization tasks (fire-and-forget)
+      setImmediate(async () => {
+        try {
+          seedConfig().catch(err => logger.error('[Config] Seed error', { error: err.message }));
+          ensureSuperAdmin().catch(err => logger.error('[Boot] ensureSuperAdmin error', { error: err.message }));
+        } catch (err) {
+          logger.warn('[Boot] Background init error', { error: err.message });
+        }
+      });
 
       // Q66: Schedule daily MeiliSearch synchronization (1h after startup, then daily)
       setTimeout(() => {
