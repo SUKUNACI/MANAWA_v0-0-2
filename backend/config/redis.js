@@ -94,14 +94,11 @@ async function initializeRedis() {
         connectTimeout: 2000,
         tls: true,
         rejectUnauthorized: false,
-        reconnectStrategy: (retries) => {
-          if (retries > 3) {
-            logger.warn('[Redis] Max retries exceeded, switching to in-memory cache');
-            useInMemory = true;
-            if (!inMemoryCache) inMemoryCache = new InMemoryCache();
-            return new Error('Redis max retries exceeded');
-          }
-          return retries * 100;
+        reconnectStrategy: () => {
+          logger.warn('[Redis] Connection failed, switching to in-memory cache');
+          useInMemory = true;
+          if (!inMemoryCache) inMemoryCache = new InMemoryCache();
+          return new Error('Redis disabled');
         },
       },
     });
