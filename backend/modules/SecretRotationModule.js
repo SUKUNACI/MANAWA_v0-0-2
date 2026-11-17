@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 const { ROTATION_STATUS, ROTATION_TYPE, ROTATION_METHOD } = require('../config/ROTATION_SCHEDULE');
 
-const prisma = new PrismaClient({
+let prisma = new PrismaClient({
   datasources: {
     db: {
       url: process.env.DATABASE_URL,
@@ -10,7 +10,15 @@ const prisma = new PrismaClient({
   },
 });
 
+// For testing: allow overriding the Prisma instance
+function setPrisma(instance) {
+  prisma = instance;
+}
+
 class SecretRotationModule {
+  static setPrisma(instance) {
+    setPrisma(instance);
+  }
   static generateNewSecret(type = 'api_key') {
     const length = type === 'password' ? 32 : 48;
     const raw = crypto.randomBytes(length * 2).toString('base64');
@@ -210,3 +218,4 @@ class SecretRotationModule {
 }
 
 module.exports = SecretRotationModule;
+module.exports.setPrisma = setPrisma;

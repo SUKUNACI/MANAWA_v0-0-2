@@ -95,8 +95,12 @@ router.post('/requests', [
  * Execute a GDPR hard delete: wipe all PII, then delete account
  * This is irreversible. Requires SUPER_ADMIN.
  */
-router.post('/requests/:id/execute', requireAdminOrSuper, async (req, res) => {
+router.post('/requests/:id/execute', async (req, res) => {
   try {
+    if (req.user.adminLevel !== 'SUPER') {
+      return res.status(403).json({ error: 'Only SUPER_ADMIN can execute hard deletes' });
+    }
+
     const request = await prisma.gdprDeletionRequest.findUnique({ where: { id: req.params.id } });
     if (!request)              return res.status(404).json({ error: 'Request not found' });
     if (request.status !== 'PENDING' && request.status !== 'IN_PROGRESS') {

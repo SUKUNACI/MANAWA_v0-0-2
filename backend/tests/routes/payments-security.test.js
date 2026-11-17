@@ -19,6 +19,25 @@ jest.mock('../../utils/paymentAudit', () => ({
   logPaymentStatus: jest.fn().mockResolvedValue({}),
 }));
 
+const JWT_SECRET = 'test-secret-key-min-32-characters-long';
+process.env.JWT_SECRET = JWT_SECRET;
+
+jest.mock('../../middleware/auth', () => ({
+  requireAuth: (req, res, next) => {
+    const header = req.headers.authorization;
+    if (!header || !header.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Non authentifié' });
+    }
+    const jwt = require('jsonwebtoken');
+    try {
+      req.user = jwt.verify(header.split(' ')[1], process.env.JWT_SECRET);
+      next();
+    } catch {
+      return res.status(401).json({ error: 'Token invalide' });
+    }
+  },
+}));
+
 const prisma = require('../../config/db');
 const paymentsRoute = require('../../routes/payments');
 
@@ -26,7 +45,6 @@ const app = express();
 app.use(express.json());
 app.use('/api', paymentsRoute);
 
-const JWT_SECRET = 'test-secret-key-min-32-characters-long';
 const userId = 'client-123';
 const quoteId = '550e8400-e29b-41d4-a716-446655440000';
 const authToken = jwt.sign({ id: userId, role: 'CLIENT', email: 'client@test.com' }, JWT_SECRET);
@@ -79,7 +97,7 @@ describe('Payments Security — Amount Server-Calculated', () => {
     await request(app)
       .post('/api/create')
       .set('Authorization', `Bearer ${authToken}`)
-      .send({ quoteId, isDeposit: false });
+      .send({ quoteId, amount: 50000, isDeposit: false });
 
     const key1 = prisma.payment.create.mock.calls[0][0].data.idempotencyKey;
     expect(key1).toMatch(/^payment-/);

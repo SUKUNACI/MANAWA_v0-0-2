@@ -490,10 +490,6 @@ app.get('/api/health', (req, res) => {
   res.redirect(301, '/api/v1/health');
 });
 
-app.get('/api/v1/health', (req, res) => {
-  res.setHeader('Cache-Control', 'no-store');
-  res.json({ status: 'ok' });
-});
 
 // Redirection QR code profil pro — manawa://pro/:id si app installée, sinon page web
 app.get('/p/:proId', (req, res) => {

@@ -8,7 +8,7 @@ const router = express.Router();
 const healthModule = new HealthModule({ checkDatabaseHealth }, redis);
 const healthLimiter = rateLimit({ windowMs: 60000, max: 200, standardHeaders: true, legacyHeaders: false });
 
-router.get('/health', healthLimiter, async (req, res) => {
+router.get('/', healthLimiter, async (req, res) => {
   try { const h = await healthModule.checkSystemHealth(); res.status(healthModule.getStatusCode(h)).json(h); } catch (err) { res.status(503).json({ status: 'unhealthy', error: 'Health check failed', timestamp: new Date().toISOString() }); }
 });
 

@@ -77,7 +77,7 @@ jest.mock('../../utils/logger', () => ({
 
 function superAdminToken(id = 'superadmin-1') {
   const jwt = require('jsonwebtoken');
-  return jwt.sign({ id, role: 'SUPER_ADMIN', email: 'superadmin@test.com' }, process.env.JWT_SECRET, { expiresIn: '1d' });
+  return jwt.sign({ id, role: 'ADMIN', adminLevel: 'SUPER', email: 'superadmin@test.com' }, process.env.JWT_SECRET, { expiresIn: '1d' });
 }
 
 const gdprRouter = require('../../routes/admin-gdpr');
@@ -247,9 +247,12 @@ describe('Admin GDPR Routes', () => {
     });
 
     it('should return 403 for ADMIN (requires SUPER_ADMIN)', async () => {
+      const jwt = require('jsonwebtoken');
+      // Create an ADMIN token WITHOUT adminLevel='SUPER'
+      const regularAdminToken = jwt.sign({ id: 'admin-2', role: 'ADMIN', email: 'admin@test.com' }, process.env.JWT_SECRET, { expiresIn: '1d' });
       const res = await request(app)
         .post('/gdpr/requests/req-1/execute')
-        .set('Authorization', `Bearer ${adminToken()}`);
+        .set('Authorization', `Bearer ${regularAdminToken}`);
       expect(res.status).toBe(403);
     });
 

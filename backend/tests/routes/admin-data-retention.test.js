@@ -41,6 +41,12 @@ jest.mock('../../middleware/auth', () => ({
       return res.status(401).json({ error: 'Token invalide' });
     }
   },
+  requireAdminOrSuper: (req, res, next) => {
+    if (!req.user || !['ADMIN', 'SUPER_ADMIN'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Accès refusé' });
+    }
+    next();
+  },
   requireRole: (role) => (req, res, next) => {
     const roles = Array.isArray(role) ? role : [role];
     if (!req.user || !roles.includes(req.user.role)) {

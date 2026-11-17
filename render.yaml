@@ -12,7 +12,7 @@ services:
       - key: PORT
         value: 4000
 
-    healthCheckPath: /api/health
+    healthCheckPath: /api/v1/health
     healthCheckInterval: 30
     healthCheckTimeout: 10
     healthCheckFailureThreshold: 3

@@ -107,6 +107,7 @@ const mockQuote = {
   id: QUOTE_ID,
   clientId: CLIENT_ID,
   projectId: 'project-1',
+  amount: 100000,
   client: mockClient,
   professional: { id: 'pro-1', userId: PRO_ID },
 };

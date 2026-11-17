@@ -36,19 +36,20 @@ let app;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.resetModules();
   app = express();
   app.use(express.json());
-  app.use('/api', require('../../routes/health'));
+  app.use('/api/v1/health', require('../../routes/health'));
 });
 
-// ─── GET /health ──────────────────────────────────────────────────────────────
+// ─── GET /api/v1/health ──────────────────────────────────────────────────────────────
 
-describe('GET /health', () => {
+describe('GET /api/v1/health', () => {
   it('200 quand DB et Redis sont sains', async () => {
     mockCheckDatabaseHealth.mockResolvedValue({ status: 'healthy' });
     mockRedis.healthCheck.mockResolvedValue({ status: 'ok' });
 
-    const res = await request(app).get('/api/health');
+    const res = await request(app).get('/api/v1/health');
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('healthy');
@@ -60,7 +61,7 @@ describe('GET /health', () => {
     mockCheckDatabaseHealth.mockResolvedValue({ status: 'unhealthy' });
     mockRedis.healthCheck.mockResolvedValue({ status: 'ok' });
 
-    const res = await request(app).get('/api/health');
+    const res = await request(app).get('/api/v1/health');
 
     expect(res.status).toBe(503);
     expect(res.body.status).toBe('degraded');
@@ -70,7 +71,7 @@ describe('GET /health', () => {
     mockCheckDatabaseHealth.mockResolvedValue({ status: 'healthy' });
     mockRedis.healthCheck.mockResolvedValue({ status: 'error' });
 
-    const res = await request(app).get('/api/health');
+    const res = await request(app).get('/api/v1/health');
 
     expect(res.status).toBe(503);
     expect(res.body.status).toBe('degraded');
@@ -80,7 +81,7 @@ describe('GET /health', () => {
     mockCheckDatabaseHealth.mockRejectedValue(new Error('Connection timeout'));
     mockRedis.healthCheck.mockResolvedValue({ status: 'ok' });
 
-    const res = await request(app).get('/api/health');
+    const res = await request(app).get('/api/v1/health');
 
     expect(res.status).toBe(503);
     expect(res.body.status).toBe('unhealthy');
@@ -91,7 +92,7 @@ describe('GET /health', () => {
     mockCheckDatabaseHealth.mockResolvedValue({ status: 'healthy' });
     mockRedis.healthCheck.mockRejectedValue(new Error('Redis down'));
 
-    const res = await request(app).get('/api/health');
+    const res = await request(app).get('/api/v1/health');
 
     expect(res.status).toBe(503);
     expect(res.body.status).toBe('unhealthy');
@@ -101,7 +102,7 @@ describe('GET /health', () => {
     mockCheckDatabaseHealth.mockResolvedValue({ status: 'healthy' });
     mockRedis.healthCheck.mockResolvedValue({ status: 'ok' });
 
-    const res = await request(app).get('/api/health');
+    const res = await request(app).get('/api/v1/health');
 
     expect(res.body.timestamp).toBeDefined();
     expect(new Date(res.body.timestamp).getTime()).not.toBeNaN();
