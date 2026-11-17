@@ -79,8 +79,13 @@ inMemoryCache = new InMemoryCache();
 
 // Initialize Redis (attempt to use Redis, fallback to in-memory with timeout)
 async function initializeRedis() {
-  if (!process.env.REDIS_URL) {
-    logger.info('[Redis] REDIS_URL not configured, using in-memory cache fallback');
+  // On Render (free plan), never try to connect to Redis even if REDIS_URL is set
+  if (process.env.RENDER || !process.env.REDIS_URL) {
+    if (process.env.RENDER) {
+      logger.info('[Redis] Render platform detected: using in-memory cache (no Redis available on free plan)');
+    } else {
+      logger.info('[Redis] REDIS_URL not configured, using in-memory cache fallback');
+    }
     useInMemory = true;
     inMemoryCache = new InMemoryCache();
     return;
