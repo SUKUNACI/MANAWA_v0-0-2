@@ -79,7 +79,9 @@ inMemoryCache = new InMemoryCache();
 
 // Initialize Redis (test connection only, no automatic retries)
 async function initializeRedis() {
-  if (!process.env.REDIS_URL) {
+  const redisUrl = (process.env.REDIS_URL || '').trim();
+
+  if (!redisUrl) {
     logger.info('[Redis] REDIS_URL not configured, using in-memory cache fallback');
     useInMemory = true;
     inMemoryCache = new InMemoryCache();
@@ -89,7 +91,7 @@ async function initializeRedis() {
   try {
     const redis = require('redis');
     const testClient = redis.createClient({
-      url: process.env.REDIS_URL,
+      url: redisUrl,
       socket: {
         connectTimeout: 500,
         tls: true,
@@ -107,7 +109,7 @@ async function initializeRedis() {
       await Promise.race([connectPromise, timeoutPromise]);
       // Connection successful - create the real client
       redisClient = redis.createClient({
-        url: process.env.REDIS_URL,
+        url: redisUrl,
         socket: {
           connectTimeout: 500,
           tls: true,
