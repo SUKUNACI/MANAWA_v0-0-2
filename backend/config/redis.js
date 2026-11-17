@@ -77,7 +77,7 @@ class InMemoryCache {
 // Initialize with InMemoryCache immediately so module-level calls work before initializeRedis()
 inMemoryCache = new InMemoryCache();
 
-// Initialize Redis (attempt to use Redis, fallback to in-memory with timeout)
+// Initialize Redis (test connection only, no automatic retries)
 async function initializeRedis() {
   if (!process.env.REDIS_URL) {
     logger.info('[Redis] REDIS_URL not configured, using in-memory cache fallback');
@@ -88,55 +88,56 @@ async function initializeRedis() {
 
   try {
     const redis = require('redis');
-    redisClient = redis.createClient({
+    const testClient = redis.createClient({
       url: process.env.REDIS_URL,
       socket: {
-        connectTimeout: 1000,
+        connectTimeout: 500,
         tls: true,
         rejectUnauthorized: false,
       },
     });
 
-    let connected = false;
-
-    redisClient.on('error', (err) => {
-      if (!connected) {
-        logger.warn('[Redis] Initial connection failed, using in-memory cache', { error: err.message });
-        useInMemory = true;
-        connected = true;
-        if (!inMemoryCache) inMemoryCache = new InMemoryCache();
-      }
-    });
-
-    redisClient.on('connect', () => {
-      logger.info('[Redis] Connected successfully ✅');
-      useInMemory = false;
-      connected = true;
-    });
-
-    const connectPromise = redisClient.connect();
+    // Try to connect once only
+    const connectPromise = testClient.connect();
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Redis connection timeout')), 1500)
+      setTimeout(() => reject(new Error('timeout')), 800)
     );
 
     try {
       await Promise.race([connectPromise, timeoutPromise]);
-      if (!connected) {
-        throw new Error('Connection not established');
-      }
+      // Connection successful - create the real client
+      redisClient = redis.createClient({
+        url: process.env.REDIS_URL,
+        socket: {
+          connectTimeout: 500,
+          tls: true,
+          rejectUnauthorized: false,
+        },
+      });
+
+      redisClient.on('connect', () => {
+        logger.info('[Redis] Connected ✅');
+        useInMemory = false;
+      });
+
+      redisClient.on('error', (err) => {
+        logger.warn('[Redis] Connection lost', { error: err.message });
+        useInMemory = true;
+      });
+
+      await redisClient.connect();
+      logger.info('[Redis] Redis initialized successfully');
     } catch (err) {
-      logger.warn('[Redis] Connection failed, disabling Redis', { error: err.message });
+      logger.info('[Redis] Connection test failed, using in-memory cache');
       useInMemory = true;
-      if (!inMemoryCache) inMemoryCache = new InMemoryCache();
-      try {
-        await redisClient.quit();
-      } catch { /* ignore */ }
       redisClient = null;
+      try {
+        await testClient.quit();
+      } catch { /* ignore */ }
     }
   } catch (err) {
-    logger.warn('[Redis] Failed to initialize, using in-memory cache', { error: err.message });
+    logger.warn('[Redis] Initialization error, using in-memory cache', { error: err.message });
     useInMemory = true;
-    if (!inMemoryCache) inMemoryCache = new InMemoryCache();
   }
 }
 
