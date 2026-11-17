@@ -128,6 +128,9 @@ async function initializeRedis() {
       logger.warn('[Redis] Connection timeout/failed, using in-memory cache', { error: err.message });
       useInMemory = true;
       if (!inMemoryCache) inMemoryCache = new InMemoryCache();
+      try {
+        await redisClient.disconnect();
+      } catch { /* ignore */ }
       redisClient = null;
     }
   } catch (err) {
