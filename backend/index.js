@@ -633,61 +633,88 @@ async function startServer() {
       }
     }
 
-    // Initialize Redis cache
+    // Initialize Redis cache (non-blocking with 2s timeout on Render)
     logger.info('Initializing Redis cache...');
-    await redis.initializeRedis();
-    const cacheHealth = await redis.healthCheck();
-    logger.info('Cache initialized', { mode: cacheHealth.mode, message: cacheHealth.message });
-
-    // Initialize job queue workers
-    logger.info('Initializing queue workers...');
-    const { initializeWorkers, shutdownWorkers } = require('./jobs/workers');
     try {
-      await initializeWorkers();
-      logger.info('Queue workers initialized');
+      if (process.env.RENDER) {
+        const redisPromise = redis.initializeRedis();
+        await Promise.race([
+          redisPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Redis init timeout on Render')), 2000)),
+        ]);
+      } else {
+        await redis.initializeRedis();
+      }
+      const cacheHealth = await redis.healthCheck();
+      logger.info('Cache initialized', { mode: cacheHealth.mode, message: cacheHealth.message });
     } catch (err) {
-      logger.error('Worker initialization failed (non-blocking)', { error: err.message });
+      logger.warn('Cache initialization timeout/failed (non-blocking)', { error: err.message });
     }
 
-    // Q56: Initialize webhook queue
+    // Initialize job queue workers (non-blocking with timeout)
+    logger.info('Initializing queue workers...');
+    if (!process.env.RENDER) {
+      const { initializeWorkers, shutdownWorkers } = require('./jobs/workers');
+      try {
+        await initializeWorkers();
+        logger.info('Queue workers initialized');
+      } catch (err) {
+        logger.warn('Worker initialization failed (non-blocking)', { error: err.message });
+      }
+    } else {
+      logger.info('Skipping queue workers on Render platform');
+    }
+
+    // Q56: Initialize webhook queue (non-blocking with timeout)
     logger.info('Initializing webhook queue...');
     try {
       const { initializeWebhookQueue } = require('./utils/webhook-queue-manager');
-      await initializeWebhookQueue();
+      const webhookPromise = initializeWebhookQueue();
+      await Promise.race([
+        webhookPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Webhook queue timeout')), 2000)),
+      ]);
       logger.info('Webhook queue initialized');
     } catch (err) {
-      logger.error('Webhook queue initialization failed (non-blocking)', { error: err.message });
+      logger.warn('Webhook queue initialization timeout/failed (non-blocking)', { error: err.message });
     }
 
-    // Q71: Initialize default feature flags in DB
+    // Q71: Initialize default feature flags in DB (non-blocking with timeout)
     logger.info('Initializing feature flags...');
     try {
       const { initializeDefaultFlags, subscribeToHotReload } = require('./config/feature-flags');
       const prismaClient = require('./config/db');
-      await initializeDefaultFlags(prismaClient);
-      // Q76: Subscribe to hot reload channel (requires a separate Redis subscriber connection)
+      const flagPromise = initializeDefaultFlags(prismaClient);
+      await Promise.race([
+        flagPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Feature flags timeout')), 2000)),
+      ]);
       const redisSubscriber = redis.getSubscriberClient ? redis.getSubscriberClient() : null;
       if (redisSubscriber) {
         await subscribeToHotReload(redisSubscriber);
       }
       logger.info('Feature flags initialized');
     } catch (err) {
-      logger.error('Feature flags initialization failed (non-blocking)', { error: err.message });
+      logger.warn('Feature flags initialization timeout/failed (non-blocking)', { error: err.message });
     }
 
-    // Q66: Initialize MeiliSearch
+    // Q66: Initialize MeiliSearch (non-blocking with timeout)
     logger.info('Initializing MeiliSearch...');
     try {
       const { ensureIndices, healthCheck } = require('./config/meilisearch');
-      const meilisearchHealth = await healthCheck();
+      const meiliPromise = healthCheck();
+      const meilisearchHealth = await Promise.race([
+        meiliPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('MeiliSearch timeout')), 2000)),
+      ]);
       if (meilisearchHealth.status === 'ok') {
         await ensureIndices();
         logger.info('MeiliSearch initialized');
       } else {
-        logger.error('MeiliSearch unavailable (non-blocking)', { error: meilisearchHealth.error });
+        logger.warn('MeiliSearch unavailable (non-blocking)', { error: meilisearchHealth.error });
       }
     } catch (err) {
-      logger.error('MeiliSearch initialization failed (non-blocking)', { error: err.message });
+      logger.warn('MeiliSearch initialization timeout/failed (non-blocking)', { error: err.message });
     }
 
     server.listen(PORT, () => {
