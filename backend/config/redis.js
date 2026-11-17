@@ -77,7 +77,7 @@ class InMemoryCache {
 // Initialize with InMemoryCache immediately so module-level calls work before initializeRedis()
 inMemoryCache = new InMemoryCache();
 
-// Initialize Redis (attempt to use Redis, fallback to in-memory)
+// Initialize Redis (attempt to use Redis, fallback to in-memory with timeout)
 async function initializeRedis() {
   if (!process.env.REDIS_URL) {
     logger.info('[Redis] REDIS_URL not configured, using in-memory cache fallback');
@@ -91,11 +91,12 @@ async function initializeRedis() {
     redisClient = redis.createClient({
       url: process.env.REDIS_URL,
       socket: {
+        connectTimeout: 2000,
         reconnectStrategy: (retries) => {
-          if (retries > 10) {
-            logger.error('[Redis] Connection failed after 10 retries, switching to in-memory cache');
+          if (retries > 3) {
+            logger.warn('[Redis] Max retries exceeded, switching to in-memory cache');
             useInMemory = true;
-            inMemoryCache = new InMemoryCache();
+            if (!inMemoryCache) inMemoryCache = new InMemoryCache();
             return new Error('Redis max retries exceeded');
           }
           return retries * 100;
@@ -104,7 +105,7 @@ async function initializeRedis() {
     });
 
     redisClient.on('error', (err) => {
-      logger.error('[Redis] Connection error, falling back to in-memory cache', { error: err.message });
+      logger.warn('[Redis] Connection error, using in-memory cache', { error: err.message });
       useInMemory = true;
       if (!inMemoryCache) inMemoryCache = new InMemoryCache();
     });
@@ -114,11 +115,23 @@ async function initializeRedis() {
       useInMemory = false;
     });
 
-    await redisClient.connect();
+    const connectPromise = redisClient.connect();
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Redis connection timeout after 3s')), 3000)
+    );
+
+    try {
+      await Promise.race([connectPromise, timeoutPromise]);
+    } catch (err) {
+      logger.warn('[Redis] Connection timeout/failed, using in-memory cache', { error: err.message });
+      useInMemory = true;
+      if (!inMemoryCache) inMemoryCache = new InMemoryCache();
+      redisClient = null;
+    }
   } catch (err) {
     logger.warn('[Redis] Failed to initialize, using in-memory cache', { error: err.message });
     useInMemory = true;
-    inMemoryCache = new InMemoryCache();
+    if (!inMemoryCache) inMemoryCache = new InMemoryCache();
   }
 }
 
