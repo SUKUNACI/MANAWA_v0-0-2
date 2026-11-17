@@ -25,6 +25,7 @@ describe('meilisearch config', () => {
 
   beforeEach(() => {
     jest.resetModules();
+    process.env.MEILISEARCH_URL = 'http://localhost:7700';
     jest.mock('meilisearch', () => ({
       MeiliSearch: jest.fn().mockImplementation(() => ({
         getIndex: jest.fn().mockResolvedValue(mockIndex),
@@ -34,6 +35,10 @@ describe('meilisearch config', () => {
       })),
     }));
     ms = require('../../config/meilisearch');
+  });
+
+  afterEach(() => {
+    delete process.env.MEILISEARCH_URL;
   });
 
   describe('exports', () => {
@@ -102,6 +107,7 @@ describe('meilisearch config', () => {
 
     it('retourne status error si MeiliSearch est indisponible', async () => {
       jest.resetModules();
+      process.env.MEILISEARCH_URL = 'http://localhost:7700';
       jest.mock('meilisearch', () => ({
         MeiliSearch: jest.fn().mockImplementation(() => ({
           health: jest.fn().mockRejectedValue(new Error('Connection refused')),
@@ -124,6 +130,7 @@ describe('meilisearch config', () => {
 
     it('crée l\'indice s\'il n\'existe pas (index_not_found)', async () => {
       jest.resetModules();
+      process.env.MEILISEARCH_URL = 'http://localhost:7700';
       const mockIdx = {
         updateSearchableAttributes: jest.fn().mockResolvedValue({}),
         updateFilterableAttributes: jest.fn().mockResolvedValue({}),
@@ -145,6 +152,7 @@ describe('meilisearch config', () => {
 
     it('lance une erreur si l\'erreur n\'est pas index_not_found', async () => {
       jest.resetModules();
+      process.env.MEILISEARCH_URL = 'http://localhost:7700';
       jest.mock('meilisearch', () => ({
         MeiliSearch: jest.fn().mockImplementation(() => ({
           getIndex: jest.fn().mockRejectedValue(new Error('Fatal error')),
@@ -170,6 +178,7 @@ describe('meilisearch config', () => {
 
     it('gère les erreurs par indice avec hits vide', async () => {
       jest.resetModules();
+      process.env.MEILISEARCH_URL = 'http://localhost:7700';
       const mockFailingIndex = {
         search: jest.fn().mockRejectedValue(new Error('Index unavailable')),
         updateSearchableAttributes: jest.fn(),
