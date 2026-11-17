@@ -13,14 +13,34 @@
 const { MeiliSearch } = require('meilisearch');
 const logger = require('../utils/logger');
 
-const MEILISEARCH_URL = process.env.MEILISEARCH_URL || 'http://localhost:7700';
+const MEILISEARCH_URL = process.env.MEILISEARCH_URL;
 const MEILISEARCH_API_KEY = process.env.MEILISEARCH_API_KEY || 'masterKey';
 
-// Initialiser le client MeiliSearch
-const client = new MeiliSearch({
-  host: MEILISEARCH_URL,
-  apiKey: MEILISEARCH_API_KEY,
-});
+// Initialize MeiliSearch client only if URL is configured
+// On Render (free plan), MeiliSearch is not available — skip gracefully
+let client = null;
+if (MEILISEARCH_URL) {
+  try {
+    client = new MeiliSearch({
+      host: MEILISEARCH_URL,
+      apiKey: MEILISEARCH_API_KEY,
+      timeout: 2000,
+      requestConfig: {
+        retry: {
+          maxRetries: 1,
+          minRetryDelay: 100,
+          maxRetryDelay: 100,
+        },
+      },
+    });
+    logger.info('[MeiliSearch] Client initialized', { url: MEILISEARCH_URL });
+  } catch (err) {
+    logger.warn('[MeiliSearch] Failed to initialize client', { error: err.message });
+    client = null;
+  }
+} else {
+  logger.warn('[MeiliSearch] URL not configured — search features disabled');
+}
 
 /**
  * Configuration des indices MeiliSearch
