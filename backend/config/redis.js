@@ -92,6 +92,8 @@ async function initializeRedis() {
       url: process.env.REDIS_URL,
       socket: {
         connectTimeout: 2000,
+        tls: true,
+        rejectUnauthorized: false,
         reconnectStrategy: (retries) => {
           if (retries > 3) {
             logger.warn('[Redis] Max retries exceeded, switching to in-memory cache');
