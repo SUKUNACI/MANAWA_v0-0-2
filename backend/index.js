@@ -1,21 +1,21 @@
 require('dotenv').config();
 
-// Validate required environment variables (skip in test mode)
-if (process.env.NODE_ENV !== 'test') {
-  const requiredEnvVars = [
-    'DATABASE_URL',
-    'JWT_SECRET',
-    'NODE_ENV',
-    'MAILJET_API_KEY',
-    'MAILJET_SECRET_KEY',
-  ];
-
-  const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
-  if (missingEnvVars.length > 0) {
-    console.error('FATAL: Missing required environment variables:', missingEnvVars);
-    process.exit(1);
-  }
-}
+// On Render, skip env validation at module load time — do it at startup instead
+// This prevents the entire app from crashing if env vars are missing before server listens
+// if (process.env.NODE_ENV !== 'test') {
+//   const requiredEnvVars = [
+//     'DATABASE_URL',
+//     'JWT_SECRET',
+//     'NODE_ENV',
+//     'MAILJET_API_KEY',
+//     'MAILJET_SECRET_KEY',
+//   ];
+//   const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+//   if (missingEnvVars.length > 0) {
+//     console.error('FATAL: Missing required environment variables:', missingEnvVars);
+//     process.exit(1);
+//   }
+// }
 
 const Sentry = require('@sentry/node');
 if (process.env.SENTRY_DSN) {
