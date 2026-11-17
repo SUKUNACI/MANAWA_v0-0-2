@@ -51,6 +51,22 @@ jest.mock('../../middleware/auth', () => ({
     }
     next();
   },
+  requireAdminOrSuper: (req, res, next) => {
+    const jwt = require('jsonwebtoken');
+    const header = req.headers.authorization;
+    if (!header || !header.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Non authentifié' });
+    }
+    try {
+      req.user = jwt.verify(header.split(' ')[1], process.env.JWT_SECRET);
+      if (!['ADMIN', 'SUPER_ADMIN'].includes(req.user.role)) {
+        return res.status(403).json({ error: 'Accès refusé' });
+      }
+      next();
+    } catch {
+      return res.status(401).json({ error: 'Token invalide' });
+    }
+  },
 }));
 
 jest.mock('../../utils/logger', () => ({

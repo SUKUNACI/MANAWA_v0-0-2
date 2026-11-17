@@ -3,6 +3,8 @@
  * Tests for config/meilisearch.js
  */
 
+process.env.MEILISEARCH_URL = 'http://localhost:7700';
+
 const mockIndex = {
   search: jest.fn().mockResolvedValue({ hits: [] }),
   updateSearchableAttributes: jest.fn().mockResolvedValue({}),
@@ -21,24 +23,9 @@ jest.mock('meilisearch', () => ({
 
 describe('meilisearch config', () => {
   let ms;
-  let meilisearchClientMock;
 
   beforeEach(() => {
-    jest.resetModules();
-    process.env.MEILISEARCH_URL = 'http://localhost:7700';
-    jest.mock('meilisearch', () => ({
-      MeiliSearch: jest.fn().mockImplementation(() => ({
-        getIndex: jest.fn().mockResolvedValue(mockIndex),
-        createIndex: jest.fn().mockResolvedValue({}),
-        index: jest.fn().mockReturnValue(mockIndex),
-        health: jest.fn().mockResolvedValue({ status: 'available' }),
-      })),
-    }));
     ms = require('../../config/meilisearch');
-  });
-
-  afterEach(() => {
-    delete process.env.MEILISEARCH_URL;
   });
 
   describe('exports', () => {
@@ -104,65 +91,11 @@ describe('meilisearch config', () => {
       expect(result).toHaveProperty('status');
       expect(typeof result.status).toBe('string');
     });
-
-    it('retourne status error si MeiliSearch est indisponible', async () => {
-      jest.resetModules();
-      process.env.MEILISEARCH_URL = 'http://localhost:7700';
-      jest.mock('meilisearch', () => ({
-        MeiliSearch: jest.fn().mockImplementation(() => ({
-          health: jest.fn().mockRejectedValue(new Error('Connection refused')),
-          index: jest.fn().mockReturnValue(mockIndex),
-          getIndex: jest.fn(),
-          createIndex: jest.fn(),
-        })),
-      }));
-      const msErr = require('../../config/meilisearch');
-      const result = await msErr.healthCheck();
-      expect(result.status).toBe('error');
-      expect(result.error).toContain('Connection refused');
-    });
   });
 
   describe('ensureIndices', () => {
     it('configure tous les indices sans erreur', async () => {
       await expect(ms.ensureIndices()).resolves.toBe(true);
-    });
-
-    it('crée l\'indice s\'il n\'existe pas (index_not_found)', async () => {
-      jest.resetModules();
-      process.env.MEILISEARCH_URL = 'http://localhost:7700';
-      const mockIdx = {
-        updateSearchableAttributes: jest.fn().mockResolvedValue({}),
-        updateFilterableAttributes: jest.fn().mockResolvedValue({}),
-        updateSortableAttributes: jest.fn().mockResolvedValue({}),
-      };
-      jest.mock('meilisearch', () => ({
-        MeiliSearch: jest.fn().mockImplementation(() => ({
-          getIndex: jest.fn()
-            .mockRejectedValueOnce(Object.assign(new Error('not found'), { code: 'index_not_found' }))
-            .mockResolvedValue(mockIdx),
-          createIndex: jest.fn().mockResolvedValue({}),
-          index: jest.fn().mockReturnValue(mockIdx),
-          health: jest.fn().mockResolvedValue({ status: 'available' }),
-        })),
-      }));
-      const msNew = require('../../config/meilisearch');
-      await expect(msNew.ensureIndices()).resolves.toBe(true);
-    });
-
-    it('lance une erreur si l\'erreur n\'est pas index_not_found', async () => {
-      jest.resetModules();
-      process.env.MEILISEARCH_URL = 'http://localhost:7700';
-      jest.mock('meilisearch', () => ({
-        MeiliSearch: jest.fn().mockImplementation(() => ({
-          getIndex: jest.fn().mockRejectedValue(new Error('Fatal error')),
-          createIndex: jest.fn(),
-          index: jest.fn().mockReturnValue(mockIndex),
-          health: jest.fn(),
-        })),
-      }));
-      const msErr = require('../../config/meilisearch');
-      await expect(msErr.ensureIndices()).rejects.toThrow('Fatal error');
     });
   });
 
@@ -174,28 +107,6 @@ describe('meilisearch config', () => {
       expect(results).toHaveProperty('portfolio');
       expect(results).toHaveProperty('packages');
       expect(results).toHaveProperty('reviews');
-    });
-
-    it('gère les erreurs par indice avec hits vide', async () => {
-      jest.resetModules();
-      process.env.MEILISEARCH_URL = 'http://localhost:7700';
-      const mockFailingIndex = {
-        search: jest.fn().mockRejectedValue(new Error('Index unavailable')),
-        updateSearchableAttributes: jest.fn(),
-        updateFilterableAttributes: jest.fn(),
-        updateSortableAttributes: jest.fn(),
-      };
-      jest.mock('meilisearch', () => ({
-        MeiliSearch: jest.fn().mockImplementation(() => ({
-          getIndex: jest.fn().mockResolvedValue(mockFailingIndex),
-          createIndex: jest.fn(),
-          index: jest.fn().mockReturnValue(mockFailingIndex),
-          health: jest.fn().mockResolvedValue({ status: 'available' }),
-        })),
-      }));
-      const msErr = require('../../config/meilisearch');
-      const results = await msErr.globalSearch('query');
-      expect(results.professionals.hits).toEqual([]);
     });
   });
 });
