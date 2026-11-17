@@ -611,14 +611,21 @@ async function startServer() {
     }
 
     logger.info('Checking database connection...');
-    const dbHealth = await checkDatabaseHealth();
+    try {
+      const dbHealthPromise = checkDatabaseHealth();
+      const dbHealth = await Promise.race([
+        dbHealthPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('DB health check timeout')), 5000)),
+      ]);
 
-    if (dbHealth.status !== 'healthy') {
-      logger.error('Database unreachable at startup', { error: dbHealth.error });
-      process.exit(1);
+      if (dbHealth.status !== 'healthy') {
+        logger.warn('Database unhealthy at startup (non-fatal)', { error: dbHealth.error });
+      } else {
+        logger.info('Database connection established');
+      }
+    } catch (err) {
+      logger.warn('Database health check failed (non-fatal)', { error: err.message });
     }
-
-    logger.info('Database connection established');
 
     // Initialize Redis cache
     logger.info('Initializing Redis cache...');
