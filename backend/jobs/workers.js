@@ -23,22 +23,32 @@ async function initializeWorkers() {
       { queue: badgesQueue, concurrency: 2, name: 'badges', handler: updateBadgesJob },
     ];
 
-    // Register all queue processors (synchronous in Bull v4)
+    // Register all queue processors
+    // CRITICAL INSTRUMENTATION: Log queue.isReady state before/after process() call
     for (const config of queueConfigs) {
       try {
         const t0 = Date.now();
-        logger.info(`[Workers] Registering ${config.name} processor`, { elapsed: t0 - startTime });
+        logger.info(`[Workers] About to call queue.process() for ${config.name}`, {
+          elapsed: t0 - startTime,
+          queueReady: config.queue.isReady ? 'true' : 'false'
+        });
 
-        config.queue.process(config.concurrency, async (job) => {
+        // Call process() WITHOUT await - it's synchronous for registration
+        const processPromise = config.queue.process(config.concurrency, async (job) => {
           return await config.handler(job);
         });
 
-        logger.info(`[Workers] ${config.name} queue worker initialized (concurrency: ${config.concurrency})`, {
+        logger.info(`[Workers] queue.process() called for ${config.name}, got Promise immediately`, {
           elapsed: Date.now() - startTime,
-          registerTime: Date.now() - t0
+          callTime: Date.now() - t0,
+          promiseReady: processPromise ? 'true' : 'false'
         });
+
+        // DON'T await - that's the bug. Just continue to next queue.
+        // The Promise will resolve in background when Redis ready.
+
       } catch (err) {
-        logger.error(`[Workers] ${config.name} process registration failed`, {
+        logger.error(`[Workers] ${config.name} process call failed`, {
           error: err.message,
           elapsed: Date.now() - startTime
         });
@@ -46,9 +56,19 @@ async function initializeWorkers() {
       }
     }
 
-    logger.info('[Workers] All job queue workers initialized successfully', {
+    logger.info('[Workers] All queue.process() calls completed (non-blocking)', {
       totalElapsed: Date.now() - startTime
     });
+
+    // Log individual queue status
+    const queueStatuses = queueConfigs.map(c => ({
+      name: c.name,
+      concurrency: c.concurrency,
+      isReady: c.queue.isReady || false,
+      isProcessing: c.queue._isProcessing || false
+    }));
+    logger.info('[Workers] Queue statuses after registration', { queueStatuses });
+
     return true;
   } catch (err) {
     logger.error('[Workers] Error initializing workers:', err.message);
