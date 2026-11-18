@@ -638,7 +638,7 @@ async function startServer() {
 
       // Background initialization tasks (fire-and-forget)
       setImmediate(async () => {
-        logger.info('[Boot] Background init started (seedConfig + ensureSuperAdmin)');
+        logger.info('[Boot] Background init started (seedConfig + ensureSuperAdmin + Bull test)');
         try {
           logger.info('[Boot] Calling seedConfig()...');
           await seedConfig().catch(err => logger.error('[Config] Seed error', { error: err.message, code: err.code, syscall: err.syscall }));
@@ -647,6 +647,11 @@ async function startServer() {
           logger.info('[Boot] Calling ensureSuperAdmin()...');
           await ensureSuperAdmin().catch(err => logger.error('[Boot] ensureSuperAdmin error', { error: err.message, code: err.code, syscall: err.syscall }));
           logger.info('[Boot] ensureSuperAdmin() completed');
+
+          // Test Bull queue connections to prove they're using Upstash Redis
+          logger.info('[Boot] Testing Bull queues...');
+          const { testBullQueues } = require('./config/bull-startup-test');
+          await testBullQueues();
         } catch (err) {
           logger.warn('[Boot] Background init error', { error: err.message });
         }
