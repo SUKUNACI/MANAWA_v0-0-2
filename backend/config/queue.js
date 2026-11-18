@@ -2,24 +2,42 @@ const Queue = require('bull');
 const redis = require('redis');
 const logger = require('../utils/logger');
 
-// Redis connection configuration
-const redisConfig = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: process.env.REDIS_PORT || 6379,
-  password: process.env.REDIS_PASSWORD || undefined,
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
-  enableOfflineQueue: true,
-  retryStrategy: (times) => {
-    const delay = Math.min(times * 50, 2000);
-    return delay;
-  },
-};
+// Parse REDIS_URL and validate in production
+function parseRedisUrl() {
+  const redisUrl = (process.env.REDIS_URL || '').trim();
+  const nodeEnv = process.env.NODE_ENV || 'development';
 
-// Remove undefined password if not set
-if (!redisConfig.password) {
-  delete redisConfig.password;
+  if (!redisUrl) {
+    if (nodeEnv === 'production') {
+      const error = '[Bull Queue] FATAL: REDIS_URL not configured in production. Startup aborted.';
+      logger.error(error);
+      throw new Error(error);
+    }
+    // Development: allow localhost fallback
+    logger.warn('[Bull Queue] REDIS_URL not configured, using localhost fallback (development mode)');
+    return {
+      host: 'localhost',
+      port: 6379,
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+      enableOfflineQueue: true,
+      retryStrategy: (times) => Math.min(times * 50, 2000),
+    };
+  }
+
+  // Parse rediss:// or redis:// URL for Bull/ioredis
+  // ioredis v6.0.0 handles rediss:// URLs correctly with automatic TLS
+  logger.info('[Bull Queue] Using REDIS_URL from environment', { url: redisUrl.replace(/:[^:/@]*@/, ':***@') });
+  return {
+    url: redisUrl,
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    enableOfflineQueue: true,
+    retryStrategy: (times) => Math.min(times * 50, 2000),
+  };
 }
+
+const redisConfig = parseRedisUrl();
 
 // Initialize queues with retry logic and settings
 const createQueueConfig = (queueName) => ({
