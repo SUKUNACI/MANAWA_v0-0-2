@@ -1,16 +1,5 @@
 require('dotenv').config();
 
-// TEMPORARY: Caller stack tracer to identify ECONNREFUSED source
-// Activation: CALLER_STACK_TRACE=1 environment variable
-if (process.env.CALLER_STACK_TRACE === '1') {
-  try {
-    const { activateCallerStackTracer } = require('./utils/caller-stack-tracer');
-    activateCallerStackTracer();
-  } catch (err) {
-    console.error('[CALLER_STACK] Failed to activate:', err.message);
-  }
-}
-
 // On Render, skip env validation at module load time — do it at startup instead
 // This prevents the entire app from crashing if env vars are missing before server listens
 // if (process.env.NODE_ENV !== 'test') {
