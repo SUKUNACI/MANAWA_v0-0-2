@@ -98,6 +98,7 @@ const adminGdprRoutes = require('./routes/admin-gdpr');
 const adminAnonymizationRoutes = require('./routes/admin-anonymization');
 const adminDataInventoryRoutes = require('./routes/admin-data-inventory');
 const mobileRoutes = require('./routes/mobile');
+const bullStatusRoutes = require('./routes/bull-status');
 const i18nMiddleware = require('./middleware/i18n');
 const { mobileContextMiddleware } = require('./middleware/mobile-context');
 const logger = require('./utils/logger');
@@ -352,6 +353,7 @@ const injectAdminCookie = (req, res, next) => {
 const apiV1Router = express.Router();
 
 apiV1Router.use('/health', healthRoutes);
+apiV1Router.use('/internal', bullStatusRoutes);
 apiV1Router.use('/auth', authRoutes);
 apiV1Router.use('/auth/2fa', auth2FARoutes);
 apiV1Router.use('/users', userRoutes);
