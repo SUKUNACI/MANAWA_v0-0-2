@@ -14,37 +14,65 @@ async function initializeWorkers() {
   logger.info('[Workers] Initializing job queue workers');
 
   try {
+    const startTime = Date.now();
+    const initQueue = async (queue, concurrency, queueName, jobHandler) => {
+      const t0 = Date.now();
+      logger.info(`[Workers] Starting ${queueName} process registration`, { elapsed: t0 - startTime });
+
+      let processRegistered = false;
+      try {
+        await Promise.race([
+          (async () => {
+            await queue.process(concurrency, jobHandler);
+            processRegistered = true;
+            logger.info(`[Workers] ${queueName} queue worker initialized (concurrency: ${concurrency})`, {
+              elapsed: Date.now() - startTime,
+              registerTime: Date.now() - t0
+            });
+          })(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`${queueName} process() timeout after 10s`)), 10000)
+          )
+        ]);
+      } catch (err) {
+        logger.error(`[Workers] ${queueName} process registration failed`, {
+          error: err.message,
+          elapsed: Date.now() - startTime,
+          registerTime: Date.now() - t0,
+          processRegistered
+        });
+        throw err;
+      }
+    };
+
     // Email queue worker
-    await emailQueue.process(5, async (job) => {
+    await initQueue(emailQueue, 5, 'emails', async (job) => {
       return await sendEmailJob(job);
     });
-    logger.info('[Workers] Email queue worker initialized (concurrency: 5)');
 
     // PDF queue worker
-    await pdfQueue.process(2, async (job) => {
+    await initQueue(pdfQueue, 2, 'pdfs', async (job) => {
       return await generatePdfJob(job);
     });
-    logger.info('[Workers] PDF queue worker initialized (concurrency: 2)');
 
     // Analytics queue worker
-    await analyticsQueue.process(1, async (job) => {
+    await initQueue(analyticsQueue, 1, 'analytics', async (job) => {
       return await calculateAnalyticsJob(job);
     });
-    logger.info('[Workers] Analytics queue worker initialized (concurrency: 1)');
 
     // Payment queue worker
-    await paymentQueue.process(3, async (job) => {
+    await initQueue(paymentQueue, 3, 'payments', async (job) => {
       return await processPaymentJob(job);
     });
-    logger.info('[Workers] Payment queue worker initialized (concurrency: 3)');
 
     // Badges queue worker
-    await badgesQueue.process(2, async (job) => {
+    await initQueue(badgesQueue, 2, 'badges', async (job) => {
       return await updateBadgesJob(job);
     });
-    logger.info('[Workers] Badges queue worker initialized (concurrency: 2)');
 
-    logger.info('[Workers] All job queue workers initialized successfully');
+    logger.info('[Workers] All job queue workers initialized successfully', {
+      totalElapsed: Date.now() - startTime
+    });
     return true;
   } catch (err) {
     logger.error('[Workers] Error initializing workers:', err.message);
