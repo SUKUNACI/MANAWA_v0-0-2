@@ -618,7 +618,11 @@ async function startServer() {
       // Initialize cron jobs AFTER server is listening (non-blocking)
       // This prevents slow cron queries from blocking health check responses
       setImmediate(() => {
-        initializeCronJobs();
+        try {
+          initializeCronJobs();
+        } catch (err) {
+          logger.error('[Boot] Cron jobs initialization failed', { error: err.message });
+        }
       });
 
       // Background initialization tasks (fire-and-forget)
