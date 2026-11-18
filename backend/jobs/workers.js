@@ -15,60 +15,36 @@ async function initializeWorkers() {
 
   try {
     const startTime = Date.now();
-    const initQueue = async (queue, concurrency, queueName, jobHandler) => {
-      const t0 = Date.now();
-      logger.info(`[Workers] Starting ${queueName} process registration`, { elapsed: t0 - startTime });
+    const queueConfigs = [
+      { queue: emailQueue, concurrency: 5, name: 'emails', handler: sendEmailJob },
+      { queue: pdfQueue, concurrency: 2, name: 'pdfs', handler: generatePdfJob },
+      { queue: analyticsQueue, concurrency: 1, name: 'analytics', handler: calculateAnalyticsJob },
+      { queue: paymentQueue, concurrency: 3, name: 'payments', handler: processPaymentJob },
+      { queue: badgesQueue, concurrency: 2, name: 'badges', handler: updateBadgesJob },
+    ];
 
-      let processRegistered = false;
+    // Register all queue processors (synchronous in Bull v4)
+    for (const config of queueConfigs) {
       try {
-        await Promise.race([
-          (async () => {
-            await queue.process(concurrency, jobHandler);
-            processRegistered = true;
-            logger.info(`[Workers] ${queueName} queue worker initialized (concurrency: ${concurrency})`, {
-              elapsed: Date.now() - startTime,
-              registerTime: Date.now() - t0
-            });
-          })(),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`${queueName} process() timeout after 10s`)), 10000)
-          )
-        ]);
-      } catch (err) {
-        logger.error(`[Workers] ${queueName} process registration failed`, {
-          error: err.message,
+        const t0 = Date.now();
+        logger.info(`[Workers] Registering ${config.name} processor`, { elapsed: t0 - startTime });
+
+        config.queue.process(config.concurrency, async (job) => {
+          return await config.handler(job);
+        });
+
+        logger.info(`[Workers] ${config.name} queue worker initialized (concurrency: ${config.concurrency})`, {
           elapsed: Date.now() - startTime,
-          registerTime: Date.now() - t0,
-          processRegistered
+          registerTime: Date.now() - t0
+        });
+      } catch (err) {
+        logger.error(`[Workers] ${config.name} process registration failed`, {
+          error: err.message,
+          elapsed: Date.now() - startTime
         });
         throw err;
       }
-    };
-
-    // Email queue worker
-    await initQueue(emailQueue, 5, 'emails', async (job) => {
-      return await sendEmailJob(job);
-    });
-
-    // PDF queue worker
-    await initQueue(pdfQueue, 2, 'pdfs', async (job) => {
-      return await generatePdfJob(job);
-    });
-
-    // Analytics queue worker
-    await initQueue(analyticsQueue, 1, 'analytics', async (job) => {
-      return await calculateAnalyticsJob(job);
-    });
-
-    // Payment queue worker
-    await initQueue(paymentQueue, 3, 'payments', async (job) => {
-      return await processPaymentJob(job);
-    });
-
-    // Badges queue worker
-    await initQueue(badgesQueue, 2, 'badges', async (job) => {
-      return await updateBadgesJob(job);
-    });
+    }
 
     logger.info('[Workers] All job queue workers initialized successfully', {
       totalElapsed: Date.now() - startTime
