@@ -23,32 +23,45 @@ async function initializeWorkers() {
       { queue: badgesQueue, concurrency: 2, name: 'badges', handler: updateBadgesJob },
     ];
 
-    // Register all queue processors
-    // CRITICAL INSTRUMENTATION: Log queue.isReady state before/after process() call
+    // CRITICAL: Register all processors with parallel wait
+    // queue.process() returns a Promise that resolves when worker is ACTUALLY ready to process jobs.
+    // We must wait for all to resolve, but do so in parallel to avoid sequential blocking.
+    const processPromises = [];
+
     for (const config of queueConfigs) {
       try {
         const t0 = Date.now();
-        logger.info(`[Workers] About to call queue.process() for ${config.name}`, {
-          elapsed: t0 - startTime,
-          queueReady: config.queue.isReady ? 'true' : 'false'
-        });
+        logger.info(`[Workers] Registering ${config.name} processor`, { elapsed: t0 - startTime });
 
-        // Call process() WITHOUT await - it's synchronous for registration
-        const processPromise = config.queue.process(config.concurrency, async (job) => {
+        // queue.process() is synchronous for registration, but returns a Promise
+        // that resolves when the worker is actually ready
+        const promise = config.queue.process(config.concurrency, async (job) => {
           return await config.handler(job);
         });
 
-        logger.info(`[Workers] queue.process() called for ${config.name}, got Promise immediately`, {
+        logger.info(`[Workers] ${config.name} processor registered (Promise created)`, {
           elapsed: Date.now() - startTime,
-          callTime: Date.now() - t0,
-          promiseReady: processPromise ? 'true' : 'false'
+          registerTime: Date.now() - t0
         });
 
-        // DON'T await - that's the bug. Just continue to next queue.
-        // The Promise will resolve in background when Redis ready.
-
+        processPromises.push(
+          promise
+            .then(() => {
+              logger.info(`[Workers] ${config.name} worker ready to process jobs`, {
+                elapsed: Date.now() - startTime
+              });
+              return { name: config.name, status: 'ready' };
+            })
+            .catch(err => {
+              logger.error(`[Workers] ${config.name} worker failed to initialize`, {
+                error: err.message,
+                elapsed: Date.now() - startTime
+              });
+              return { name: config.name, status: 'failed', error: err.message };
+            })
+        );
       } catch (err) {
-        logger.error(`[Workers] ${config.name} process call failed`, {
+        logger.error(`[Workers] ${config.name} process registration failed`, {
           error: err.message,
           elapsed: Date.now() - startTime
         });
@@ -56,18 +69,24 @@ async function initializeWorkers() {
       }
     }
 
-    logger.info('[Workers] All queue.process() calls completed (non-blocking)', {
-      totalElapsed: Date.now() - startTime
+    // Wait for all workers to be ready in parallel (non-blocking)
+    logger.info('[Workers] Waiting for all workers to be ready...', {
+      totalQueues: queueConfigs.length
     });
 
-    // Log individual queue status
-    const queueStatuses = queueConfigs.map(c => ({
-      name: c.name,
-      concurrency: c.concurrency,
-      isReady: c.queue.isReady || false,
-      isProcessing: c.queue._isProcessing || false
-    }));
-    logger.info('[Workers] Queue statuses after registration', { queueStatuses });
+    const results = await Promise.all(processPromises);
+
+    const failedWorkers = results.filter(r => r.status !== 'ready');
+    if (failedWorkers.length > 0) {
+      const error = `${failedWorkers.length} workers failed to initialize: ${failedWorkers.map(w => w.name).join(', ')}`;
+      logger.error(`[Workers] ${error}`);
+      throw new Error(error);
+    }
+
+    logger.info('[Workers] All job queue workers initialized successfully and ready to process jobs', {
+      totalElapsed: Date.now() - startTime,
+      workersReady: queueConfigs.length
+    });
 
     return true;
   } catch (err) {
