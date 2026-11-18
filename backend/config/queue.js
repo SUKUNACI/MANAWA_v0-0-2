@@ -32,9 +32,8 @@ function parseRedisUrl() {
     const urlObj = new URL(redisUrl);
     const isTls = urlObj.protocol === 'rediss:';
     const host = urlObj.hostname;
-    // For rediss://, ignore explicit port from URL and use TLS default 6380
-    // Some providers (e.g., Upstash) include :6379 in rediss:// URL, which is incorrect
-    const port = isTls ? 6380 : (urlObj.port || 6379);
+    // Use explicit port from URL, or default: redis:// → 6379, rediss:// → 6380
+    const port = urlObj.port || (isTls ? 6380 : 6379);
     const password = urlObj.password || undefined;
 
     logger.info('[Bull Queue] Using REDIS_URL from environment', {
