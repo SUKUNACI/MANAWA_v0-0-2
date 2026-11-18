@@ -111,12 +111,19 @@ async function testBullJobProcessing() {
     logger.info('[Bull Job Test] Created temporary diagnostic queue');
 
     // Register a simple no-op worker
-    await diagQueue.process(async (job) => {
+    // CRITICAL: queue.process() returns a Promise that never settles (it listens indefinitely)
+    // Don't await it — launch in background and capture errors asynchronously
+    const workerPromise = diagQueue.process(async (job) => {
       logger.info('[Bull Job Test] Worker processing job', { jobId: job.id });
       return { result: 'diagnostic job completed', jobId: job.id, timestamp: new Date().toISOString() };
     });
 
-    logger.info('[Bull Job Test] Registered diagnostic worker');
+    // Attach error handler but don't block on the worker promise
+    workerPromise.catch(err => {
+      logger.error('[Bull Job Test] Worker promise rejected:', { error: err.message });
+    });
+
+    logger.info('[Bull Job Test] Registered diagnostic worker (background)');
 
     // Add a job
     const job = await diagQueue.add(
@@ -124,14 +131,16 @@ async function testBullJobProcessing() {
       { attempts: 1, removeOnComplete: true, removeOnFail: false }
     );
 
-    logger.info('[Bull Job Test] Diagnostic job added', { jobId: job.id });
+    logger.info('[Bull Job Test] Diagnostic job added', { jobId: job.id, state: job._state });
 
     // Wait for completion or timeout (5s)
     let completed = false;
     let jobError = null;
+    let completionResult = null;
 
     const completeHandler = (result) => {
       completed = true;
+      completionResult = result;
       logger.info('[Bull Job Test] Job completed ✅', { jobId: job.id, result });
     };
 
@@ -143,20 +152,56 @@ async function testBullJobProcessing() {
     job.on('completed', completeHandler);
     job.on('failed', failHandler);
 
-    await new Promise((resolve) => {
+    // Wait with explicit state polling
+    const startWait = Date.now();
+    let lastState = job._state;
+
+    const completionPromise = new Promise((resolve) => {
+      const checkInterval = setInterval(async () => {
+        try {
+          const freshJob = await diagQueue.getJob(job.id);
+          if (freshJob) {
+            const currentState = freshJob._state || 'unknown';
+            if (currentState !== lastState) {
+              logger.info('[Bull Job Test] Job state changed', {
+                jobId: job.id,
+                from: lastState,
+                to: currentState,
+                elapsed: Date.now() - startWait
+              });
+              lastState = currentState;
+            }
+            if (currentState === 'completed' || currentState === 'failed') {
+              clearInterval(checkInterval);
+              resolve();
+            }
+          }
+        } catch (err) {
+          logger.warn('[Bull Job Test] Error checking job state:', { error: err.message });
+        }
+      }, 500);
+
       setTimeout(() => {
-        job.removeListener('completed', completeHandler);
-        job.removeListener('failed', failHandler);
+        clearInterval(checkInterval);
         resolve();
       }, 5000);
     });
 
+    await completionPromise;
+
     if (completed) {
-      logger.info('[Bull Job Test] Job processing verified: PENDING → COMPLETED ✅');
+      logger.info('[Bull Job Test] Job processing verified: PENDING → COMPLETED ✅', {
+        jobId: job.id,
+        result: completionResult,
+        totalElapsed: Date.now() - startWait
+      });
     } else if (jobError) {
       logger.error('[Bull Job Test] Job processing failed', { error: jobError });
     } else {
-      logger.warn('[Bull Job Test] Job did not complete within 5s timeout (worker may not have picked it up)');
+      logger.warn('[Bull Job Test] Job did not complete within 5s timeout (worker may not have picked it up)', {
+        jobId: job.id,
+        lastState
+      });
     }
 
     // Cleanup: close temporary queue and remove from Redis
