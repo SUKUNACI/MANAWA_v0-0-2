@@ -125,88 +125,72 @@ async function testBullJobProcessing() {
 
     logger.info('[Bull Job Test] Registered diagnostic worker (background)');
 
-    // Add a job
+    // Add a job (keep it for verification — don't auto-remove)
     const jobData = await diagQueue.add(
       { type: 'diagnostic', timestamp: new Date().toISOString() },
-      { attempts: 1, removeOnComplete: true, removeOnFail: false }
+      { attempts: 1, removeOnComplete: false, removeOnFail: false }
     );
 
     const jobId = jobData.id;
-    logger.info('[Bull Job Test] Diagnostic job added', { jobId, state: jobData._state });
+    logger.info('[Bull Job Test] Diagnostic job added', { jobId, initialState: jobData._state });
 
     // Wait for completion or timeout (5s)
     let completed = false;
     let jobError = null;
     let completionResult = null;
 
-    // Wait with explicit state polling (10s timeout instead of 5s)
+    // Wait using job.finished() API (proper Bull v4 method)
     const startWait = Date.now();
-    let lastState = 'pending';
+    let finalJobState = null;
 
-    const completionPromise = new Promise((resolve) => {
-      const checkInterval = setInterval(async () => {
-        try {
-          const freshJob = await diagQueue.getJob(jobId);
-          if (freshJob) {
-            const currentState = freshJob._state || 'unknown';
-            if (currentState !== lastState) {
-              logger.info('[Bull Job Test] Job state changed', {
-                jobId,
-                from: lastState,
-                to: currentState,
-                elapsed: Date.now() - startWait
-              });
-              lastState = currentState;
-              if (currentState === 'completed') {
-                completed = true;
-                completionResult = freshJob.returnvalue;
-                logger.info('[Bull Job Test] Job completed ✅', { jobId, result: completionResult });
-              } else if (currentState === 'failed') {
-                jobError = freshJob.failedReason || 'Unknown failure';
-                logger.error('[Bull Job Test] Job failed ❌', { jobId, error: jobError });
-              }
-            }
-            if (currentState === 'completed' || currentState === 'failed') {
-              clearInterval(checkInterval);
-              resolve();
-            }
-          }
-        } catch (err) {
-          logger.warn('[Bull Job Test] Error checking job state:', { error: err.message });
-        }
-      }, 500);
+    try {
+      // Use job.finished() which resolves when job completes or fails
+      const result = await Promise.race([
+        jobData.finished(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Job wait timeout')), 10000)
+        )
+      ]);
 
-      setTimeout(() => {
-        clearInterval(checkInterval);
-        resolve();
-      }, 10000); // Increased from 5s to 10s
-    });
-
-    await completionPromise;
-
-    if (completed) {
-      logger.info('[Bull Job Test] Job processing verified: PENDING → COMPLETED ✅', {
+      completed = true;
+      completionResult = result;
+      finalJobState = 'completed';
+      logger.info('[Bull Job Test] Job completed ✅', {
         jobId,
         result: completionResult,
         totalElapsed: Date.now() - startWait
       });
-    } else if (jobError) {
-      logger.error('[Bull Job Test] Job processing failed', { error: jobError });
-    } else {
-      logger.warn('[Bull Job Test] Job did not complete within 5s timeout (worker may not have picked it up)', {
-        jobId,
-        lastState
-      });
+    } catch (err) {
+      // Job didn't complete or failed
+      if (err.message === 'Job wait timeout') {
+        logger.warn('[Bull Job Test] Job wait timeout (10s)', { jobId });
+      } else {
+        jobError = err.message;
+        logger.error('[Bull Job Test] Job failed ❌', { jobId, error: jobError });
+      }
+
+      // Check final state via getState()
+      try {
+        finalJobState = await jobData.getState();
+        logger.info('[Bull Job Test] Final job state via getState()', {
+          jobId,
+          state: finalJobState,
+          totalElapsed: Date.now() - startWait
+        });
+      } catch (stateErr) {
+        logger.warn('[Bull Job Test] Could not get final state:', { error: stateErr.message });
+      }
     }
 
-    // Cleanup: close temporary queue and remove from Redis
+    // Cleanup: explicitly remove the job, then close queue
     try {
-      await diagQueue.close();
-      logger.info('[Bull Job Test] Queue closed');
+      // Remove the job explicitly before closing
+      await jobData.remove();
+      logger.info('[Bull Job Test] Job removed from queue', { jobId });
 
-      // Don't try to clean if queue is closed
-      // Cleanup will happen automatically when queue closes
-      logger.info('[Bull Job Test] Cleanup: temporary diagnostic queue closed and cleaned');
+      // Close the queue
+      await diagQueue.close();
+      logger.info('[Bull Job Test] Queue closed and cleaned');
     } catch (err) {
       logger.warn('[Bull Job Test] Error during cleanup:', { error: err.message });
     }
