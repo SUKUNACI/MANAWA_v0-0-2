@@ -46,7 +46,7 @@ function parseRedisUrl() {
       host,
       port: parseInt(port, 10),
       password,
-      tls: isTls,
+      ...(isTls && { tls: {} }), // ioredis requires tls: {} (object) not boolean
       maxRetriesPerRequest: null,
       enableReadyCheck: false,
       enableOfflineQueue: true,
