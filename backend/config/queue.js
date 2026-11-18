@@ -6,11 +6,12 @@ const logger = require('../utils/logger');
 function parseRedisUrl() {
   const redisUrl = (process.env.REDIS_URL || '').trim();
   const nodeEnv = process.env.NODE_ENV || 'development';
+  const isRender = process.env.RENDER === 'true';
 
   if (!redisUrl) {
-    if (nodeEnv === 'production') {
-      const error = '[Bull Queue] FATAL: REDIS_URL not configured in production. Startup aborted.';
-      logger.error(error);
+    if (nodeEnv === 'production' || isRender) {
+      const error = '[Bull Queue] FATAL: REDIS_URL not configured but NODE_ENV or RENDER indicates production. Startup aborted.';
+      logger.error(error, { nodeEnv, isRender, REDIS_URL_empty: !redisUrl });
       throw new Error(error);
     }
     // Development: allow localhost fallback
