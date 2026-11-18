@@ -27,15 +27,36 @@ function parseRedisUrl() {
   }
 
   // Parse rediss:// or redis:// URL for Bull/ioredis
-  // ioredis v6.0.0 handles rediss:// URLs correctly with automatic TLS
-  logger.info('[Bull Queue] Using REDIS_URL from environment', { url: redisUrl.replace(/:[^:/@]*@/, ':***@') });
-  return {
-    url: redisUrl,
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false,
-    enableOfflineQueue: true,
-    retryStrategy: (times) => Math.min(times * 50, 2000),
-  };
+  // ioredis v6.0.0 requires explicit host/port/password/tls when using rediss://
+  try {
+    const urlObj = new URL(redisUrl);
+    const isTls = urlObj.protocol === 'rediss:';
+    const host = urlObj.hostname;
+    const port = urlObj.port || (isTls ? 6380 : 6379);
+    const password = urlObj.password || undefined;
+
+    logger.info('[Bull Queue] Using REDIS_URL from environment', {
+      host,
+      port,
+      tls: isTls,
+      url: redisUrl.replace(/:[^:/@]*@/, ':***@')
+    });
+
+    return {
+      host,
+      port: parseInt(port, 10),
+      password,
+      tls: isTls,
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+      enableOfflineQueue: true,
+      retryStrategy: (times) => Math.min(times * 50, 2000),
+    };
+  } catch (err) {
+    const error = `[Bull Queue] FATAL: Failed to parse REDIS_URL: ${err.message}`;
+    logger.error(error, { redisUrl: redisUrl.replace(/:[^:/@]*@/, ':***@') });
+    throw new Error(error);
+  }
 }
 
 const redisConfig = parseRedisUrl();
