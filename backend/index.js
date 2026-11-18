@@ -623,30 +623,33 @@ async function startServer() {
     const { initializeRedis } = require('./config/redis');
     await initializeRedis();
 
-    server.listen(PORT, '0.0.0.0', () => {
-      logger.info('✅ Server listening', { port: PORT, host: '0.0.0.0' });
+    // CRITICAL: Initialize Bull queue workers BEFORE server.listen()
+    // This ensures workers are ready to process jobs when service goes live
+    // Workers must be ready before we accept requests on the port
+    logger.info('[Boot] Initializing Bull queue workers before server listen...');
+    (async () => {
+      try {
+        const { initializeWorkers } = require('./jobs/workers');
+        await initializeWorkers();
+        logger.info('[Boot] Bull queue workers initialized ✅ — NOW BINDING PORT');
 
-      // Initialize cron jobs AFTER server is listening (non-blocking)
-      // This prevents slow cron queries from blocking health check responses
-      setImmediate(() => {
-        try {
-          initializeCronJobs();
-        } catch (err) {
-          logger.error('[Boot] Cron jobs initialization failed', { error: err.message });
-        }
-      });
+        // Only AFTER workers are ready, start listening
+        server.listen(PORT, '0.0.0.0', () => {
+          logger.info('✅ Server listening', { port: PORT, host: '0.0.0.0' });
 
-      // Background initialization tasks (fire-and-forget)
-      setImmediate(async () => {
-        // Initialize Bull queue workers
-        logger.info('[Boot] Initializing Bull queue workers...');
-        try {
-          const { initializeWorkers } = require('./jobs/workers');
-          await initializeWorkers();
-          logger.info('[Boot] Bull queue workers initialized ✅');
-        } catch (err) {
-          logger.error('[Boot] Failed to initialize Bull workers', { error: err.message });
-        }
+          // Initialize cron jobs AFTER server is listening (non-blocking)
+          // This prevents slow cron queries from blocking health check responses
+          setImmediate(() => {
+            try {
+              initializeCronJobs();
+            } catch (err) {
+              logger.error('[Boot] Cron jobs initialization failed', { error: err.message });
+            }
+          });
+
+          // Background initialization tasks (fire-and-forget)
+          setImmediate(async () => {
+            logger.info('[Boot] Background init started (seedConfig + ensureSuperAdmin + Bull test)');
         logger.info('[Boot] Background init started (seedConfig + ensureSuperAdmin + Bull test)');
         try {
           logger.info('[Boot] Calling seedConfig()...');
@@ -688,10 +691,15 @@ async function startServer() {
       setInterval(cleanupOldAdminLogs, 24 * 60 * 60 * 1000);
       cleanupOldAdminLogs();
 
-      // Webhook retry scheduler (requires DB — runs only after server started)
-      setTimeout(scheduleWebhookRetries, 10 * 1000);
-      setInterval(scheduleWebhookRetries, 30 * 60 * 1000);
-    });
+          // Webhook retry scheduler (requires DB — runs only after server started)
+          setTimeout(scheduleWebhookRetries, 10 * 1000);
+          setInterval(scheduleWebhookRetries, 30 * 60 * 1000);
+        });
+      } catch (err) {
+        logger.error('[Boot] CRITICAL: Bull workers initialization failed — server cannot start', { error: err.message });
+        process.exit(1);
+      }
+    })();
 
     // Graceful shutdown
     process.on('SIGTERM', async () => {
