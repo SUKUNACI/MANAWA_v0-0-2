@@ -19,11 +19,15 @@ require('dotenv').config();
 
 const Sentry = require('@sentry/node');
 if (process.env.SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.NODE_ENV || 'production',
-    tracesSampleRate: 0.2,
-  });
+  try {
+    Sentry.init({
+      dsn: process.env.SENTRY_DSN,
+      environment: process.env.NODE_ENV || 'production',
+      tracesSampleRate: 0.2,
+    });
+  } catch (err) {
+    console.warn('[Sentry] Init failed (non-blocking):', err.message);
+  }
 }
 
 const express = require('express');
