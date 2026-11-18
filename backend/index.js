@@ -636,18 +636,17 @@ async function startServer() {
         }
       });
 
-      // Initialize Bull queue workers
-      logger.info('[Boot] Initializing Bull queue workers...');
-      try {
-        const { initializeWorkers } = require('./jobs/workers');
-        await initializeWorkers();
-        logger.info('[Boot] Bull queue workers initialized ✅');
-      } catch (err) {
-        logger.error('[Boot] Failed to initialize Bull workers', { error: err.message });
-      }
-
       // Background initialization tasks (fire-and-forget)
       setImmediate(async () => {
+        // Initialize Bull queue workers
+        logger.info('[Boot] Initializing Bull queue workers...');
+        try {
+          const { initializeWorkers } = require('./jobs/workers');
+          await initializeWorkers();
+          logger.info('[Boot] Bull queue workers initialized ✅');
+        } catch (err) {
+          logger.error('[Boot] Failed to initialize Bull workers', { error: err.message });
+        }
         logger.info('[Boot] Background init started (seedConfig + ensureSuperAdmin + Bull test)');
         try {
           logger.info('[Boot] Calling seedConfig()...');
