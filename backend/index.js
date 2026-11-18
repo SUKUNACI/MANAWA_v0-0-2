@@ -662,11 +662,10 @@ async function startServer() {
           await ensureSuperAdmin().catch(err => logger.error('[Boot] ensureSuperAdmin error', { error: err.message, code: err.code, syscall: err.syscall }));
           logger.info('[Boot] ensureSuperAdmin() completed');
 
-          // Test Bull queue connections + job processing
+          // Test Bull queue connections (diagnostic job processing removed for production)
           logger.info('[Boot] Testing Bull queues...');
-          const { testBullQueues, testBullJobProcessing } = require('./config/bull-startup-test');
+          const { testBullQueues } = require('./config/bull-startup-test');
           await testBullQueues();
-          await testBullJobProcessing();
         } catch (err) {
           logger.warn('[Boot] Background init error', { error: err.message });
         }
