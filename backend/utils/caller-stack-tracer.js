@@ -25,18 +25,24 @@ function activateCallerStackTracer() {
     return socket;
   };
 
-  // Capture error with creation context
+  // Capture error with creation context + current stack
   const originalOn = net.Socket.prototype.on;
   net.Socket.prototype.on = function(eventName, listener) {
     if (eventName === 'error') {
       return originalOn.call(this, eventName, (err) => {
         if (err && err.code === 'ECONNREFUSED') {
           const creationStack = socketCreationStacks.get(this) || 'unknown';
-          logger.error('[CALLER_STACK] ECONNREFUSED', {
+          const errorStack = new Error().stack
+            .split('\n')
+            .slice(2, 6)
+            .map(line => line.trim())
+            .join(' | ');
+          logger.error('[CALLER_STACK] ECONNREFUSED detected', {
             address: err.address,
             port: err.port,
             syscall: err.syscall,
             creation_stack: creationStack,
+            error_handler_stack: errorStack,
           });
         }
         return listener.call(this, err);
