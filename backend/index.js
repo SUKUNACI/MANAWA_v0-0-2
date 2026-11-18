@@ -1,16 +1,5 @@
 require('dotenv').config();
 
-// TEMPORARY: Network diagnostics (production audit - issue #ECONNREFUSED_DIAGNOSIS)
-// Activation: SET ENABLE_NET_DIAG=1 in env to enable; auto-deactivates after first diagnosis
-if (process.env.ENABLE_NET_DIAG === '1') {
-  try {
-    const { activateNetworkDiagnostics } = require('./utils/network-diagnostics');
-    activateNetworkDiagnostics();
-  } catch (err) {
-    console.error('[NET_DIAG] Failed to activate:', err.message);
-  }
-}
-
 // On Render, skip env validation at module load time — do it at startup instead
 // This prevents the entire app from crashing if env vars are missing before server listens
 // if (process.env.NODE_ENV !== 'test') {
