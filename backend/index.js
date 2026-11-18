@@ -237,15 +237,20 @@ app.use(responseSizeLimitMiddleware);
 logger.info('[Q69] Response size limit middleware registered (5MB max)');
 
 // Initialize Firebase
-const firebaseApp = initializeFirebase();
-if (firebaseApp) {
-  try {
-    const messaging = getMessaging();
-    setMessaging(messaging);
-    logger.info('[Server] Firebase Cloud Messaging initialized');
-  } catch (err) {
-    logger.error('[Server] Firebase messaging initialization failed', { error: err.message });
+let firebaseApp = null;
+try {
+  firebaseApp = initializeFirebase();
+  if (firebaseApp) {
+    try {
+      const messaging = getMessaging();
+      setMessaging(messaging);
+      logger.info('[Server] Firebase Cloud Messaging initialized');
+    } catch (err) {
+      logger.error('[Server] Firebase messaging initialization failed', { error: err.message });
+    }
   }
+} catch (err) {
+  logger.error('[Server] Firebase init error', { error: err.message });
 }
 
 const io = new Server(server, {
