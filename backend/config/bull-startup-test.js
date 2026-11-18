@@ -126,50 +126,45 @@ async function testBullJobProcessing() {
     logger.info('[Bull Job Test] Registered diagnostic worker (background)');
 
     // Add a job
-    const job = await diagQueue.add(
+    const jobData = await diagQueue.add(
       { type: 'diagnostic', timestamp: new Date().toISOString() },
       { attempts: 1, removeOnComplete: true, removeOnFail: false }
     );
 
-    logger.info('[Bull Job Test] Diagnostic job added', { jobId: job.id, state: job._state });
+    const jobId = jobData.id;
+    logger.info('[Bull Job Test] Diagnostic job added', { jobId, state: jobData._state });
 
     // Wait for completion or timeout (5s)
     let completed = false;
     let jobError = null;
     let completionResult = null;
 
-    const completeHandler = (result) => {
-      completed = true;
-      completionResult = result;
-      logger.info('[Bull Job Test] Job completed ✅', { jobId: job.id, result });
-    };
-
-    const failHandler = (err) => {
-      jobError = err.message;
-      logger.error('[Bull Job Test] Job failed ❌', { jobId: job.id, error: err.message });
-    };
-
-    job.on('completed', completeHandler);
-    job.on('failed', failHandler);
-
     // Wait with explicit state polling
     const startWait = Date.now();
-    let lastState = job._state;
+    let lastState = 'pending';
 
     const completionPromise = new Promise((resolve) => {
       const checkInterval = setInterval(async () => {
         try {
-          const freshJob = await diagQueue.getJob(job.id);
+          const freshJob = await diagQueue.getJob(jobId);
           if (freshJob) {
             const currentState = freshJob._state || 'unknown';
             if (currentState !== lastState) {
               logger.info('[Bull Job Test] Job state changed', {
-                jobId: job.id,
+                jobId,
                 from: lastState,
                 to: currentState,
                 elapsed: Date.now() - startWait
               });
               lastState = currentState;
+              if (currentState === 'completed') {
+                completed = true;
+                completionResult = freshJob.returnvalue;
+                logger.info('[Bull Job Test] Job completed ✅', { jobId, result: completionResult });
+              } else if (currentState === 'failed') {
+                jobError = freshJob.failedReason || 'Unknown failure';
+                logger.error('[Bull Job Test] Job failed ❌', { jobId, error: jobError });
+              }
             }
             if (currentState === 'completed' || currentState === 'failed') {
               clearInterval(checkInterval);
@@ -191,7 +186,7 @@ async function testBullJobProcessing() {
 
     if (completed) {
       logger.info('[Bull Job Test] Job processing verified: PENDING → COMPLETED ✅', {
-        jobId: job.id,
+        jobId,
         result: completionResult,
         totalElapsed: Date.now() - startWait
       });
@@ -199,7 +194,7 @@ async function testBullJobProcessing() {
       logger.error('[Bull Job Test] Job processing failed', { error: jobError });
     } else {
       logger.warn('[Bull Job Test] Job did not complete within 5s timeout (worker may not have picked it up)', {
-        jobId: job.id,
+        jobId,
         lastState
       });
     }
