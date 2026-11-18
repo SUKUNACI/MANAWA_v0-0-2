@@ -69,24 +69,27 @@ async function initializeWorkers() {
       }
     }
 
-    // Wait for all workers to be ready in parallel (non-blocking)
-    logger.info('[Workers] Waiting for all workers to be ready...', {
-      totalQueues: queueConfigs.length
+    // Don't await workers — they connect in background
+    // Service can accept requests immediately, workers process jobs as they connect to Redis
+    logger.info('[Workers] All job queue workers registered and initializing in background', {
+      totalQueues: queueConfigs.length,
+      totalElapsed: Date.now() - startTime
     });
 
-    const results = await Promise.all(processPromises);
-
-    const failedWorkers = results.filter(r => r.status !== 'ready');
-    if (failedWorkers.length > 0) {
-      const error = `${failedWorkers.length} workers failed to initialize: ${failedWorkers.map(w => w.name).join(', ')}`;
-      logger.error(`[Workers] ${error}`);
-      throw new Error(error);
-    }
-
-    logger.info('[Workers] All job queue workers initialized successfully and ready to process jobs', {
-      totalElapsed: Date.now() - startTime,
-      workersReady: queueConfigs.length
-    });
+    // Let Promise.all run in background but don't block initialization
+    // Attach handlers to track completion
+    Promise.all(processPromises)
+      .then(results => {
+        const failed = results.filter(r => r.status !== 'ready');
+        if (failed.length > 0) {
+          logger.warn(`[Workers] ${failed.length} workers failed:`, {
+            failed: failed.map(f => `${f.name}: ${f.error}`).join(', ')
+          });
+        } else {
+          logger.info('[Workers] All workers ready to process jobs');
+        }
+      })
+      .catch(err => logger.error('[Workers] Background ready check error:', { error: err.message }));
 
     return true;
   } catch (err) {
