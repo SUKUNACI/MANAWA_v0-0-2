@@ -20,12 +20,21 @@ const DEFAULTS = {
 
 // Seed : insère les clés manquantes avec leurs valeurs par défaut
 async function seedConfig() {
-  for (const [key, { value, description }] of Object.entries(DEFAULTS)) {
-    await prisma.appConfig.upsert({
-      where: { key },
-      create: { key, value, description },
-      update: {}, // ne pas écraser si déjà présent
-    });
+  const logger = require('./logger');
+  logger.info('[Config] seedConfig() starting — about to query prisma.appConfig');
+  try {
+    for (const [key, { value, description }] of Object.entries(DEFAULTS)) {
+      logger.debug(`[Config] upserting config key: ${key}`);
+      await prisma.appConfig.upsert({
+        where: { key },
+        create: { key, value, description },
+        update: {}, // ne pas écraser si déjà présent
+      });
+    }
+    logger.info('[Config] seedConfig() completed successfully');
+  } catch (err) {
+    logger.error('[Config] seedConfig() failed', { error: err.message, code: err.code, syscall: err.syscall, address: err.address, port: err.port });
+    throw err;
   }
 
   // Migration des IPs de la variable d'env vers la DB (exécuté une seule fois)

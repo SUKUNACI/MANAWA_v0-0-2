@@ -636,9 +636,15 @@ async function startServer() {
 
       // Background initialization tasks (fire-and-forget)
       setImmediate(async () => {
+        logger.info('[Boot] Background init started (seedConfig + ensureSuperAdmin)');
         try {
-          seedConfig().catch(err => logger.error('[Config] Seed error', { error: err.message }));
-          ensureSuperAdmin().catch(err => logger.error('[Boot] ensureSuperAdmin error', { error: err.message }));
+          logger.info('[Boot] Calling seedConfig()...');
+          await seedConfig().catch(err => logger.error('[Config] Seed error', { error: err.message, code: err.code, syscall: err.syscall }));
+          logger.info('[Boot] seedConfig() completed');
+
+          logger.info('[Boot] Calling ensureSuperAdmin()...');
+          await ensureSuperAdmin().catch(err => logger.error('[Boot] ensureSuperAdmin error', { error: err.message, code: err.code, syscall: err.syscall }));
+          logger.info('[Boot] ensureSuperAdmin() completed');
         } catch (err) {
           logger.warn('[Boot] Background init error', { error: err.message });
         }

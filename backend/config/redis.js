@@ -101,6 +101,8 @@ async function initializeRedis() {
     const redis = require('redis');
     // Note: REDIS_URL must use rediss:// scheme for TLS (not redis://)
     // TLS is determined by the URL scheme, not socket config
+    logger.info('[Redis] Attempting connection to Redis', { url: redisUrl.replace(/:[^:/@]*@/, ':***@') });
+
     redisClient = redis.createClient({
       url: redisUrl,
       socket: {
@@ -114,11 +116,12 @@ async function initializeRedis() {
     });
 
     redisClient.on('error', (err) => {
-      logger.warn('[Redis] Connection lost', { error: err.message });
+      logger.warn('[Redis] Connection error', { error: err.message, code: err.code, errno: err.errno });
       useInMemory = true;
     });
 
     // Connect with timeout
+    logger.info('[Redis] Calling redis.connect()...');
     const connectPromise = redisClient.connect();
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Redis connection timeout after 10 seconds')), 10000)
@@ -128,9 +131,9 @@ async function initializeRedis() {
       await Promise.race([connectPromise, timeoutPromise]);
       logger.info('[Redis] Redis initialized successfully');
     } catch (err) {
-      logger.error('[Redis] FATAL: Connection failed but REDIS_URL was configured. Startup aborted.', { error: err.message });
+      logger.error('[Redis] FATAL: Connection failed', { error: err.message, code: err.code, syscall: err.syscall, address: err.address, port: err.port });
       redisClient = null;
-      throw new Error(`[Redis] Failed to connect to Redis at startup. REDIS_URL is configured but connection failed: ${err.message}`);
+      throw new Error(`[Redis] Failed to connect to Redis at startup: ${err.message}`);
     }
   } catch (err) {
     logger.error('[Redis] FATAL: Initialization error but REDIS_URL was configured. Startup aborted.', { error: err.message });

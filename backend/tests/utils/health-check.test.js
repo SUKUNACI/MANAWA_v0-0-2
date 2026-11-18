@@ -346,10 +346,12 @@ describe('Health Check Utility', () => {
       await healthCheck.checkDatabaseHealth();
 
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('health check'),
+        expect.stringContaining('Database health check failed'),
         expect.objectContaining({
-          error: 'Connection failed',
-          code: 'ECONNREFUSED',
+          error: expect.objectContaining({
+            message: 'Connection failed',
+            code: 'ECONNREFUSED',
+          }),
         })
       );
     });
@@ -363,8 +365,10 @@ describe('Health Check Utility', () => {
       await healthCheck.checkDatabaseHealth();
 
       const logCall = logger.error.mock.calls[0];
-      expect(logCall[1].error).toBe('Database error');
-      expect(logCall[1].code).toBe('DB_ERROR');
+      expect(logCall[1].error).toEqual(expect.objectContaining({
+        message: 'Database error',
+        code: 'DB_ERROR',
+      }));
     });
   });
 
