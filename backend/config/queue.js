@@ -61,7 +61,6 @@ function parseRedisUrl() {
 }
 
 const redisConfig = parseRedisUrl();
-logger.info('[Bull Queue] Final config for Bull', { redisConfig });
 
 // Initialize queues with retry logic and settings
 const createQueueConfig = (queueName) => ({
