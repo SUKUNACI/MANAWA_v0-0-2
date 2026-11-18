@@ -29,8 +29,15 @@ class HealthModule {
         timestamp: new Date().toISOString(),
       };
     } catch (error) {
-      logger.error('Health check failed', { error: error.message });
-      throw new Error('Health check failed');
+      const errorDetails = {
+        message: error.message,
+        code: error.code,
+        syscall: error.syscall,
+        address: error.address,
+        port: error.port,
+      };
+      logger.error('Health check failed', { error: errorDetails, stack: error.stack });
+      throw error;
     }
   }
 

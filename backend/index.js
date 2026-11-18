@@ -549,8 +549,8 @@ app.use((err, req, res, next) => {
 const prisma = require('./config/db');
 
 // Inline cron jobs (quote expiry, token cleanup, payment expiry, payment reconciliation)
+// Note: initializeCronJobs() is called in startServer() AFTER Redis initialization
 const { initializeCronJobs } = require('./jobs/cron-jobs');
-initializeCronJobs();
 
 // ERROR #20: Add admin log retention policy - cleanup logs older than 90 days
 const ADMIN_LOG_RETENTION_DAYS = parseInt(process.env.ADMIN_LOG_RETENTION_DAYS || '90', 10);
@@ -607,6 +607,13 @@ async function startServer() {
         process.exit(1);
       }
     }
+
+    // Initialize Redis cache (required for health check and production features)
+    const { initializeRedis } = require('./config/redis');
+    await initializeRedis();
+
+    // Initialize cron jobs AFTER Redis is ready (they may use cache/DB)
+    initializeCronJobs();
 
     server.listen(PORT, '0.0.0.0', () => {
       logger.info('✅ Server listening', { port: PORT, host: '0.0.0.0' });

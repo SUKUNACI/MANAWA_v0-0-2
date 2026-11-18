@@ -5,6 +5,7 @@ const { getConfig } = require('./third-party-api-config');
 let redisClient = null;
 let inMemoryCache = null;
 let useInMemory = false;
+let redisConfigured = false; // Track if REDIS_URL was provided (distinguishes intentional in-memory vs failover)
 
 // Get configuration
 const config = getConfig('redis');
@@ -82,64 +83,58 @@ async function initializeRedis() {
   const redisUrl = (process.env.REDIS_URL || '').trim();
 
   if (!redisUrl) {
-    logger.info('[Redis] REDIS_URL not configured, using in-memory cache fallback');
+    const nodeEnv = process.env.NODE_ENV || 'development';
+    if (nodeEnv === 'production') {
+      logger.error('[Redis] FATAL: REDIS_URL not configured in production. Startup aborted.');
+      throw new Error('[Redis] REDIS_URL is required in production. In-memory fallback is not safe for production use.');
+    }
+    logger.info('[Redis] REDIS_URL not configured, using in-memory cache fallback (development mode)');
+    redisConfigured = false;
     useInMemory = true;
     inMemoryCache = new InMemoryCache();
     return;
   }
 
+  redisConfigured = true; // REDIS_URL was provided
+
   try {
     const redis = require('redis');
-    const testClient = redis.createClient({
+    // Note: REDIS_URL must use rediss:// scheme for TLS (not redis://)
+    // TLS is determined by the URL scheme, not socket config
+    redisClient = redis.createClient({
       url: redisUrl,
       socket: {
-        connectTimeout: 500,
-        tls: true,
-        rejectUnauthorized: false,
+        connectTimeout: 5000,
       },
     });
 
-    // Try to connect once only
-    const connectPromise = testClient.connect();
+    redisClient.on('connect', () => {
+      logger.info('[Redis] Connected ✅');
+      useInMemory = false;
+    });
+
+    redisClient.on('error', (err) => {
+      logger.warn('[Redis] Connection lost', { error: err.message });
+      useInMemory = true;
+    });
+
+    // Connect with timeout
+    const connectPromise = redisClient.connect();
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('timeout')), 800)
+      setTimeout(() => reject(new Error('Redis connection timeout after 10 seconds')), 10000)
     );
 
     try {
       await Promise.race([connectPromise, timeoutPromise]);
-      // Connection successful - create the real client
-      redisClient = redis.createClient({
-        url: redisUrl,
-        socket: {
-          connectTimeout: 500,
-          tls: true,
-          rejectUnauthorized: false,
-        },
-      });
-
-      redisClient.on('connect', () => {
-        logger.info('[Redis] Connected ✅');
-        useInMemory = false;
-      });
-
-      redisClient.on('error', (err) => {
-        logger.warn('[Redis] Connection lost', { error: err.message });
-        useInMemory = true;
-      });
-
-      await redisClient.connect();
       logger.info('[Redis] Redis initialized successfully');
     } catch (err) {
-      logger.info('[Redis] Connection test failed, using in-memory cache');
-      useInMemory = true;
+      logger.error('[Redis] FATAL: Connection failed but REDIS_URL was configured. Startup aborted.', { error: err.message });
       redisClient = null;
-      try {
-        await testClient.quit();
-      } catch { /* ignore */ }
+      throw new Error(`[Redis] Failed to connect to Redis at startup. REDIS_URL is configured but connection failed: ${err.message}`);
     }
   } catch (err) {
-    logger.warn('[Redis] Initialization error, using in-memory cache', { error: err.message });
-    useInMemory = true;
+    logger.error('[Redis] FATAL: Initialization error but REDIS_URL was configured. Startup aborted.', { error: err.message });
+    throw err;
   }
 }
 
@@ -301,7 +296,10 @@ async function disconnect() {
 // Health check
 async function healthCheck() {
   if (useInMemory) {
-    return { status: 'ok', mode: 'in-memory-fallback', message: 'In-memory cache fallback active' };
+    if (redisConfigured) {
+      return { status: 'degraded', mode: 'in-memory-fallback', message: 'Redis connection failed, using in-memory cache' };
+    }
+    return { status: 'ok', mode: 'in-memory-fallback', message: 'In-memory cache active (Redis not configured)' };
   }
 
   try {
@@ -327,4 +325,8 @@ module.exports = {
   healthCheck,
   // Expose circuit breaker for monitoring/testing
   circuitBreaker,
+  // Track whether Redis was configured (for health check distinction)
+  get isRedisConfigured() {
+    return redisConfigured;
+  },
 };

@@ -9,14 +9,20 @@ async function checkDatabaseHealth() {
       timestamp: new Date().toISOString(),
     };
   } catch (error) {
-    logger.error('Database health check failed', {
-      error: error.message,
+    const errorDetails = {
+      message: error.message,
       code: error.code,
-    });
+      syscall: error.syscall,
+      address: error.address,
+      port: error.port,
+      errno: error.errno,
+    };
+    logger.error('Database health check failed (SELECT 1)', { error: errorDetails });
     return {
       status: 'unhealthy',
       error: error.message,
       code: error.code,
+      syscall: error.syscall,
       timestamp: new Date().toISOString(),
     };
   }
