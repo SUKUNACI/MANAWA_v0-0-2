@@ -18,6 +18,7 @@ const SearchModule = require('../modules/search');
 const SearchGlobalModule = require('../modules/search-global');
 const prisma = require('../config/db');
 const logger = require('../utils/logger');
+const { triggerRecoverySync, handleStartupRecovery } = require('../config/meilisearch-recovery');
 
 const router = express.Router();
 const searchModule = new SearchModule(prisma);
@@ -100,6 +101,49 @@ const createSearchHandler = (type = null) => {
 
       res.json(result);
     } catch (err) {
+      // Case 1: HTML reçu au réveil → retry avec backoff
+      if (err.message === 'MeiliSearch startup') {
+        logger.warn('[SearchGlobal] Startup detected, attempting recovery', { type: type || 'global' });
+        try {
+          // Reessayer la recherche avec backoff (service peut répondre maintenant)
+          const retryResult = await handleStartupRecovery(async () => {
+            return type
+              ? await searchGlobalModule.searchByType(type, q.trim(), { limit: clamped.limit, offset: clamped.offset, filters })
+              : await searchGlobalModule.searchGlobal(q.trim(), { limit: clamped.limit, offset: clamped.offset, filters });
+          });
+          return res.json(retryResult);
+        } catch (retryErr) {
+          logger.warn('[SearchGlobal] Startup recovery retry exhausted', { error: retryErr.message });
+          // Return empty (service still starting, but recovery now in progress)
+          const emptyResult = {
+            professionals: { hits: [] },
+            projects: { hits: [] },
+            portfolio: { hits: [] },
+            packages: { hits: [] },
+            reviews: { hits: [] },
+          };
+          return res.json(type ? { hits: [] } : emptyResult);
+        }
+      }
+
+      // Case 2: Index absent après redémarrage → resync unique
+      if (err.message === 'MeiliSearch missing_index') {
+        logger.warn('[SearchGlobal] Missing index detected, triggering resync', { type: type || 'global' });
+        triggerRecoverySync('missing_index').catch(recErr => {
+          logger.error('[SearchGlobal] Resync failed', { error: recErr.message });
+        });
+        // Return empty (indices being recreated)
+        const emptyResult = {
+          professionals: { hits: [] },
+          projects: { hits: [] },
+          portfolio: { hits: [] },
+          packages: { hits: [] },
+          reviews: { hits: [] },
+        };
+        return res.json(type ? { hits: [] } : emptyResult);
+      }
+
+      // Case 3: Auth error ou autre → ne pas resyncer
       logger.error('[SearchGlobal] Handler failed', {
         type: type || 'global',
         error: err.message,

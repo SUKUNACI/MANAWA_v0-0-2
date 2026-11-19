@@ -671,22 +671,33 @@ async function startServer() {
         }
       });
 
-      // Q66: Schedule daily MeiliSearch synchronization (1h after startup, then daily)
-      setTimeout(() => {
-        logger.info('[MeiliSearch] Scheduling daily sync...');
-        const { syncAllIndices } = require('./jobs/meilisearch-sync');
+      // Q66: MeiliSearch synchronization
+      // NOTE: Moved from +60min to immediate to recover indices if MeiliSearch woke from ephemeral storage loss
+      setImmediate(async () => {
+        try {
+          logger.info('[MeiliSearch] Initial sync starting (immediate)...');
+          const { syncAllIndices } = require('./jobs/meilisearch-sync');
+          const { handleStartupRecovery } = require('./config/meilisearch-recovery');
 
-        syncAllIndices().catch(err => {
-          logger.error('[MeiliSearch] Initial sync error', { error: err.message });
-        });
+          // Use handleStartupRecovery at boot: retries with backoff, then resync if exhausted
+          try {
+            await handleStartupRecovery(syncAllIndices);
+            logger.info('[MeiliSearch] Initial sync completed');
+          } catch (err) {
+            logger.warn('[MeiliSearch] Initial sync exhausted after retries', { error: err.message });
+            // Recovery already triggered by handleStartupRecovery, just log final failure
+          }
 
-        // Then schedule daily syncs at 02:00 UTC
-        setInterval(() => {
-          syncAllIndices().catch(err => {
-            logger.error('[MeiliSearch] Daily sync error', { error: err.message });
-          });
-        }, 24 * 60 * 60 * 1000);
-      }, 60 * 60 * 1000); // 1 hour after startup
+          // Then schedule daily syncs
+          setInterval(() => {
+            syncAllIndices().catch(err => {
+              logger.error('[MeiliSearch] Daily sync error', { error: err.message });
+            });
+          }, 24 * 60 * 60 * 1000);
+        } catch (err) {
+          logger.error('[MeiliSearch] Initial sync setup error', { error: err.message });
+        }
+      });
 
       // Admin log cleanup CRON (requires DB — runs only after server started)
       setInterval(cleanupOldAdminLogs, 24 * 60 * 60 * 1000);

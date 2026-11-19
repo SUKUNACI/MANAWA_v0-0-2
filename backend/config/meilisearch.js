@@ -181,6 +181,35 @@ async function healthCheck() {
 }
 
 /**
+ * Catégorise les erreurs MeiliSearch pour déterminer la stratégie de recovery
+ * @returns 'startup' | 'missing_index' | 'auth_error' | 'other'
+ */
+function categorizeError(err) {
+  const msg = err?.message || '';
+  const code = err?.code;
+
+  // MeiliSearchApiError has response.status, not err.status
+  const statusCode = err?.response?.status || err?.status;
+
+  // 1. Erreurs d'auth EN PREMIER : ne jamais resyncer
+  if (statusCode === 401 || statusCode === 403 || code === 'invalid_api_key' || code === 'unauthorized' || msg.includes('401') || msg.includes('403')) {
+    return 'auth_error';
+  }
+
+  // 2. Index absent après redémarrage : code MeiliSearch
+  if (code === 'index_not_found' || msg.includes('index_not_found')) {
+    return 'missing_index';
+  }
+
+  // 3. HTML au réveil : "Unexpected token '<', \"<!DOCTYPE
+  if (msg.includes('Unexpected token') && msg.includes('<') && msg.includes('DOCTYPE')) {
+    return 'startup';
+  }
+
+  return 'other';
+}
+
+/**
  * Recherche globale dans tous les indices
  * @param {string} query - Terme de recherche
  * @param {object} options - Options (filters, limit, offset, etc.)
@@ -189,28 +218,54 @@ async function healthCheck() {
 async function globalSearch(query, options = {}) {
   const { limit = 10, offset = 0, filters = [] } = options;
   const results = {};
+  const errorCategory = new Map(); // Track error types per index
 
   try {
     // Rechercher dans chaque indice en parallèle
     const searches = await Promise.all([
       getIndex('professionals').search(query, { limit, offset, filter: filters }).catch(err => {
-        logger.warn('[MeiliSearch] Erreur recherche professionals', { error: err.message });
+        const category = categorizeError(err);
+        errorCategory.set('professionals', category);
+        if (category === 'startup' || category === 'missing_index') {
+          throw new Error(`MeiliSearch ${category}`);
+        }
+        logger.warn('[MeiliSearch] Search error professionals', { error: err.message, category });
         return { hits: [] };
       }),
       getIndex('projects').search(query, { limit, offset, filter: filters }).catch(err => {
-        logger.warn('[MeiliSearch] Erreur recherche projects', { error: err.message });
+        const category = categorizeError(err);
+        errorCategory.set('projects', category);
+        if (category === 'startup' || category === 'missing_index') {
+          throw new Error(`MeiliSearch ${category}`);
+        }
+        logger.warn('[MeiliSearch] Search error projects', { error: err.message, category });
         return { hits: [] };
       }),
       getIndex('portfolio').search(query, { limit, offset, filter: filters }).catch(err => {
-        logger.warn('[MeiliSearch] Erreur recherche portfolio', { error: err.message });
+        const category = categorizeError(err);
+        errorCategory.set('portfolio', category);
+        if (category === 'startup' || category === 'missing_index') {
+          throw new Error(`MeiliSearch ${category}`);
+        }
+        logger.warn('[MeiliSearch] Search error portfolio', { error: err.message, category });
         return { hits: [] };
       }),
       getIndex('packages').search(query, { limit, offset, filter: filters }).catch(err => {
-        logger.warn('[MeiliSearch] Erreur recherche packages', { error: err.message });
+        const category = categorizeError(err);
+        errorCategory.set('packages', category);
+        if (category === 'startup' || category === 'missing_index') {
+          throw new Error(`MeiliSearch ${category}`);
+        }
+        logger.warn('[MeiliSearch] Search error packages', { error: err.message, category });
         return { hits: [] };
       }),
       getIndex('reviews').search(query, { limit, offset, filter: filters }).catch(err => {
-        logger.warn('[MeiliSearch] Erreur recherche reviews', { error: err.message });
+        const category = categorizeError(err);
+        errorCategory.set('reviews', category);
+        if (category === 'startup' || category === 'missing_index') {
+          throw new Error(`MeiliSearch ${category}`);
+        }
+        logger.warn('[MeiliSearch] Search error reviews', { error: err.message, category });
         return { hits: [] };
       }),
     ]);
@@ -223,7 +278,12 @@ async function globalSearch(query, options = {}) {
 
     return results;
   } catch (err) {
-    logger.error('[MeiliSearch] Erreur recherche globale', { error: err.message });
+    if (err.message.startsWith('MeiliSearch')) {
+      const category = err.message.split(' ')[1];
+      logger.warn('[MeiliSearch] Global search error triggers recovery', { category });
+      throw err;
+    }
+    logger.error('[MeiliSearch] Global search error', { error: err.message });
     throw err;
   }
 }
