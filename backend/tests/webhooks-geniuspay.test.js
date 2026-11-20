@@ -115,8 +115,8 @@ describe('GeniusPay Webhooks - Q51', () => {
 
       const res = await request(app)
         .post('/webhooks/geniuspay')
-        .set('x-geniuspay-signature', signature)
-        .set('x-geniuspay-timestamp', timestamp.toString())
+        .set('x-webhook-signature', signature)
+        .set('x-webhook-timestamp', timestamp.toString())
         .send(payload);
 
       expect(res.status).toBe(200);
@@ -151,8 +151,8 @@ describe('GeniusPay Webhooks - Q51', () => {
 
       const res = await request(app)
         .post('/webhooks/geniuspay')
-        .set('x-geniuspay-signature', signature)
-        .set('x-geniuspay-timestamp', timestamp.toString())
+        .set('x-webhook-signature', signature)
+        .set('x-webhook-timestamp', timestamp.toString())
         .send(payload);
 
       expect(res.status).toBe(200);
@@ -184,8 +184,8 @@ describe('GeniusPay Webhooks - Q51', () => {
 
       const res = await request(app)
         .post('/webhooks/geniuspay')
-        .set('x-geniuspay-signature', signature)
-        .set('x-geniuspay-timestamp', timestamp.toString())
+        .set('x-webhook-signature', signature)
+        .set('x-webhook-timestamp', timestamp.toString())
         .send(payload);
 
       expect(res.status).toBe(200);
@@ -206,8 +206,8 @@ describe('GeniusPay Webhooks - Q51', () => {
 
       const res = await request(app)
         .post('/webhooks/geniuspay')
-        .set('x-geniuspay-signature', 'invalid-sig')
-        .set('x-geniuspay-timestamp', Math.floor(Date.now() / 1000).toString())
+        .set('x-webhook-signature', 'invalid-sig')
+        .set('x-webhook-timestamp', Math.floor(Date.now() / 1000).toString())
         .send(payload);
 
       expect(res.status).toBe(401);
@@ -234,8 +234,8 @@ describe('GeniusPay Webhooks - Q51', () => {
 
       await request(app)
         .post('/webhooks/geniuspay')
-        .set('x-geniuspay-signature', signature)
-        .set('x-geniuspay-timestamp', timestamp.toString())
+        .set('x-webhook-signature', signature)
+        .set('x-webhook-timestamp', timestamp.toString())
         .send(payload);
 
       const notifications = await prisma.notification.findMany({
@@ -269,8 +269,8 @@ describe('GeniusPay Webhooks - Q51', () => {
 
       await request(app)
         .post('/webhooks/geniuspay')
-        .set('x-geniuspay-signature', signature)
-        .set('x-geniuspay-timestamp', timestamp.toString())
+        .set('x-webhook-signature', signature)
+        .set('x-webhook-timestamp', timestamp.toString())
         .send(payload);
 
       const auditLogs = await prisma.paymentAuditLog.findMany({

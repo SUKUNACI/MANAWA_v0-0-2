@@ -40,6 +40,101 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// _selectCredentials — Credential selection and environment guards
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe('geniuspay._selectCredentials', () => {
+  test('production: retourne les clés live depuis GENIUSPAY_API_KEY / API_SECRET / WEBHOOK_SECRET', () => {
+    const env = {
+      GENIUSPAY_API_KEY: 'pk_live_abc123',
+      GENIUSPAY_API_SECRET: 'sk_live_xyz456',
+      GENIUSPAY_WEBHOOK_SECRET: 'whsec_prod_789',
+    };
+    const result = geniuspay._selectCredentials('production', env);
+    expect(result.apiKey).toBe('pk_live_abc123');
+    expect(result.apiSecret).toBe('sk_live_xyz456');
+    expect(result.webhookSecret).toBe('whsec_prod_789');
+  });
+
+  test('production: lève une erreur bloquante si GENIUSPAY_API_KEY commence par pk_sandbox_', () => {
+    const env = {
+      GENIUSPAY_API_KEY: 'pk_sandbox_wrongkey',
+      GENIUSPAY_API_SECRET: 'sk_live_xyz',
+      GENIUSPAY_WEBHOOK_SECRET: 'whsec_prod',
+    };
+    expect(() => geniuspay._selectCredentials('production', env)).toThrow(/pk_sandbox_/);
+  });
+
+  test('production: lève une erreur bloquante si GENIUSPAY_API_SECRET commence par sk_sandbox_', () => {
+    const env = {
+      GENIUSPAY_API_KEY: 'pk_live_ok',
+      GENIUSPAY_API_SECRET: 'sk_sandbox_wrongsecret',
+      GENIUSPAY_WEBHOOK_SECRET: 'whsec_prod',
+    };
+    expect(() => geniuspay._selectCredentials('production', env)).toThrow(/sk_sandbox_/);
+  });
+
+  test('development: retourne les clés sandbox depuis GENIUSPAY_SANDBOX_API_KEY / SANDBOX_API_SECRET / SANDBOX_WEBHOOK_SECRET', () => {
+    const env = {
+      GENIUSPAY_SANDBOX_API_KEY: 'pk_sandbox_devkey',
+      GENIUSPAY_SANDBOX_API_SECRET: 'sk_sandbox_devsecret',
+      GENIUSPAY_SANDBOX_WEBHOOK_SECRET: 'whsec_sandbox_devhook',
+    };
+    const result = geniuspay._selectCredentials('development', env);
+    expect(result.apiKey).toBe('pk_sandbox_devkey');
+    expect(result.apiSecret).toBe('sk_sandbox_devsecret');
+    expect(result.webhookSecret).toBe('whsec_sandbox_devhook');
+  });
+
+  test('development: lève une erreur bloquante si GENIUSPAY_SANDBOX_API_KEY commence par pk_live_', () => {
+    const env = {
+      GENIUSPAY_SANDBOX_API_KEY: 'pk_live_wrongdev',
+      GENIUSPAY_SANDBOX_API_SECRET: 'sk_sandbox_devsecret',
+      GENIUSPAY_SANDBOX_WEBHOOK_SECRET: 'whsec_sandbox_devhook',
+    };
+    expect(() => geniuspay._selectCredentials('development', env)).toThrow(/pk_live_/);
+  });
+
+  test('development: lève une erreur bloquante si GENIUSPAY_SANDBOX_API_SECRET commence par sk_live_', () => {
+    const env = {
+      GENIUSPAY_SANDBOX_API_KEY: 'pk_sandbox_ok',
+      GENIUSPAY_SANDBOX_API_SECRET: 'sk_live_wrongdev',
+      GENIUSPAY_SANDBOX_WEBHOOK_SECRET: 'whsec_sandbox_devhook',
+    };
+    expect(() => geniuspay._selectCredentials('development', env)).toThrow(/sk_live_/);
+  });
+
+  test('development: retourne null si aucune clé sandbox configurée — pas de fallback production', () => {
+    const env = {
+      GENIUSPAY_API_KEY: 'pk_live_should_not_be_used',
+      GENIUSPAY_API_SECRET: 'sk_live_should_not_be_used',
+    };
+    const result = geniuspay._selectCredentials('development', env);
+    expect(result.apiKey).toBeNull();
+    expect(result.apiSecret).toBeNull();
+  });
+
+  test('production: retourne null si aucune clé production configurée — pas de fallback sandbox', () => {
+    const env = {
+      GENIUSPAY_SANDBOX_API_KEY: 'pk_sandbox_should_not_be_used',
+    };
+    const result = geniuspay._selectCredentials('production', env);
+    expect(result.apiKey).toBeNull();
+  });
+
+  test('test: accepte des valeurs arbitraires sans lever d\'erreur', () => {
+    const env = {
+      GENIUSPAY_API_KEY: 'test-api-key',
+      GENIUSPAY_API_SECRET: 'test-api-secret',
+      GENIUSPAY_WEBHOOK_SECRET: 'test-webhook-secret',
+    };
+    expect(() => geniuspay._selectCredentials('test', env)).not.toThrow();
+    const result = geniuspay._selectCredentials('test', env);
+    expect(result.apiKey).toBe('test-api-key');
+  });
+});
+
 // ── Fixtures ────────────────────────────────────────────────────────────────────
 const mockPaymentPayload = {
   amount: 100000,

@@ -13,6 +13,12 @@ const express = require('express');
 
 // ── Mock Prisma ───────────────────────────────────────────────────────────────
 jest.mock('../../config/db', () => ({
+  subscriptionPaymentAttempt: {
+    findUnique: jest.fn().mockResolvedValue(null),
+  },
+  subscription: {
+    findFirst: jest.fn().mockResolvedValue(null),
+  },
   payment: {
     findFirst: jest.fn(),
     update:    jest.fn(),
@@ -97,8 +103,8 @@ function buildPayload(eventType, data = {}) {
 
 function validHeaders() {
   return {
-    'x-geniuspay-signature': VALID_SIG,
-    'x-geniuspay-timestamp': TIMESTAMP,
+    'x-webhook-signature': VALID_SIG,
+    'x-webhook-timestamp': TIMESTAMP,
   };
 }
 
@@ -128,7 +134,7 @@ describe('Vérification signature et timestamp', () => {
   test('400 — signature absente, timestamp présent', async () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
-      .set('x-geniuspay-timestamp', TIMESTAMP)
+      .set('x-webhook-timestamp', TIMESTAMP)
       .send(buildPayload('payment.succeeded'));
 
     expect(res.status).toBe(400);
@@ -137,7 +143,7 @@ describe('Vérification signature et timestamp', () => {
   test('400 — timestamp absent, signature présente', async () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
-      .set('x-geniuspay-signature', VALID_SIG)
+      .set('x-webhook-signature', VALID_SIG)
       .send(buildPayload('payment.succeeded'));
 
     expect(res.status).toBe(400);

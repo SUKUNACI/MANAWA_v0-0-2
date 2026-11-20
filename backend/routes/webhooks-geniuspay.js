@@ -50,8 +50,8 @@ router.use((req, res, next) => {
 router.post('/', async (req, res) => {
   try {
     // 1. Verify webhook signature
-    const signature = req.headers['x-geniuspay-signature'];
-    const timestamp = req.headers['x-geniuspay-timestamp'];
+    const signature = req.headers['x-webhook-signature'];
+    const timestamp = req.headers['x-webhook-timestamp'];
 
     if (!signature || !timestamp) {
       logger.warn('[Webhook GeniusPay] Missing signature or timestamp headers');
@@ -84,6 +84,44 @@ router.post('/', async (req, res) => {
     if (!isValidTimestamp) {
       logger.warn('[Webhook GeniusPay] Timestamp too old', { timestamp });
       return res.status(401).json({ error: 'Request timestamp too old' });
+    }
+
+    // Verify webhook environment — reject BEFORE any DB write (D1/D3)
+    // Deux sources indépendantes : payload.environment et X-Webhook-Environment header.
+    // Si les deux sont présentes et contradictoires → rejet immédiat (D1).
+    // Si une seule est présente → vérification contre l'environnement attendu.
+    // Si aucune n'est présente → permissif (signature valide = confiance suffisante)
+    //   mais warn en production (D3).
+    if (process.env.NODE_ENV !== 'test') {
+      const envFromBody   = payload.environment || null;
+      const envFromHeader = req.headers['x-webhook-environment'] || null;
+      const expectedEnv   = process.env.NODE_ENV === 'production' ? 'live' : 'sandbox';
+
+      if (envFromBody && envFromHeader && envFromBody !== envFromHeader) {
+        logger.warn('[Webhook GeniusPay] Contradiction environnement — rejeté avant écriture DB', {
+          envFromBody,
+          envFromHeader,
+          nodeEnv: process.env.NODE_ENV,
+        });
+        return res.status(400).json({ error: 'Environment contradiction', bodyEnv: envFromBody, headerEnv: envFromHeader });
+      }
+
+      const webhookEnv = envFromBody || envFromHeader;
+
+      if (webhookEnv) {
+        if (webhookEnv !== expectedEnv) {
+          logger.warn('[Webhook GeniusPay] Mauvais environnement — rejeté avant écriture DB', {
+            received: webhookEnv,
+            expected: expectedEnv,
+            nodeEnv: process.env.NODE_ENV,
+          });
+          return res.status(400).json({ error: 'Environment mismatch', received: webhookEnv, expected: expectedEnv });
+        }
+      } else if (process.env.NODE_ENV === 'production') {
+        logger.warn('[Webhook GeniusPay] Champ environment absent du webhook — accepté sur signature HMAC', {
+          nodeEnv: process.env.NODE_ENV,
+        });
+      }
     }
 
     // 2. Parse event type and data

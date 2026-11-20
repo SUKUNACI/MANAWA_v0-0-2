@@ -10,7 +10,9 @@ const thirdPartyApiConfig = {
    */
   geniuspay: {
     serviceName: 'GeniusPay',
-    enabled: !!process.env.GENIUSPAY_API_KEY,
+    enabled: process.env.NODE_ENV === 'production'
+      ? !!process.env.GENIUSPAY_API_KEY
+      : !!process.env.GENIUSPAY_SANDBOX_API_KEY,
 
     // Circuit Breaker settings
     circuitBreaker: {

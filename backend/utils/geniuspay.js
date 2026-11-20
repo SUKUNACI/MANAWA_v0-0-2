@@ -7,9 +7,49 @@ const logger = require('./logger');
 const timeoutConfig = require('../config/timeout-config');
 
 const GENIUSPAY_BASE_URL = 'https://geniuspay.ci/api/v1/merchant';
-const API_KEY = process.env.GENIUSPAY_API_KEY;
-const API_SECRET = process.env.GENIUSPAY_API_SECRET;
-const WEBHOOK_SECRET = process.env.GENIUSPAY_WEBHOOK_SECRET;
+// Sélection stricte des credentials selon NODE_ENV — sans fallback entre sandbox et production.
+// Exportée pour tests unitaires directs (sans rechargement du module).
+function _selectCredentials(nodeEnv, env) {
+  if (nodeEnv === 'production') {
+    const apiKey = env.GENIUSPAY_API_KEY || null;
+    const apiSecret = env.GENIUSPAY_API_SECRET || null;
+    const webhookSecret = env.GENIUSPAY_WEBHOOK_SECRET || null;
+    if (apiKey && apiKey.startsWith('pk_sandbox_')) {
+      throw new Error('[GeniusPay] FATAL: Clé sandbox (pk_sandbox_...) détectée dans NODE_ENV=production. Configurez GENIUSPAY_API_KEY avec une clé live (pk_live_...).');
+    }
+    if (apiSecret && apiSecret.startsWith('sk_sandbox_')) {
+      throw new Error('[GeniusPay] FATAL: Secret sandbox (sk_sandbox_...) détecté dans NODE_ENV=production. Configurez GENIUSPAY_API_SECRET avec un secret live (sk_live_...).');
+    }
+    return { apiKey, apiSecret, webhookSecret };
+  }
+  if (nodeEnv === 'development') {
+    const apiKey = env.GENIUSPAY_SANDBOX_API_KEY || null;
+    const apiSecret = env.GENIUSPAY_SANDBOX_API_SECRET || null;
+    const webhookSecret = env.GENIUSPAY_SANDBOX_WEBHOOK_SECRET || null;
+    if (apiKey && apiKey.startsWith('pk_live_')) {
+      throw new Error('[GeniusPay] FATAL: Clé live (pk_live_...) détectée dans NODE_ENV=development. Configurez GENIUSPAY_SANDBOX_API_KEY avec une clé sandbox (pk_sandbox_...).');
+    }
+    if (apiSecret && apiSecret.startsWith('sk_live_')) {
+      throw new Error('[GeniusPay] FATAL: Secret live (sk_live_...) détecté dans NODE_ENV=development. Configurez GENIUSPAY_SANDBOX_API_SECRET avec un secret sandbox (sk_sandbox_...).');
+    }
+    return { apiKey, apiSecret, webhookSecret };
+  }
+  // test / autre — pas de garde (les mocks définissent des valeurs arbitraires)
+  return {
+    apiKey: env.GENIUSPAY_API_KEY || null,
+    apiSecret: env.GENIUSPAY_API_SECRET || null,
+    webhookSecret: env.GENIUSPAY_WEBHOOK_SECRET || null,
+  };
+}
+
+const _resolved = _selectCredentials(process.env.NODE_ENV, process.env);
+const API_KEY = _resolved.apiKey;
+const API_SECRET = _resolved.apiSecret;
+const WEBHOOK_SECRET = _resolved.webhookSecret;
+
+if (!API_KEY) logger.warn('[GeniusPay] Clé API absente — paiements désactivés');
+if (!API_SECRET) logger.warn('[GeniusPay] Secret API absent — paiements désactivés');
+if (!WEBHOOK_SECRET) logger.warn('[GeniusPay] Secret webhook absent — vérification des webhooks désactivée');
 
 // Get configuration
 const config = getConfig('geniuspay');
@@ -237,4 +277,6 @@ module.exports = {
   circuitBreaker,
   rateLimiter,
   client,
+  // Exposed for unit testing of credential selection
+  _selectCredentials,
 };

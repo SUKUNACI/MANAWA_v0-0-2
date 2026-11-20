@@ -387,8 +387,8 @@ describe('POST /api/v1/webhooks/geniuspay — subscription path', () => {
 
     const res = await request(app)
       .post('/api/v1/webhooks/geniuspay')
-      .set('x-geniuspay-signature', 'sig')
-      .set('x-geniuspay-timestamp', '9999999999')
+      .set('x-webhook-signature', 'sig')
+      .set('x-webhook-timestamp', '9999999999')
       .send(webhookPayload('payment.succeeded'));
 
     expect(res.status).toBe(200);
@@ -413,8 +413,8 @@ describe('POST /api/v1/webhooks/geniuspay — subscription path', () => {
 
     const res = await request(app)
       .post('/api/v1/webhooks/geniuspay')
-      .set('x-geniuspay-signature', 'sig')
-      .set('x-geniuspay-timestamp', '9999999999')
+      .set('x-webhook-signature', 'sig')
+      .set('x-webhook-timestamp', '9999999999')
       .send(webhookPayload('payment.succeeded'));
 
     expect(res.status).toBe(200);
@@ -432,8 +432,8 @@ describe('POST /api/v1/webhooks/geniuspay — subscription path', () => {
 
     const res = await request(app)
       .post('/api/v1/webhooks/geniuspay')
-      .set('x-geniuspay-signature', 'sig')
-      .set('x-geniuspay-timestamp', '9999999999')
+      .set('x-webhook-signature', 'sig')
+      .set('x-webhook-timestamp', '9999999999')
       .send(webhookPayload('payment.succeeded', { amount: 1000 }));
 
     // Amount mismatch: no paid benefits — subscription stays PENDING_PAYMENT for admin review
@@ -453,8 +453,8 @@ describe('POST /api/v1/webhooks/geniuspay — subscription path', () => {
 
     const res = await request(app)
       .post('/api/v1/webhooks/geniuspay')
-      .set('x-geniuspay-signature', 'sig')
-      .set('x-geniuspay-timestamp', '9999999999')
+      .set('x-webhook-signature', 'sig')
+      .set('x-webhook-timestamp', '9999999999')
       .send(webhookPayload('payment.failed', { failure_reason: 'insufficient_funds' }));
 
     expect(res.status).toBe(200);
@@ -477,8 +477,8 @@ describe('POST /api/v1/webhooks/geniuspay — subscription path', () => {
 
     const res = await request(app)
       .post('/api/v1/webhooks/geniuspay')
-      .set('x-geniuspay-signature', 'sig')
-      .set('x-geniuspay-timestamp', '9999999999')
+      .set('x-webhook-signature', 'sig')
+      .set('x-webhook-timestamp', '9999999999')
       .send(webhookPayload('payment.failed'));
 
     expect(res.status).toBe(200);
@@ -496,8 +496,8 @@ describe('POST /api/v1/webhooks/geniuspay — subscription path', () => {
 
     const res = await request(app)
       .post('/api/v1/webhooks/geniuspay')
-      .set('x-geniuspay-signature', 'sig')
-      .set('x-geniuspay-timestamp', '9999999999')
+      .set('x-webhook-signature', 'sig')
+      .set('x-webhook-timestamp', '9999999999')
       .send(webhookPayload('payment.cancelled'));
 
     expect(res.status).toBe(200);
@@ -515,8 +515,8 @@ describe('POST /api/v1/webhooks/geniuspay — subscription path', () => {
 
     const res = await request(app)
       .post('/api/v1/webhooks/geniuspay')
-      .set('x-geniuspay-signature', 'sig')
-      .set('x-geniuspay-timestamp', '9999999999')
+      .set('x-webhook-signature', 'sig')
+      .set('x-webhook-timestamp', '9999999999')
       .send(webhookPayload('payment.expired'));
 
     expect(res.status).toBe(200);
@@ -528,8 +528,8 @@ describe('POST /api/v1/webhooks/geniuspay — subscription path', () => {
 
     const res = await request(app)
       .post('/api/v1/webhooks/geniuspay')
-      .set('x-geniuspay-signature', 'sig')
-      .set('x-geniuspay-timestamp', '9999999999')
+      .set('x-webhook-signature', 'sig')
+      .set('x-webhook-timestamp', '9999999999')
       .send(webhookPayload('payment.succeeded', { reference: 'unknown-ref' }));
 
     expect(res.status).toBe(200);
@@ -540,8 +540,8 @@ describe('POST /api/v1/webhooks/geniuspay — subscription path', () => {
 
     const res = await request(app)
       .post('/api/v1/webhooks/geniuspay')
-      .set('x-geniuspay-signature', 'bad-sig')
-      .set('x-geniuspay-timestamp', '9999999999')
+      .set('x-webhook-signature', 'bad-sig')
+      .set('x-webhook-timestamp', '9999999999')
       .send(webhookPayload('payment.succeeded'));
 
     expect(res.status).toBe(401);
@@ -552,8 +552,8 @@ describe('POST /api/v1/webhooks/geniuspay — subscription path', () => {
 
     const res = await request(app)
       .post('/api/v1/webhooks/geniuspay')
-      .set('x-geniuspay-signature', 'sig')
-      .set('x-geniuspay-timestamp', '1000000000')
+      .set('x-webhook-signature', 'sig')
+      .set('x-webhook-timestamp', '1000000000')
       .send(webhookPayload('payment.succeeded'));
 
     expect(res.status).toBe(401);
@@ -576,8 +576,8 @@ describe('POST /api/v1/webhooks/geniuspay — subscription path', () => {
 
     await request(app)
       .post('/api/v1/webhooks/geniuspay')
-      .set('x-geniuspay-signature', 'sig')
-      .set('x-geniuspay-timestamp', '9999999999')
+      .set('x-webhook-signature', 'sig')
+      .set('x-webhook-timestamp', '9999999999')
       .send(webhookPayload('payment.succeeded'));
 
     const updateData = prisma.subscription.update.mock.calls[0][0].data;
@@ -597,8 +597,8 @@ describe('POST /api/v1/webhooks/geniuspay — subscription path', () => {
 
     const res = await request(app)
       .post('/api/v1/webhooks/geniuspay')
-      .set('x-geniuspay-signature', 'sig')
-      .set('x-geniuspay-timestamp', '9999999999')
+      .set('x-webhook-signature', 'sig')
+      .set('x-webhook-timestamp', '9999999999')
       .send(webhookPayload('payment.succeeded'));
 
     expect(res.status).toBe(200);
@@ -838,8 +838,8 @@ describe('POST /api/v1/webhooks/geniuspay — via attempt', () => {
 
     const res = await request(app)
       .post('/api/v1/webhooks/geniuspay')
-      .set('x-geniuspay-signature', 'sig')
-      .set('x-geniuspay-timestamp', '9999999999')
+      .set('x-webhook-signature', 'sig')
+      .set('x-webhook-timestamp', '9999999999')
       .send(attemptWebhookPayload('payment.succeeded', { reference: 'gp-ref' }));
 
     expect(res.status).toBe(200);
@@ -869,8 +869,8 @@ describe('POST /api/v1/webhooks/geniuspay — via attempt', () => {
 
     const res = await request(app)
       .post('/api/v1/webhooks/geniuspay')
-      .set('x-geniuspay-signature', 'sig')
-      .set('x-geniuspay-timestamp', '9999999999')
+      .set('x-webhook-signature', 'sig')
+      .set('x-webhook-timestamp', '9999999999')
       .send(attemptWebhookPayload('payment.succeeded', { reference: 'gp-ref' }));
 
     expect(res.status).toBe(200);
@@ -888,8 +888,8 @@ describe('POST /api/v1/webhooks/geniuspay — via attempt', () => {
 
     const res = await request(app)
       .post('/api/v1/webhooks/geniuspay')
-      .set('x-geniuspay-signature', 'sig')
-      .set('x-geniuspay-timestamp', '9999999999')
+      .set('x-webhook-signature', 'sig')
+      .set('x-webhook-timestamp', '9999999999')
       .send(attemptWebhookPayload('payment.succeeded', { reference: 'gp-ref' }));
 
     expect(res.status).toBe(200);
@@ -907,8 +907,8 @@ describe('POST /api/v1/webhooks/geniuspay — via attempt', () => {
 
     const res = await request(app)
       .post('/api/v1/webhooks/geniuspay')
-      .set('x-geniuspay-signature', 'sig')
-      .set('x-geniuspay-timestamp', '9999999999')
+      .set('x-webhook-signature', 'sig')
+      .set('x-webhook-timestamp', '9999999999')
       .send(attemptWebhookPayload('payment.succeeded', { reference: 'gp-ref' }));
 
     expect(res.status).toBe(200);

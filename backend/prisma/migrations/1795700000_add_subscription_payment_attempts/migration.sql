@@ -1,3 +1,5 @@
+BEGIN;
+
 -- Migration: 1795700000_add_subscription_payment_attempts
 -- Implements the SubscriptionPaymentAttempt model.
 --
@@ -100,3 +102,5 @@ CREATE TRIGGER "SubscriptionPaymentAttempt_updatedAt_trigger"
   BEFORE UPDATE ON "SubscriptionPaymentAttempt"
   FOR EACH ROW
   EXECUTE FUNCTION update_subscription_payment_attempt_updated_at();
+
+COMMIT;
