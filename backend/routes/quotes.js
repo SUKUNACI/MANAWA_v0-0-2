@@ -8,6 +8,7 @@ const { body } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const prisma = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { requireIdentityVerified } = require('../middleware/requireIdentityVerified');
 const { handleValidationErrors } = require('../middleware/validateInput');
 const { sendPushNotification } = require('../config/pushNotifications');
 const generateQuotePdf = require('../utils/generateQuotePdf');
@@ -51,6 +52,7 @@ const writeLimiter = rateLimit({
 router.post('/',
   requireAuth,
   requireRole('PROFESSIONAL'),
+  requireIdentityVerified,
   createQuoteLimiter,
   body('projectId').notEmpty().trim(),
   body('description').notEmpty().trim().isLength({ max: 5000 }),
@@ -73,9 +75,6 @@ router.post('/',
       }
 
       if (!pro) return res.status(404).json({ error: 'Profil professionnel introuvable', code: 'PRO_PROFILE_NOT_FOUND' });
-      if (!pro.verifiedByAdmin) {
-        return res.status(403).json({ error: "Votre identité doit être vérifiée avant de pouvoir envoyer un devis. Rendez-vous dans Compte → Vérification d'identité.", code: 'IDENTITY_NOT_VERIFIED' });
-      }
 
       const quoteTier = getActiveTier(pro.subscription, pro);
       const quoteTierCfg = getTierConfig(quoteTier);
@@ -129,7 +128,7 @@ router.post('/',
 );
 
 // POST /api/quotes/:id/revise
-router.post('/:id/revise', writeLimiter, requireAuth, requireRole('PROFESSIONAL'), async (req, res, next) => {
+router.post('/:id/revise', writeLimiter, requireAuth, requireRole('PROFESSIONAL'), requireIdentityVerified, async (req, res, next) => {
   try {
     let pro;
     try {

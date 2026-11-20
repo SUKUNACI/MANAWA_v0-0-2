@@ -80,8 +80,10 @@ class AdminModule {
       const data = { identityStatus: 'APPROVED', verifiedByAdmin: true };
 
       if (!pro.trialEndsAt) {
-        const trialEnd = new Date();
-        trialEnd.setDate(trialEnd.getDate() + 30);
+        const now = new Date();
+        const trialEnd = new Date(now);
+        trialEnd.setDate(trialEnd.getDate() + 14);
+        data.trialStartedAt = now;
         data.trialEndsAt = trialEnd;
       }
 

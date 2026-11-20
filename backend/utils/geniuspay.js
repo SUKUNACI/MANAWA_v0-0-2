@@ -188,16 +188,18 @@ async function refundPayment(reference, amount, reason) {
   });
 }
 
-// ERROR #4: Use crypto.timingSafeEqual for consistency - prevent timing attacks
 // Vérifier la signature d'un webhook
-function verifyWebhookSignature(signature, timestamp, payload) {
+// rawBody doit être le corps brut de la requête (string) — jamais un objet re-sérialisé,
+// car JSON.stringify(JSON.parse(raw)) peut altérer l'ordre des clés ou le format des nombres.
+function verifyWebhookSignature(signature, timestamp, rawBody) {
   if (!WEBHOOK_SECRET) {
     console.warn('GENIUSPAY_WEBHOOK_SECRET not configured');
     return false;
   }
 
-  // Format: signature = HMAC-SHA256(timestamp + "." + json_payload, secret)
-  const data = `${timestamp}.${JSON.stringify(payload)}`;
+  // Format: signature = HMAC-SHA256(timestamp + "." + raw_body_string, secret)
+  const bodyStr = typeof rawBody === 'string' ? rawBody : JSON.stringify(rawBody);
+  const data = `${timestamp}.${bodyStr}`;
   const expectedSignature = crypto
     .createHmac('sha256', WEBHOOK_SECRET)
     .update(data)

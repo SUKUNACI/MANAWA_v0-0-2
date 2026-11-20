@@ -5,7 +5,18 @@ const { proToken, clientToken } = require('./helpers');
 jest.mock('../config/db', () => ({
   user:         { findUnique: jest.fn() },
   professional: { findUnique: jest.fn() },
-  subscription: { upsert: jest.fn(), updateMany: jest.fn() },
+  subscription: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn(), update: jest.fn().mockResolvedValue({}), updateMany: jest.fn() },
+  subscriptionPaymentAttempt: {
+    findUnique: jest.fn().mockResolvedValue(null),
+    findFirst: jest.fn().mockResolvedValue(null),
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn().mockImplementation(({ data }) => Promise.resolve({
+      id: 'mock-attempt-id', geniuspayRef: null, status: data.status || 'CREATED', ...data,
+    })),
+    update: jest.fn().mockResolvedValue({}),
+    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+  },
+  payment:      { findFirst: jest.fn().mockResolvedValue(null) },
   promoCode:    { findUnique: jest.fn(), update: jest.fn() },
   promoUsage:   { findUnique: jest.fn(), create: jest.fn() },
   appConfig:    { upsert: jest.fn().mockResolvedValue({}) },

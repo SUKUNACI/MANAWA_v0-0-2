@@ -52,6 +52,17 @@ function getActiveTier(subscription, pro) {
     return subscription.tier || 'ESSENTIEL';
   }
 
+  // Grace period: professional retains their tier while they still have time to pay.
+  // Once gracePeriodEndsAt passes the cron job sets status to INACTIVE.
+  if (
+    subscription &&
+    subscription.status === 'GRACE_PERIOD' &&
+    subscription.gracePeriodEndsAt &&
+    new Date(subscription.gracePeriodEndsAt) > new Date()
+  ) {
+    return subscription.tier || 'ESSENTIEL';
+  }
+
   return 'GRATUIT';
 }
 
@@ -109,7 +120,11 @@ router.post('/validate-promo', paymentLimiter, requireAuth, requireRole('PROFESS
 );
 
 router.post('/checkout', paymentLimiter, requireAuth, requireRole('PROFESSIONAL'),
-  [body('tier').isIn(['ESSENTIEL', 'PRO', 'ELITE']).withMessage('Tier invalide'), body('promoCode').optional().trim().isLength({ min: 3, max: 50 }).withMessage('Code promo 3-50 caractères')],
+  [
+    body('tier').isIn(['ESSENTIEL', 'PRO', 'ELITE']).withMessage('Tier invalide'),
+    body('billingCycle').optional().isIn(['MONTHLY', 'YEARLY']).withMessage('Cycle invalide (MONTHLY ou YEARLY)'),
+    body('promoCode').optional().trim().isLength({ min: 3, max: 50 }).withMessage('Code promo 3-50 caractères'),
+  ],
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
@@ -121,7 +136,8 @@ router.post('/checkout', paymentLimiter, requireAuth, requireRole('PROFESSIONAL'
       });
       if (!pro) return res.status(404).json({ error: 'Professionnel non trouvé' });
 
-      const result = await subscription.createCheckout(req.body.tier, req.body.promoCode, pro);
+      const billingCycle = req.body.billingCycle || 'MONTHLY';
+      const result = await subscription.createCheckout(req.body.tier, req.body.promoCode, pro, billingCycle);
       res.json(result);
     } catch (err) {
       if (err.status) res.status(err.status).json({ error: err.message });
@@ -136,6 +152,151 @@ router.get('/success', async (req, res) => {
 
 router.get('/error', async (req, res) => {
   res.json({ success: false, message: 'Paiement annulé ou échoué' });
+});
+
+/**
+ * GET /api/subscriptions/history
+ * Returns the professional's full payment attempt history from SubscriptionPaymentAttempt.
+ * Each attempt is returned as a record, ordered newest first.
+ * Strictly scoped to the authenticated professional — no cross-professional data.
+ */
+router.get('/history', subscriptionReadLimiter, requireAuth, requireRole('PROFESSIONAL'), async (req, res, next) => {
+  try {
+    const pro = await prisma.professional.findUnique({
+      where: { userId: req.user.id },
+      include: {
+        subscription: {
+          select: {
+            id: true,
+            tier: true,
+            billingCycle: true,
+            status: true,
+            expiresAt: true,
+            gracePeriodEndsAt: true,
+            paymentAttempts: {
+              orderBy: { createdAt: 'desc' },
+              select: {
+                id: true,
+                geniuspayRef: true,
+                provider: true,
+                tier: true,
+                billingCycle: true,
+                expectedAmount: true,
+                confirmedAmount: true,
+                status: true,
+                confirmedAt: true,
+                createdAt: true,
+                scheduledStartAt: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!pro) return res.status(404).json({ error: 'Professionnel non trouvé' });
+    if (!pro.subscription) return res.json({ payments: [], subscription: null });
+
+    const sub = pro.subscription;
+    const attempts = sub.paymentAttempts || [];
+
+    const payments = attempts.map(a => ({
+      id: a.id,
+      reference: a.geniuspayRef,
+      provider: a.provider,
+      tier: a.tier,
+      billingCycle: a.billingCycle,
+      amount: a.confirmedAmount ?? a.expectedAmount,
+      status: a.status,
+      paidAt: a.confirmedAt,
+      createdAt: a.createdAt,
+      scheduledStartAt: a.scheduledStartAt,
+    }));
+
+    res.json({
+      subscription: {
+        id: sub.id,
+        status: sub.status,
+        tier: sub.tier,
+        billingCycle: sub.billingCycle,
+        expiresAt: sub.expiresAt,
+        gracePeriodEndsAt: sub.gracePeriodEndsAt,
+      },
+      payments,
+      total: payments.length,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/subscriptions/receipt?attemptId=<id>
+ * Generates a PDF receipt for a specific confirmed SubscriptionPaymentAttempt.
+ * If no attemptId is provided, returns the most recent SUCCEEDED attempt.
+ * Returns 404 if no confirmed payment exists.
+ */
+router.get('/receipt', subscriptionReadLimiter, requireAuth, requireRole('PROFESSIONAL'), async (req, res, next) => {
+  try {
+    const pro = await prisma.professional.findUnique({
+      where: { userId: req.user.id },
+      include: {
+        subscription: {
+          select: { id: true, startedAt: true, expiresAt: true },
+        },
+        user: { select: { firstName: true, lastName: true, email: true } },
+      },
+    });
+
+    if (!pro) return res.status(404).json({ error: 'Professionnel non trouvé' });
+    if (!pro.subscription) return res.status(404).json({ error: 'Aucun abonnement trouvé' });
+
+    // Look up the requested attempt — must belong to this professional's subscription
+    let attempt;
+    if (req.query.attemptId) {
+      attempt = await prisma.subscriptionPaymentAttempt.findUnique({
+        where: { id: req.query.attemptId },
+      });
+      // Security: reject attempts that don't belong to this professional
+      if (!attempt || attempt.subscriptionId !== pro.subscription.id) {
+        return res.status(404).json({ error: 'Tentative non trouvée' });
+      }
+    } else {
+      // Default: most recent SUCCEEDED attempt
+      attempt = await prisma.subscriptionPaymentAttempt.findFirst({
+        where: { subscriptionId: pro.subscription.id, status: 'SUCCEEDED' },
+        orderBy: { confirmedAt: 'desc' },
+      });
+    }
+
+    if (!attempt || attempt.status !== 'SUCCEEDED') {
+      return res.status(404).json({ error: 'Aucun paiement confirmé' });
+    }
+
+    const { generateSubscriptionReceiptBuffer } = require('../utils/generateSubscriptionReceipt');
+    const reference = attempt.geniuspayRef || attempt.id;
+    const buffer = await generateSubscriptionReceiptBuffer({
+      professionalName: `${pro.user.firstName || ''} ${pro.user.lastName || ''}`.trim() || pro.user.email,
+      professionalEmail: pro.user.email,
+      tier: attempt.tier,
+      billingCycle: attempt.billingCycle || 'MONTHLY',
+      amount: attempt.confirmedAmount ?? attempt.expectedAmount,
+      reference,
+      paymentDate: attempt.confirmedAt,
+      startedAt: pro.subscription.startedAt,
+      expiresAt: pro.subscription.expiresAt,
+      receiptNumber: `SUB-${reference.slice(-8).toUpperCase()}`,
+    });
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="recu-abonnement-${attempt.tier}-${new Date(attempt.confirmedAt).toISOString().slice(0, 10)}.pdf"`,
+      'Content-Length': buffer.length,
+    });
+    res.send(buffer);
+  } catch (err) {
+    next(err);
+  }
 });
 
 module.exports = router;

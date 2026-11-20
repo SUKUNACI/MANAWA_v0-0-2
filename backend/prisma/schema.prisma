@@ -130,9 +130,13 @@ model Professional {
   lastExperienceUpdate    DateTime?
   idDocumentVersoUrl      String?
   trades                  String[]            @default([])
-  identityRejectionReason String?
-  trialEndsAt             DateTime?
-  companyCode             String?             @unique
+  identityRejectionReason     String?
+  trialEndsAt                 DateTime?
+  trialStartedAt              DateTime?
+  idDocumentHash              String?
+  idDocumentNumberEncrypted   String?
+  idDocumentType              String?             // CNI | PASSEPORT | TITRE_SEJOUR | PERMIS
+  companyCode                 String?             @unique
   companyMembers          CompanyMember[]     @relation("CompanyMembers")
   memberOf                CompanyMember?      @relation("MemberOf")
   promoUsages             PromoUsage[]
@@ -153,6 +157,7 @@ model Professional {
   @@index([trade])
   @@index([verifiedByAdmin, accountType])
   @@index([averageRating, createdAt])
+  @@index([idDocumentHash])
 }
 
 model PortfolioItem {
@@ -325,16 +330,85 @@ model QuoteItem {
 }
 
 model Subscription {
-  id             String       @id @default(uuid())
-  professionalId String       @unique
-  status         String       @default("INACTIVE")
-  tier           String       @default("ESSENTIEL")
-  transactionId  String?
-  startedAt      DateTime?
-  expiresAt      DateTime?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  professional   Professional @relation(fields: [professionalId], references: [id])
+  id                String       @id @default(uuid())
+  professionalId    String       @unique
+  status            String       @default("INACTIVE")
+  // Statuts possibles : INACTIVE | PENDING_PAYMENT | ACTIVE | GRACE_PERIOD
+  tier              String       @default("ESSENTIEL")
+  billingCycle      String       @default("MONTHLY")
+  // Cycle de facturation : MONTHLY | YEARLY
+  amount            Int?
+  // Montant en XOF au moment du checkout (après promo éventuelle)
+  transactionId     String?
+  geniuspayRef      String?
+  // Référence GeniusPay conservée pour compatibilité — la source de vérité est désormais
+  // SubscriptionPaymentAttempt. Ce champ reste utile comme index rapide de la dernière tentative.
+  startedAt         DateTime?
+  expiresAt         DateTime?
+  scheduledStartAt  DateTime?
+  // Début de facturation différé : si checkout pendant essai, facturation le lendemain de la fin d'essai
+  lastPaymentAt     DateTime?
+  // Dernière confirmation de paiement GeniusPay
+  gracePeriodEndsAt DateTime?
+  // Défini après un échec confirmé : 3 jours pour réessayer avant retour GRATUIT
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  professional      Professional @relation(fields: [professionalId], references: [id])
+  paymentAttempts   SubscriptionPaymentAttempt[]
+
+  @@index([geniuspayRef])
+  @@index([status, gracePeriodEndsAt])
+}
+
+// SubscriptionPaymentAttempt — enregistrement durable d'une tentative de paiement d'abonnement.
+//
+// Chaque appel à createCheckout() crée une nouvelle tentative indépendante.
+// La référence GeniusPay est unique par tentative : deux tentatives coexistent sans s'écraser.
+// Les webhooks et la réconciliation retrouvent l'abonnement via cette table, pas via Subscription.geniuspayRef.
+//
+// Statuts :
+//   CREATED          — tentative créée, GeniusPay pas encore interrogé
+//   PENDING          — checkout envoyé à GeniusPay, en attente de confirmation
+//   SUCCEEDED        — paiement confirmé par GeniusPay (montant vérifié)
+//   FAILED           — paiement échoué (confirmé par webhook ou réconciliation)
+//   CANCELLED        — utilisateur a annulé avant paiement
+//   EXPIRED          — lien de paiement expiré sans action
+//   REVIEW_REQUIRED  — montant absent ou incohérent — à traiter manuellement
+model SubscriptionPaymentAttempt {
+  id                String    @id @default(uuid())
+  subscriptionId    String
+  // Clé d'idempotence: empêche la création d'une nouvelle tentative si la même demande est répétée.
+  idempotencyKey    String    @unique
+  // Référence GeniusPay — null jusqu'à la réponse de GeniusPay (peut échouer avant attribution)
+  geniuspayRef      String?   @unique
+  provider          String    @default("geniuspay")
+  tier              String
+  billingCycle      String
+  // Montant attendu en XOF (calculé côté serveur depuis TIER_PRICING)
+  expectedAmount    Int
+  // Montant confirmé par GeniusPay (renseigné lors de la confirmation)
+  confirmedAmount   Int?
+  status            String    @default("CREATED")
+  // Données brutes GeniusPay (JSON string) — pour audit et débogage
+  providerData      String?
+  // Date à laquelle GeniusPay a confirmé le paiement
+  confirmedAt       DateTime?
+  // Lien vers un autre paiement confirmé sur la même période (double paiement détecté)
+  duplicateOfId     String?
+  scheduledStartAt  DateTime?
+  // Period covered by this payment attempt — used for duplicate-payment detection.
+  // periodStartAt = beginning of the billing period being purchased.
+  // periodEndAt   = computed expiry date for that period (= expiresAt if payment succeeds).
+  periodStartAt     DateTime?
+  periodEndAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  subscription      Subscription @relation(fields: [subscriptionId], references: [id])
+
+  @@index([subscriptionId])
+  @@index([geniuspayRef])
+  @@index([status])
+  @@index([subscriptionId, status])
 }
 
 model Payment {
