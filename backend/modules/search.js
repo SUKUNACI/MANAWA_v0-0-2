@@ -264,8 +264,6 @@ class SearchModule {
     const { applyFilters } = require('../utils/filter-helper');
     let where = {
       flags: { none: {} },
-      professional: { isNot: null },
-      author: { isNot: null },
       OR: [
         { comment: { contains: q, mode: 'insensitive' } },
         { professional: { user: { firstName: { contains: q, mode: 'insensitive' } } } },
@@ -312,8 +310,6 @@ class SearchModule {
     const { applyFilters } = require('../utils/filter-helper');
     let where = {
       flags: { none: {} },
-      professional: { isNot: null },
-      author: { isNot: null },
       OR: [
         { comment: { contains: q, mode: 'insensitive' } },
         { professional: { user: { firstName: { contains: q, mode: 'insensitive' } } } },
