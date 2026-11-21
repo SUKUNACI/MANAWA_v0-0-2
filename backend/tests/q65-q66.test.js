@@ -3,7 +3,7 @@
  *
  * Tests pour:
  * - Q65: Filtering Options (filter-helper.js)
- * - Q66: Full-Text Search Support via MeiliSearch (meilisearch.js, meilisearch-sync.js, search-global.js)
+ * - Q66: Full-Text Search Support via PostgreSQL (search-global.js)
  */
 
 const { validateFilters, applyFilters } = require('../utils/filter-helper');
@@ -102,106 +102,7 @@ describe('Q65: Filter Helper', () => {
   });
 });
 
-describe('Q66: MeiliSearch Configuration', () => {
-  // Note: These tests require MeiliSearch to be running
-  // Skip if MeiliSearch is not available
-
-  let meilisearchClient;
-
-  beforeAll(() => {
-    try {
-      const { client } = require('../config/meilisearch');
-      meilisearchClient = client;
-    } catch (err) {
-      console.warn('⚠️ MeiliSearch not available for testing');
-    }
-  });
-
-  it('should have correct indices configuration', () => {
-    const { INDICES_CONFIG } = require('../config/meilisearch');
-
-    const expectedIndices = ['professionals', 'projects', 'portfolio', 'packages', 'reviews'];
-    expect(Object.keys(INDICES_CONFIG)).toEqual(expect.arrayContaining(expectedIndices));
-
-    for (const indexName of expectedIndices) {
-      const config = INDICES_CONFIG[indexName];
-      expect(config.name).toBe(indexName);
-      expect(config.primaryKey).toBeDefined();
-      expect(config.searchableAttributes).toBeDefined();
-      expect(config.filterableAttributes).toBeDefined();
-    }
-  });
-
-  it('should export required functions', () => {
-    const meilisearch = require('../config/meilisearch');
-
-    expect(typeof meilisearch.getIndex).toBe('function');
-    expect(typeof meilisearch.ensureIndices).toBe('function');
-    expect(typeof meilisearch.healthCheck).toBe('function');
-    expect(typeof meilisearch.globalSearch).toBe('function');
-  });
-
-  it('should properly format data for MeiliSearch', () => {
-    // Test data formatting (mocked example)
-    const professional = {
-      id: '123',
-      firstName: 'John',
-      lastName: 'Doe',
-      trade: 'Electrician',
-      city: 'Paris',
-      averageRating: 4.5,
-      verifiedByAdmin: true,
-    };
-
-    const formatted = {
-      id: professional.id,
-      firstName: professional.firstName,
-      lastName: professional.lastName,
-      trade: professional.trade,
-      city: professional.city,
-      averageRating: professional.averageRating,
-      verifiedByAdmin: professional.verifiedByAdmin,
-    };
-
-    expect(formatted.id).toBe('123');
-    expect(formatted.firstName).toBe('John');
-    expect(formatted.averageRating).toBe(4.5);
-  });
-});
-
-describe('Q66: MeiliSearch Sync Job', () => {
-  it('should export sync functions', () => {
-    const sync = require('../jobs/meilisearch-sync');
-
-    expect(typeof sync.syncAllIndices).toBe('function');
-    expect(typeof sync.syncProfessionals).toBe('function');
-    expect(typeof sync.syncProjects).toBe('function');
-    expect(typeof sync.syncPortfolio).toBe('function');
-    expect(typeof sync.syncPackages).toBe('function');
-    expect(typeof sync.syncReviews).toBe('function');
-  });
-
-  it('should handle batch processing correctly', () => {
-    // Test batch size constants
-    const BATCH_SIZE = 100;
-    expect(BATCH_SIZE).toBe(100);
-
-    // Test that batching logic works
-    const items = Array.from({ length: 250 }, (_, i) => ({ id: i }));
-    const batches = [];
-
-    for (let i = 0; i < items.length; i += BATCH_SIZE) {
-      batches.push(items.slice(i, i + BATCH_SIZE));
-    }
-
-    expect(batches).toHaveLength(3);
-    expect(batches[0]).toHaveLength(100);
-    expect(batches[1]).toHaveLength(100);
-    expect(batches[2]).toHaveLength(50);
-  });
-});
-
-describe('Q65 + Q66: Search Integration', () => {
+describe('Q65: Search Integration', () => {
   describe('Filter parsing from query params', () => {
     it('should parse filters[key]=value format', () => {
       const query = {
@@ -239,7 +140,7 @@ describe('Q65 + Q66: Search Integration', () => {
     });
   });
 
-  describe('MeiliSearch filter construction', () => {
+  describe('Filter string construction', () => {
     it('should build rating filters correctly', () => {
       const queryFilters = { minRating: '3.5', maxRating: '5' };
       const filters = [];

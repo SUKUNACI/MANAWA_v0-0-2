@@ -5,7 +5,7 @@
 
 const logger = require('../utils/logger');
 
-const VALID_SERVICES = ['render', 'supabase', 'redis', 'cloudinary', 'mailjet', 'twilio', 'meilisearch', 'other'];
+const VALID_SERVICES = ['render', 'supabase', 'redis', 'cloudinary', 'mailjet', 'twilio', 'other'];
 
 class AdminCostsModule {
   constructor(prisma) {

@@ -1,12 +1,10 @@
 /**
- * Global Search Route - Q66: Full-Text Search via MeiliSearch
+ * Global Search Route — PostgreSQL full-text search
  *
  * GET /api/v1/search/global?q=&filters[]=
  *
- * Recherche combinée dans tous les indices:
+ * Recherche combinée via PostgreSQL:
  * - professionals, projects, portfolio, packages, reviews
- *
- * Avec support des filtres définis dans Q65
  */
 
 const express = require('express');
@@ -18,13 +16,11 @@ const SearchModule = require('../modules/search');
 const SearchGlobalModule = require('../modules/search-global');
 const prisma = require('../config/db');
 const logger = require('../utils/logger');
-const { triggerRecoverySync, handleStartupRecovery } = require('../config/meilisearch-recovery');
 
 const router = express.Router();
 const searchModule = new SearchModule(prisma);
 const searchGlobalModule = new SearchGlobalModule(searchModule, prisma, logger);
 
-// Rate limiters
 const globalSearchLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 100,
@@ -34,44 +30,25 @@ const globalSearchLimiter = rateLimit({
   message: { error: 'Trop de requêtes de recherche, réessayez dans une minute' },
 });
 
-/**
- * Validation rules for all search endpoints
- */
 const searchValidationRules = [
   query('q').trim().notEmpty().isLength({ min: 2, max: 200 }).withMessage('q required, 2-200 chars'),
   query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('limit must be 1-50'),
   query('offset').optional().isInt({ min: 0 }).withMessage('offset must be >= 0'),
 ];
 
-/**
- * Generic search handler factory using SearchGlobalModule
- * Delegates all validation and search logic to the module
- * Supports both global search (type=null) and type-specific search
- *
- * Handler orchestration:
- * 1. Validate search term via searchGlobalModule.validateSearchTerm()
- * 2. Validate & clamp pagination via searchGlobalModule.validatePagination()
- * 3. Validate type (if type-specific) via searchGlobalModule.validateType()
- * 4. Parse filters via searchGlobalModule.parseFilters()
- * 5. Execute search via searchGlobalModule.searchByType() or searchGlobalModule.searchGlobal()
- * 6. Delegate logging to module (centralized)
- */
 const createSearchHandler = (type = null) => {
   return async (req, res, next) => {
     try {
       const { q, limit = 10, offset = 0 } = req.query;
 
-      // Validate search term
       const termValidation = searchGlobalModule.validateSearchTerm(q);
       if (!termValidation.valid) {
         return res.status(400).json({ error: termValidation.errors[0] });
       }
 
-      // Validate & clamp pagination
       const paginationValidation = searchGlobalModule.validatePagination(limit, offset);
       const { clamped } = paginationValidation;
 
-      // Validate type (if type-specific search)
       if (type) {
         const typeValidation = searchGlobalModule.validateType(type);
         if (!typeValidation.valid) {
@@ -79,71 +56,56 @@ const createSearchHandler = (type = null) => {
         }
       }
 
-      // Parse filters from query parameters
       const filters = searchGlobalModule.parseFilters(req.query);
+      const term = q.trim();
+      const pgLimit = clamped.limit;
+      const pgSkip = clamped.offset;
 
-      // Execute search via SearchGlobalModule
-      // Module handles:
-      // - searchByType(type, term, { limit, offset, filters })
-      // - searchGlobal(term, { limit, offset, filters })
-      // - Centralized logging
-      const result = type
-        ? await searchGlobalModule.searchByType(type, q.trim(), {
-            limit: clamped.limit,
-            offset: clamped.offset,
-            filters,
-          })
-        : await searchGlobalModule.searchGlobal(q.trim(), {
-            limit: clamped.limit,
-            offset: clamped.offset,
-            filters,
-          });
+      if (!type) {
+        // Global search — query all 5 types in parallel via PostgreSQL
+        const [professionals, projects, portfolio, packages, reviews] = await Promise.all([
+          searchModule.searchProfessionals(term, { skip: pgSkip, take: pgLimit, filters }),
+          searchModule.searchProjects(term, { skip: pgSkip, take: pgLimit, filters }),
+          searchModule.searchPortfolio(term, { skip: pgSkip, take: pgLimit }),
+          searchModule.searchPackages(term, { skip: pgSkip, take: pgLimit, filters }),
+          searchModule.searchReviews(term, { skip: pgSkip, take: pgLimit }),
+        ]);
 
-      res.json(result);
-    } catch (err) {
-      // Case 1: HTML reçu au réveil → retry avec backoff
-      if (err.message === 'MeiliSearch startup') {
-        logger.warn('[SearchGlobal] Startup detected, attempting recovery', { type: type || 'global' });
-        try {
-          // Reessayer la recherche avec backoff (service peut répondre maintenant)
-          const retryResult = await handleStartupRecovery(async () => {
-            return type
-              ? await searchGlobalModule.searchByType(type, q.trim(), { limit: clamped.limit, offset: clamped.offset, filters })
-              : await searchGlobalModule.searchGlobal(q.trim(), { limit: clamped.limit, offset: clamped.offset, filters });
-          });
-          return res.json(retryResult);
-        } catch (retryErr) {
-          logger.warn('[SearchGlobal] Startup recovery retry exhausted', { error: retryErr.message });
-          // Return empty (service still starting, but recovery now in progress)
-          const emptyResult = {
-            professionals: { hits: [] },
-            projects: { hits: [] },
-            portfolio: { hits: [] },
-            packages: { hits: [] },
-            reviews: { hits: [] },
-          };
-          return res.json(type ? { hits: [] } : emptyResult);
-        }
-      }
-
-      // Case 2: Index absent après redémarrage → resync unique
-      if (err.message === 'MeiliSearch missing_index') {
-        logger.warn('[SearchGlobal] Missing index detected, triggering resync', { type: type || 'global' });
-        triggerRecoverySync('missing_index').catch(recErr => {
-          logger.error('[SearchGlobal] Resync failed', { error: recErr.message });
+        return res.json({
+          query: term,
+          filters,
+          pagination: { limit: pgLimit, offset: pgSkip },
+          results: {
+            professionals: { hits: professionals, processingTimeMs: 0 },
+            projects: { hits: projects, processingTimeMs: 0 },
+            portfolio: { hits: portfolio, processingTimeMs: 0 },
+            packages: { hits: packages, processingTimeMs: 0 },
+            reviews: { hits: reviews, processingTimeMs: 0 },
+          },
+          total: professionals.length + projects.length + portfolio.length + packages.length + reviews.length,
         });
-        // Return empty (indices being recreated)
-        const emptyResult = {
-          professionals: { hits: [] },
-          projects: { hits: [] },
-          portfolio: { hits: [] },
-          packages: { hits: [] },
-          reviews: { hits: [] },
-        };
-        return res.json(type ? { hits: [] } : emptyResult);
       }
 
-      // Case 3: Auth error ou autre → ne pas resyncer
+      // Type-specific search via PostgreSQL
+      const typeMethodMap = {
+        professionals: () => searchModule.searchProfessionals(term, { skip: pgSkip, take: pgLimit, filters }),
+        projects: () => searchModule.searchProjects(term, { skip: pgSkip, take: pgLimit, filters }),
+        portfolio: () => searchModule.searchPortfolio(term, { skip: pgSkip, take: pgLimit }),
+        packages: () => searchModule.searchPackages(term, { skip: pgSkip, take: pgLimit, filters }),
+        reviews: () => searchModule.searchReviews(term, { skip: pgSkip, take: pgLimit }),
+      };
+
+      const hits = await typeMethodMap[type]();
+
+      return res.json({
+        query: term,
+        filters,
+        pagination: { limit: pgLimit, offset: pgSkip },
+        [type]: hits,
+        processingTimeMs: 0,
+      });
+
+    } catch (err) {
       logger.error('[SearchGlobal] Handler failed', {
         type: type || 'global',
         error: err.message,
@@ -153,22 +115,11 @@ const createSearchHandler = (type = null) => {
   };
 };
 
-// GET / — Global search across all indices
 router.get('/', globalSearchLimiter, optionalAuth, searchValidationRules, handleValidationErrors, createSearchHandler());
-
-// GET /professionals — Search professionals only
 router.get('/professionals', globalSearchLimiter, optionalAuth, searchValidationRules, handleValidationErrors, createSearchHandler('professionals'));
-
-// GET /packages — Search packages only
 router.get('/packages', globalSearchLimiter, optionalAuth, searchValidationRules, handleValidationErrors, createSearchHandler('packages'));
-
-// GET /portfolio — Search portfolio only
 router.get('/portfolio', globalSearchLimiter, optionalAuth, searchValidationRules, handleValidationErrors, createSearchHandler('portfolio'));
-
-// GET /projects — Search projects only
 router.get('/projects', globalSearchLimiter, optionalAuth, searchValidationRules, handleValidationErrors, createSearchHandler('projects'));
-
-// GET /reviews — Search reviews only
 router.get('/reviews', globalSearchLimiter, optionalAuth, searchValidationRules, handleValidationErrors, createSearchHandler('reviews'));
 
 module.exports = router;

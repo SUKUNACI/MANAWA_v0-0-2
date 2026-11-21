@@ -5,10 +5,10 @@
 // ─── Q87: Cost Tracking ───────────────────────────────────────────────────────
 
 describe('Q87: Cost Tracking', () => {
-  const VALID_SERVICES = ['render', 'supabase', 'redis', 'cloudinary', 'mailjet', 'twilio', 'meilisearch', 'other'];
+  const VALID_SERVICES = ['render', 'supabase', 'redis', 'cloudinary', 'mailjet', 'twilio', 'other'];
 
-  it('valid services list has 8 entries', () => {
-    expect(VALID_SERVICES.length).toBe(8);
+  it('valid services list has 7 entries', () => {
+    expect(VALID_SERVICES.length).toBe(7);
   });
 
   it('month format validation — YYYY-MM', () => {

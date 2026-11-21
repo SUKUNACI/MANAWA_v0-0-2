@@ -44,7 +44,6 @@
     "js-yaml": "^4.1.0",
     "jsonwebtoken": "^9.0.2",
     "lru-cache": "^11.5.3",
-    "meilisearch": "^0.43.0",
     "multer": "^2.5.0",
     "node-cron": "^3.0.3",
     "node-mailjet": "^6.0.11",

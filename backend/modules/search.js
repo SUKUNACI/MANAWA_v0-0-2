@@ -2,14 +2,12 @@
 
 const logger = require('../utils/logger');
 const searchCache = require('../utils/search-cache');
-const { globalSearch } = require('../config/meilisearch');
 const { getFacetedCounts } = require('../utils/aggregation-helper');
 
 /**
  * Search Module — Centralized search logic for professionals, projects, clients
  * Handles:
- * - Local PostgreSQL search (professionals, portfolio, packages)
- * - Global MeiliSearch (all entities)
+ * - PostgreSQL full-text search (professionals, projects, portfolio, packages, reviews)
  * - Faceted search aggregation
  * - Query construction, filtering, caching, result formatting
  */
@@ -204,6 +202,131 @@ class SearchModule {
     return this.prisma.servicePackage.count({ where });
   }
 
+  async searchProjects(q, { skip = 0, take = 20, filters = {} } = {}) {
+    const { applyFilters } = require('../utils/filter-helper');
+    let where = {
+      client: { deletedAt: null },
+      status: { in: ['OPEN', 'IN_PROGRESS'] },
+      OR: [
+        { title: { contains: q, mode: 'insensitive' } },
+        { description: { contains: q, mode: 'insensitive' } },
+        { tradeNeeded: { contains: q, mode: 'insensitive' } },
+        { city: { contains: q, mode: 'insensitive' } },
+      ],
+    };
+
+    where = applyFilters('projects', where, filters);
+
+    return this.prisma.project.findMany({
+      where,
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        tradeNeeded: true,
+        budgetMin: true,
+        budgetMax: true,
+        city: true,
+        status: true,
+        createdAt: true,
+        client: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+          },
+        },
+      },
+      skip,
+      take,
+    });
+  }
+
+  async countProjects(q, filters = {}) {
+    const { applyFilters } = require('../utils/filter-helper');
+    let where = {
+      client: { deletedAt: null },
+      status: { in: ['OPEN', 'IN_PROGRESS'] },
+      OR: [
+        { title: { contains: q, mode: 'insensitive' } },
+        { description: { contains: q, mode: 'insensitive' } },
+        { tradeNeeded: { contains: q, mode: 'insensitive' } },
+        { city: { contains: q, mode: 'insensitive' } },
+      ],
+    };
+
+    where = applyFilters('projects', where, filters);
+    return this.prisma.project.count({ where });
+  }
+
+  async searchReviews(q, { skip = 0, take = 20, filters = {} } = {}) {
+    const { applyFilters } = require('../utils/filter-helper');
+    let where = {
+      flags: { none: {} },
+      professional: { isNot: null },
+      author: { isNot: null },
+      OR: [
+        { comment: { contains: q, mode: 'insensitive' } },
+        { professional: { user: { firstName: { contains: q, mode: 'insensitive' } } } },
+        { professional: { user: { lastName: { contains: q, mode: 'insensitive' } } } },
+        { author: { firstName: { contains: q, mode: 'insensitive' } } },
+        { author: { lastName: { contains: q, mode: 'insensitive' } } },
+      ],
+    };
+
+    where = applyFilters('reviews', where, filters);
+
+    return this.prisma.review.findMany({
+      where,
+      select: {
+        id: true,
+        rating: true,
+        comment: true,
+        createdAt: true,
+        professional: {
+          select: {
+            id: true,
+            user: {
+              select: {
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        },
+        author: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+      skip,
+      take,
+    });
+  }
+
+  async countReviews(q, filters = {}) {
+    const { applyFilters } = require('../utils/filter-helper');
+    let where = {
+      flags: { none: {} },
+      professional: { isNot: null },
+      author: { isNot: null },
+      OR: [
+        { comment: { contains: q, mode: 'insensitive' } },
+        { professional: { user: { firstName: { contains: q, mode: 'insensitive' } } } },
+        { professional: { user: { lastName: { contains: q, mode: 'insensitive' } } } },
+        { author: { firstName: { contains: q, mode: 'insensitive' } } },
+        { author: { lastName: { contains: q, mode: 'insensitive' } } },
+      ],
+    };
+
+    where = applyFilters('reviews', where, filters);
+    return this.prisma.review.count({ where });
+  }
+
   async getHistory(userId) {
     const row = await this.prisma.appConfig.findUnique({ where: { key: `search_history_${userId}` } });
     if (!row) return [];
@@ -253,157 +376,6 @@ class SearchModule {
 
   clampPage(raw) {
     return Math.max(1, parseInt(raw) || 1);
-  }
-
-  /**
-   * MeiliSearch Utilities
-   */
-
-  clampLimitGlobal(raw, defaultLimit = this.DEFAULT_LIMIT) {
-    const n = parseInt(raw) || defaultLimit;
-    return Math.min(Math.max(1, n), this.MAX_LIMIT);
-  }
-
-  buildMeilisearchFilters(queryFilters = {}) {
-    if (!queryFilters) return [];
-
-    const filters = [];
-
-    // Rating filters
-    if (queryFilters.minRating !== undefined) {
-      filters.push(`averageRating >= ${parseFloat(queryFilters.minRating)}`);
-    }
-    if (queryFilters.maxRating !== undefined) {
-      filters.push(`averageRating <= ${parseFloat(queryFilters.maxRating)}`);
-    }
-
-    // Price filters
-    if (queryFilters.minPrice !== undefined) {
-      filters.push(`price >= ${parseFloat(queryFilters.minPrice)}`);
-      filters.push(`subscription.monthlyPrice >= ${parseFloat(queryFilters.minPrice)}`);
-    }
-    if (queryFilters.maxPrice !== undefined) {
-      filters.push(`price <= ${parseFloat(queryFilters.maxPrice)}`);
-      filters.push(`subscription.monthlyPrice <= ${parseFloat(queryFilters.maxPrice)}`);
-    }
-
-    // Verified filter
-    if (queryFilters.verifiedOnly === 'true' || queryFilters.verifiedOnly === true) {
-      filters.push('verifiedByAdmin = true');
-    }
-
-    // City filter
-    if (queryFilters.city) {
-      const city = String(queryFilters.city).trim();
-      filters.push(`city = "${city}"`);
-    }
-
-    // Category filter
-    if (queryFilters.category) {
-      const category = String(queryFilters.category).trim();
-      filters.push(`category = "${category}"`);
-    }
-
-    return filters;
-  }
-
-  /**
-   * Global search via MeiliSearch
-   * @param {string} q - Search query
-   * @param {object} opts - { limit, offset, filters }
-   * @returns {Promise<object>} Aggregated results from all indices
-   */
-  async searchGlobal(q, { limit = this.DEFAULT_LIMIT, offset = 0, filters = {} } = {}) {
-    try {
-      const clampedLimit = this.clampLimitGlobal(limit);
-      const clampedOffset = Math.max(0, parseInt(offset) || 0);
-
-      const meilisearchFilters = this.buildMeilisearchFilters(filters);
-
-      logger.debug('[SearchModule] Global search', {
-        query: q,
-        limit: clampedLimit,
-        offset: clampedOffset,
-        filters: meilisearchFilters,
-      });
-
-      const results = await globalSearch(q, {
-        limit: clampedLimit,
-        offset: clampedOffset,
-        filters: meilisearchFilters.length > 0 ? meilisearchFilters : undefined,
-      });
-
-      return {
-        query: q,
-        filters,
-        pagination: { limit: clampedLimit, offset: clampedOffset },
-        results: {
-          professionals: {
-            hits: results.professionals?.hits || [],
-            processingTimeMs: results.professionals?.processingTimeMs || 0,
-          },
-          projects: {
-            hits: results.projects?.hits || [],
-            processingTimeMs: results.projects?.processingTimeMs || 0,
-          },
-          portfolio: {
-            hits: results.portfolio?.hits || [],
-            processingTimeMs: results.portfolio?.processingTimeMs || 0,
-          },
-          packages: {
-            hits: results.packages?.hits || [],
-            processingTimeMs: results.packages?.processingTimeMs || 0,
-          },
-          reviews: {
-            hits: results.reviews?.hits || [],
-            processingTimeMs: results.reviews?.processingTimeMs || 0,
-          },
-        },
-        total: (results.professionals?.hits?.length || 0) +
-               (results.projects?.hits?.length || 0) +
-               (results.portfolio?.hits?.length || 0) +
-               (results.packages?.hits?.length || 0) +
-               (results.reviews?.hits?.length || 0),
-      };
-    } catch (err) {
-      logger.error('[SearchModule] Global search failed', { error: err.message });
-      throw err;
-    }
-  }
-
-  /**
-   * Search specific type via MeiliSearch
-   * @param {string} type - Entity type (professionals, packages, portfolio)
-   * @param {string} q - Search query
-   * @param {object} opts - { limit, offset, filters }
-   * @returns {Promise<object>} Type-specific results
-   */
-  async searchGlobalByType(type, q, { limit = this.DEFAULT_LIMIT, offset = 0, filters = {} } = {}) {
-    try {
-      const clampedLimit = this.clampLimitGlobal(limit);
-      const clampedOffset = Math.max(0, parseInt(offset) || 0);
-
-      const meilisearchFilters = this.buildMeilisearchFilters(filters);
-
-      const results = await globalSearch(q, {
-        limit: clampedLimit,
-        offset: clampedOffset,
-        filters: meilisearchFilters.length > 0 ? meilisearchFilters : undefined,
-      });
-
-      const typeResults = results[type] || { hits: [], processingTimeMs: 0 };
-
-      return {
-        query: q,
-        filters,
-        pagination: { limit: clampedLimit, offset: clampedOffset },
-        [type]: typeResults.hits || [],
-        processingTimeMs: typeResults.processingTimeMs || 0,
-      };
-    } catch (err) {
-      logger.error('[SearchModule] Global search by type failed', { type, error: err.message });
-      throw err;
-    }
   }
 
   /**
