@@ -22,7 +22,7 @@ describe('Queue Configuration (Bull)', () => {
 
       expect(() => {
         require('../../../config/queue.js');
-      }).toThrow('[Bull Queue] FATAL: REDIS_URL not configured in production');
+      }).toThrow('[Bull Queue] FATAL: REDIS_URL not configured but NODE_ENV or RENDER indicates production. Startup aborted.');
     });
 
     it('should parse rediss:// URL correctly for TLS', () => {
@@ -63,11 +63,13 @@ describe('Queue Configuration (Bull)', () => {
       const logger = require('../../../utils/logger');
       jest.spyOn(logger, 'warn');
 
-      const queue = require('../../../config/queue.js');
-      expect(queue.emailQueue).toBeDefined();
+      const { parseRedisUrl } = require('../../../config/queue.js');
+      const config = parseRedisUrl();
+
+      expect(config.host).toBe('localhost');
+      expect(config.port).toBe(6379);
       expect(logger.warn).toHaveBeenCalledWith(
-        '[Bull Queue] REDIS_URL not configured, using localhost fallback (development mode)',
-        expect.anything()
+        '[Bull Queue] REDIS_URL not configured, using localhost fallback (development mode)'
       );
 
       logger.warn.mockRestore();
@@ -101,47 +103,22 @@ describe('Queue Configuration (Bull)', () => {
       process.env.NODE_ENV = 'production';
       process.env.REDIS_URL = 'rediss://user:pass@localhost:6379';
 
-      const logger = require('../../../utils/logger');
-      const loggedConfigs = [];
-      jest.spyOn(logger, 'info').mockImplementation((msg, data) => {
-        if (msg.includes('Using REDIS_URL')) {
-          loggedConfigs.push(data);
-        }
-      });
+      const { parseRedisUrl } = require('../../../config/queue.js');
+      const config = parseRedisUrl();
 
-      const queue = require('../../../config/queue.js');
-      expect(queue.emailQueue).toBeDefined();
-
-      // Verify that explicit port 6379 was logged (not replaced with 6380)
-      const config = loggedConfigs[0];
       expect(config.port).toBe(6379);
-      expect(config.tls).toBe(true);
-
-      logger.info.mockRestore();
+      expect(config.tls).toEqual({});
     });
 
     it('should use default port 6380 for rediss:// URL without explicit port', () => {
       process.env.NODE_ENV = 'production';
       process.env.REDIS_URL = 'rediss://user:pass@localhost';
 
-      const logger = require('../../../utils/logger');
-      const loggedConfigs = [];
-      jest.spyOn(logger, 'info').mockImplementation((msg, data) => {
-        if (msg.includes('Using REDIS_URL')) {
-          loggedConfigs.push(data);
-        }
-      });
+      const { parseRedisUrl } = require('../../../config/queue.js');
+      const config = parseRedisUrl();
 
-      delete require.cache[require.resolve('../../../config/queue.js')];
-
-      const queue = require('../../../config/queue.js');
-      expect(queue.emailQueue).toBeDefined();
-
-      const config = loggedConfigs[0];
       expect(config.port).toBe(6380);
-      expect(config.tls).toBe(true);
-
-      logger.info.mockRestore();
+      expect(config.tls).toEqual({});
     });
   });
 });

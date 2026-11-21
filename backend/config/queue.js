@@ -33,7 +33,7 @@ function parseRedisUrl() {
     const isTls = urlObj.protocol === 'rediss:';
     const host = urlObj.hostname;
     // Use explicit port from URL, or default: redis:// → 6379, rediss:// → 6380
-    const port = urlObj.port || (isTls ? 6380 : 6379);
+    const port = parseInt(urlObj.port || (isTls ? 6380 : 6379), 10);
     const password = urlObj.password || undefined;
 
     logger.info('[Bull Queue] Using REDIS_URL from environment', {
@@ -45,7 +45,7 @@ function parseRedisUrl() {
 
     return {
       host,
-      port: parseInt(port, 10),
+      port,
       password,
       ...(isTls && { tls: {} }), // ioredis requires tls: {} (object) not boolean
       maxRetriesPerRequest: null,
@@ -217,4 +217,5 @@ module.exports = {
   getQueueStats,
   retryFailedJobs,
   cleanOldJobs,
+  parseRedisUrl,
 };
