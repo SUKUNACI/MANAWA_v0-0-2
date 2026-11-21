@@ -23,6 +23,7 @@ scripts/create-admin.js
 uploads/
 dist/
 build/
+generated/coverage/
 
 # Backups DB locaux
 backups/
