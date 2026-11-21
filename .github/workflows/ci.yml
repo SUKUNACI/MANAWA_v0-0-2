@@ -65,12 +65,14 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         env:
           DATABASE_URL: postgresql://manawa:manawa_test@localhost:5432/manawa_test
+          DIRECT_URL: postgresql://manawa:manawa_test@localhost:5432/manawa_test
         run: npx prisma generate
 
       - name: Push database schema
         working-directory: ${{ env.WORKING_DIR }}
         env:
           DATABASE_URL: postgresql://manawa:manawa_test@localhost:5432/manawa_test
+          DIRECT_URL: postgresql://manawa:manawa_test@localhost:5432/manawa_test
         run: npx prisma db push --accept-data-loss
 
       - name: Run tests with coverage

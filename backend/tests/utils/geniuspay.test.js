@@ -1,8 +1,8 @@
 // ── Mock environment variables BEFORE requiring geniuspay ─────────────────────
 // geniuspay.js reads process.env at module-load time (API_KEY, API_SECRET, WEBHOOK_SECRET)
 process.env.GENIUSPAY_API_KEY = 'test-api-key';
-process.env.GENIUSPAY_API_SECRET = 'test-api-secret';
-process.env.GENIUSPAY_WEBHOOK_SECRET = 'test-webhook-secret';
+process.env.GENIUSPAY_API_SECRET = 'mock-secret';
+process.env.GENIUSPAY_WEBHOOK_SECRET = 'mock-whsec';
 
 // ── Mock axios ──────────────────────────────────────────────────────────────────
 // geniuspay.js calls axios.create() at module level and stores the result in `client`.
@@ -59,7 +59,7 @@ describe('geniuspay._selectCredentials', () => {
 
   test('production: lève une erreur bloquante si GENIUSPAY_API_KEY commence par pk_sandbox_', () => {
     const env = {
-      GENIUSPAY_API_KEY: 'pk_sandbox_wrongkey',
+      GENIUSPAY_API_KEY: 'pk_sandbox_bad',
       GENIUSPAY_API_SECRET: 'sk_live_xyz',
       GENIUSPAY_WEBHOOK_SECRET: 'whsec_prod',
     };
@@ -69,7 +69,7 @@ describe('geniuspay._selectCredentials', () => {
   test('production: lève une erreur bloquante si GENIUSPAY_API_SECRET commence par sk_sandbox_', () => {
     const env = {
       GENIUSPAY_API_KEY: 'pk_live_ok',
-      GENIUSPAY_API_SECRET: 'sk_sandbox_wrongsecret',
+      GENIUSPAY_API_SECRET: 'sk_sandbox_bad',
       GENIUSPAY_WEBHOOK_SECRET: 'whsec_prod',
     };
     expect(() => geniuspay._selectCredentials('production', env)).toThrow(/sk_sandbox_/);
@@ -77,21 +77,21 @@ describe('geniuspay._selectCredentials', () => {
 
   test('development: retourne les clés sandbox depuis GENIUSPAY_SANDBOX_API_KEY / SANDBOX_API_SECRET / SANDBOX_WEBHOOK_SECRET', () => {
     const env = {
-      GENIUSPAY_SANDBOX_API_KEY: 'pk_sandbox_devkey',
-      GENIUSPAY_SANDBOX_API_SECRET: 'sk_sandbox_devsecret',
-      GENIUSPAY_SANDBOX_WEBHOOK_SECRET: 'whsec_sandbox_devhook',
+      GENIUSPAY_SANDBOX_API_KEY: 'pk_sandbox_dev',
+      GENIUSPAY_SANDBOX_API_SECRET: 'sk_sandbox_dev',
+      GENIUSPAY_SANDBOX_WEBHOOK_SECRET: 'whsec_sb_dev',
     };
     const result = geniuspay._selectCredentials('development', env);
-    expect(result.apiKey).toBe('pk_sandbox_devkey');
-    expect(result.apiSecret).toBe('sk_sandbox_devsecret');
-    expect(result.webhookSecret).toBe('whsec_sandbox_devhook');
+    expect(result.apiKey).toBe('pk_sandbox_dev');
+    expect(result.apiSecret).toBe('sk_sandbox_dev');
+    expect(result.webhookSecret).toBe('whsec_sb_dev');
   });
 
   test('development: lève une erreur bloquante si GENIUSPAY_SANDBOX_API_KEY commence par pk_live_', () => {
     const env = {
-      GENIUSPAY_SANDBOX_API_KEY: 'pk_live_wrongdev',
-      GENIUSPAY_SANDBOX_API_SECRET: 'sk_sandbox_devsecret',
-      GENIUSPAY_SANDBOX_WEBHOOK_SECRET: 'whsec_sandbox_devhook',
+      GENIUSPAY_SANDBOX_API_KEY: 'pk_live_bad',
+      GENIUSPAY_SANDBOX_API_SECRET: 'sk_sandbox_dev',
+      GENIUSPAY_SANDBOX_WEBHOOK_SECRET: 'whsec_sb_dev',
     };
     expect(() => geniuspay._selectCredentials('development', env)).toThrow(/pk_live_/);
   });
@@ -99,16 +99,16 @@ describe('geniuspay._selectCredentials', () => {
   test('development: lève une erreur bloquante si GENIUSPAY_SANDBOX_API_SECRET commence par sk_live_', () => {
     const env = {
       GENIUSPAY_SANDBOX_API_KEY: 'pk_sandbox_ok',
-      GENIUSPAY_SANDBOX_API_SECRET: 'sk_live_wrongdev',
-      GENIUSPAY_SANDBOX_WEBHOOK_SECRET: 'whsec_sandbox_devhook',
+      GENIUSPAY_SANDBOX_API_SECRET: 'sk_live_bad',
+      GENIUSPAY_SANDBOX_WEBHOOK_SECRET: 'whsec_sb_dev',
     };
     expect(() => geniuspay._selectCredentials('development', env)).toThrow(/sk_live_/);
   });
 
   test('development: retourne null si aucune clé sandbox configurée — pas de fallback production', () => {
     const env = {
-      GENIUSPAY_API_KEY: 'pk_live_should_not_be_used',
-      GENIUSPAY_API_SECRET: 'sk_live_should_not_be_used',
+      GENIUSPAY_API_KEY: 'pk_live_skip',
+      GENIUSPAY_API_SECRET: 'sk_live_skip',
     };
     const result = geniuspay._selectCredentials('development', env);
     expect(result.apiKey).toBeNull();
@@ -117,7 +117,7 @@ describe('geniuspay._selectCredentials', () => {
 
   test('production: retourne null si aucune clé production configurée — pas de fallback sandbox', () => {
     const env = {
-      GENIUSPAY_SANDBOX_API_KEY: 'pk_sandbox_should_not_be_used',
+      GENIUSPAY_SANDBOX_API_KEY: 'pk_sandbox_no',
     };
     const result = geniuspay._selectCredentials('production', env);
     expect(result.apiKey).toBeNull();
@@ -126,8 +126,8 @@ describe('geniuspay._selectCredentials', () => {
   test('test: accepte des valeurs arbitraires sans lever d\'erreur', () => {
     const env = {
       GENIUSPAY_API_KEY: 'test-api-key',
-      GENIUSPAY_API_SECRET: 'test-api-secret',
-      GENIUSPAY_WEBHOOK_SECRET: 'test-webhook-secret',
+      GENIUSPAY_API_SECRET: 'mock-secret',
+      GENIUSPAY_WEBHOOK_SECRET: 'mock-whsec',
     };
     expect(() => geniuspay._selectCredentials('test', env)).not.toThrow();
     const result = geniuspay._selectCredentials('test', env);
@@ -547,7 +547,7 @@ describe('geniuspay.verifyWebhookSignature', () => {
     const payload = { id: 'pay-1', status: 'COMPLETED' };
     const data = `${timestamp}.${JSON.stringify(payload)}`;
     const signature = crypto
-      .createHmac('sha256', 'test-webhook-secret')
+      .createHmac('sha256', 'mock-whsec')
       .update(data)
       .digest('hex');
 
@@ -571,7 +571,7 @@ describe('geniuspay.verifyWebhookSignature', () => {
     const originalPayload = { id: 'pay-1', status: 'COMPLETED' };
     const data = `${timestamp}.${JSON.stringify(originalPayload)}`;
     const signature = crypto
-      .createHmac('sha256', 'test-webhook-secret')
+      .createHmac('sha256', 'mock-whsec')
       .update(data)
       .digest('hex');
 
@@ -587,12 +587,14 @@ describe('geniuspay.verifyWebhookSignature', () => {
     const payload = { id: 'pay-1', status: 'COMPLETED' };
     const data = `${timestamp}.${JSON.stringify(payload)}`;
     const signature = crypto
-      .createHmac('sha256', 'test-webhook-secret')
+      .createHmac('sha256', 'mock-whsec')
       .update(data)
       .digest('hex');
 
-    // Slightly different signature
-    const wrongSignature = signature.slice(0, -1) + '0';
+    // Slightly different signature — replace last char with a guaranteed different value
+    const lastChar = signature[signature.length - 1];
+    const differentChar = lastChar === '0' ? '1' : '0';
+    const wrongSignature = signature.slice(0, -1) + differentChar;
 
     const isValid = geniuspay.verifyWebhookSignature(wrongSignature, timestamp, payload);
 
@@ -617,7 +619,7 @@ describe('geniuspay.verifyWebhookSignature', () => {
     };
     const data = `${timestamp}.${JSON.stringify(payload)}`;
     const signature = crypto
-      .createHmac('sha256', 'test-webhook-secret')
+      .createHmac('sha256', 'mock-whsec')
       .update(data)
       .digest('hex');
 

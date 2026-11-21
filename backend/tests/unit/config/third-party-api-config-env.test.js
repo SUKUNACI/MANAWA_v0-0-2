@@ -25,7 +25,7 @@ function loadConfig() {
 describe('GeniusPay config.enabled — development', () => {
   test('enabled = true quand GENIUSPAY_SANDBOX_API_KEY est présente', () => {
     process.env.NODE_ENV = 'development';
-    process.env.GENIUSPAY_SANDBOX_API_KEY = 'pk_sandbox_abc123';
+    process.env.GENIUSPAY_SANDBOX_API_KEY = 'pk_sandbox_ok';
     delete process.env.GENIUSPAY_API_KEY;
 
     const { getConfig } = loadConfig();
@@ -67,7 +67,7 @@ describe('GeniusPay config.enabled — production', () => {
 
   test('enabled = false quand seule GENIUSPAY_SANDBOX_API_KEY est présente en production', () => {
     process.env.NODE_ENV = 'production';
-    process.env.GENIUSPAY_SANDBOX_API_KEY = 'pk_sandbox_abc123';
+    process.env.GENIUSPAY_SANDBOX_API_KEY = 'pk_sandbox_ok';
     delete process.env.GENIUSPAY_API_KEY;
 
     const { getConfig } = loadConfig();
