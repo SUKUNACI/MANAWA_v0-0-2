@@ -1,0 +1,409 @@
+{
+  "services": [
+    {
+      "name": "PostgreSQL (Neon)",
+      "type": "database",
+      "function": "Primary relational database for all application data (users, projects, quotes, payments, etc.)",
+      "config_file": "config/db.js",
+      "env_vars": [
+        "DATABASE_URL",
+        "DIRECT_URL"
+      ],
+      "routes": [
+        "All routes use prisma client"
+      ],
+      "modules": [
+        "All modules"
+      ],
+      "test_priority": "critical",
+      "notes": "Pool connection for app (DATABASE_URL), direct connection for migrations (DIRECT_URL). ORM: Prisma v5.18.0"
+    },
+    {
+      "name": "Redis",
+      "type": "cache",
+      "function": "Session storage, caching (user profiles, search results), queue backend for Bull job processing",
+      "config_file": "config/redis.js",
+      "env_vars": [
+        "REDIS_URL"
+      ],
+      "routes": [
+        "All routes that use caching middleware"
+      ],
+      "modules": [
+        "All modules via redis.js"
+      ],
+      "test_priority": "critical",
+      "notes": "Supports rediss:// (TLS) and redis:// schemes. In-memory fallback in non-prod. CircuitBreaker + failover. Production requires REDIS_URL or startup fails."
+    },
+    {
+      "name": "Bull Queues (Job Processing)",
+      "type": "task_queue",
+      "function": "Asynchronous job processing for emails, PDFs, analytics, payments, badges. Backed by Redis.",
+      "config_file": "config/queue.js",
+      "env_vars": [
+        "REDIS_URL"
+      ],
+      "routes": [
+        "GET/POST /api/v1/queues-admin (queue monitoring)"
+      ],
+      "modules": [
+        "jobs/workers.js",
+        "jobs/sendEmailJob.js",
+        "jobs/generatePdfJob.js",
+        "jobs/calculateAnalyticsJob.js",
+        "jobs/processPaymentJob.js",
+        "jobs/updateBadgesJob.js"
+      ],
+      "test_priority": "critical",
+      "notes": "5 queues: emails (5 concurrency), pdfs (2), analytics (1), payments (3), badges (2). Retries: 3x with exponential backoff."
+    },
+    {
+      "name": "Mailjet",
+      "type": "email",
+      "function": "Email delivery for verification codes, password resets, package suspension notifications, generic notification fallback",
+      "config_file": "config/mailer.js",
+      "env_vars": [
+        "MAILJET_API_KEY",
+        "MAILJET_SECRET_KEY",
+        "MAILJET_FROM_EMAIL",
+        "MAILJET_FROM_NAME"
+      ],
+      "routes": [
+        "POST /api/v1/auth/verification-email",
+        "POST /api/v1/auth/password-reset",
+        "All notification routes (fallback)"
+      ],
+      "modules": [
+        "config/mailer.js",
+        "config/push-notification-fallback.js"
+      ],
+      "test_priority": "important",
+      "notes": "API v3.1. CircuitBreaker + RateLimiter. 5s timeout. Optional (dev mode: logs codes to console)."
+    },
+    {
+      "name": "Twilio",
+      "type": "sms",
+      "function": "SMS sending for phone verification codes and alerts",
+      "config_file": "config/sms.js",
+      "env_vars": [
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_AUTH_TOKEN",
+        "TWILIO_PHONE_NUMBER"
+      ],
+      "routes": [
+        "POST /api/v1/verification/send-sms"
+      ],
+      "modules": [
+        "config/sms.js"
+      ],
+      "test_priority": "important",
+      "notes": "CircuitBreaker + RateLimiter. 5s timeout. Optional (dev mode: logs codes to console)."
+    },
+    {
+      "name": "PostgreSQL Full-Text Search",
+      "type": "search",
+      "function": "Full-text search pour professionals, projects, portfolio, packages, reviews via PostgreSQL ILIKE/full-text queries.",
+      "config_file": "modules/search.js",
+      "env_vars": [],
+      "routes": [
+        "GET /api/v1/search/global?q=",
+        "GET /api/v1/search/global/professionals?q=",
+        "GET /api/v1/search/global/packages?q=",
+        "GET /api/v1/search/global/portfolio?q=",
+        "GET /api/v1/search/global/projects?q=",
+        "GET /api/v1/search/global/reviews?q=",
+        "GET /api/search-facets/facets"
+      ],
+      "modules": [
+        "modules/search.js",
+        "utils/filter-helper.js"
+      ],
+      "test_priority": "critical",
+      "notes": "MeiliSearch retiré en v0.0.2 (commit 3b386a9). La recherche utilise PostgreSQL directement. 6/6 endpoints 200 OK en production."
+    },
+    {
+      "name": "Cloudinary",
+      "type": "cdn_media",
+      "function": "Image and media upload/storage. Profile avatars, portfolio project images, verification photos.",
+      "config_file": "config/cloudinary.js",
+      "env_vars": [
+        "CLOUDINARY_CLOUD_NAME",
+        "CLOUDINARY_API_KEY",
+        "CLOUDINARY_API_SECRET"
+      ],
+      "routes": [
+        "POST /api/v1/uploads (media uploads)",
+        "All routes serving media URLs"
+      ],
+      "modules": [
+        "config/cloudinary.js",
+        "config/upload.js"
+      ],
+      "test_priority": "important",
+      "notes": "Supports auto resource type detection. Folders: manawa/avatars, manawa/verification, manawa/portfolio. Optional (dev mode: fails gracefully)."
+    },
+    {
+      "name": "Firebase Cloud Messaging (FCM)",
+      "type": "push_notifications",
+      "function": "Push notifications to Android/iOS via Firebase. Fallback to Expo for backward compatibility.",
+      "config_file": "config/firebase-admin.js, config/pushNotifications.js",
+      "env_vars": [
+        "FIREBASE_SERVICE_ACCOUNT"
+      ],
+      "routes": [
+        "All routes triggering real-time notifications"
+      ],
+      "modules": [
+        "config/firebase-admin.js",
+        "config/pushNotifications.js",
+        "config/notification-batching.js",
+        "config/push-notification-fallback.js"
+      ],
+      "test_priority": "secondary",
+      "notes": "Env var (prod) or local JSON file (dev). Supports FCM, APNs, Expo token types. Email fallback if no tokens."
+    },
+    {
+      "name": "Expo Push Service",
+      "type": "push_notifications",
+      "function": "Backward compatibility push notifications for Expo clients before full FCM migration",
+      "config_file": "config/pushNotifications.js",
+      "env_vars": [],
+      "routes": [
+        "All routes triggering real-time notifications"
+      ],
+      "modules": [
+        "config/pushNotifications.js"
+      ],
+      "test_priority": "secondary",
+      "notes": "URL: https://exp.host/--/api/v2/push/send. 5s timeout. Auto-detected by token format (ExponentPushToken[...])."
+    },
+    {
+      "name": "Socket.io",
+      "type": "real_time",
+      "function": "WebSocket real-time communication for live chat, notifications, presence updates",
+      "config_file": "N/A (core/index.js)",
+      "env_vars": [
+        "CORS_ORIGINS"
+      ],
+      "routes": [
+        "WebSocket namespace handlers in socket/ directory"
+      ],
+      "modules": [
+        "socket/ directory"
+      ],
+      "test_priority": "secondary",
+      "notes": "v4.7.5. Inherits CORS from app. Used for messages, notifications, live updates."
+    },
+    {
+      "name": "GeniusPay",
+      "type": "payment_gateway",
+      "function": "Payment processing, transaction handling, subscription billing. Alternative: CinetPay.",
+      "config_file": "config/third-party-api-config.js",
+      "env_vars": [
+        "GENIUSPAY_API_KEY",
+        "GENIUSPAY_CB_FAILURE_THRESHOLD",
+        "GENIUSPAY_CB_TIME_WINDOW",
+        "GENIUSPAY_CB_RESET_TIMEOUT",
+        "GENIUSPAY_RL_MIN_REMAINING",
+        "GENIUSPAY_RL_THRESHOLD",
+        "GENIUSPAY_TIMEOUT"
+      ],
+      "routes": [
+        "POST /api/v1/payments (payment creation)",
+        "GET /api/v1/payments/:id (payment status)",
+        "POST /api/v1/webhooks/geniuspay (webhook receiver)"
+      ],
+      "modules": [
+        "modules/payment.js",
+        "jobs/processPaymentJob.js",
+        "jobs/payment-reconciliation-daily.js"
+      ],
+      "test_priority": "critical",
+      "notes": "CircuitBreaker (5 failures/5min) + AdaptiveRateLimiter. 15s timeout. Webhook signature verification required."
+    },
+    {
+      "name": "Daily.co",
+      "type": "video_calls",
+      "function": "Video call room creation/management for professional consultations",
+      "config_file": "N/A (utils/daily.js)",
+      "env_vars": [
+        "DAILY_API_KEY"
+      ],
+      "routes": [
+        "POST /api/v1/video-calls (initiate call)",
+        "GET /api/v1/video-calls (list calls)",
+        "DELETE /api/v1/video-calls/:id (end call)"
+      ],
+      "modules": [
+        "utils/daily.js",
+        "routes/videoCalls.js",
+        "modules/videoCall.js"
+      ],
+      "test_priority": "secondary",
+      "notes": "API: https://api.daily.co/v1. Graceful degradation if no API key. Optional."
+    },
+    {
+      "name": "Sentry",
+      "type": "error_monitoring",
+      "function": "Error tracking, performance monitoring, breadcrumb logging for debugging",
+      "config_file": "index.js (initialization), utils/sentry-breadcrumbs.js",
+      "env_vars": [
+        "SENTRY_DSN"
+      ],
+      "routes": [
+        "All error handlers"
+      ],
+      "modules": [
+        "utils/sentry-breadcrumbs.js"
+      ],
+      "test_priority": "secondary",
+      "notes": "20% trace sample rate. Breadcrumbs for auth, payment, search, database, API. Optional (non-blocking init)."
+    },
+    {
+      "name": "Node.js Cron Jobs",
+      "type": "scheduling",
+      "function": "Scheduled background jobs: secret rotation, backup sync, admin log cleanup, webhook retry scheduling, analytics calculations",
+      "config_file": "jobs/cron-jobs.js",
+      "env_vars": [
+        "BACKUP_FULL_HOUR",
+        "BACKUP_INCREMENTAL_HOURS",
+        "ADMIN_LOG_RETENTION_DAYS"
+      ],
+      "routes": [
+        "N/A (background tasks)"
+      ],
+      "modules": [
+        "jobs/cron-jobs.js",
+        "jobs/secret-rotation-daily.js",
+        "jobs/payment-reconciliation-daily.js",
+        "jobs/webhook-retry-scheduler.js"
+      ],
+      "test_priority": "important",
+      "notes": "Library: node-cron v3.0.3. Runs in-process after server startup."
+    },
+    {
+      "name": "JWT (Authentication)",
+      "type": "auth",
+      "function": "User authentication tokens, session management, token refresh",
+      "config_file": "middleware/auth.js",
+      "env_vars": [
+        "JWT_SECRET"
+      ],
+      "routes": [
+        "POST /api/v1/auth/login",
+        "POST /api/v1/auth/refresh",
+        "POST /api/v1/auth/logout"
+      ],
+      "modules": [
+        "modules/auth.js"
+      ],
+      "test_priority": "critical",
+      "notes": "Library: jsonwebtoken v9.0.2. Min 32 chars. Sign/verify in middleware/auth.js."
+    },
+    {
+      "name": "Prisma ORM",
+      "type": "database_orm",
+      "function": "SQL query builder and schema management for PostgreSQL. Migrations, type safety.",
+      "config_file": "prisma/schema.prisma",
+      "env_vars": [
+        "DATABASE_URL",
+        "DIRECT_URL"
+      ],
+      "routes": [
+        "All routes using db operations"
+      ],
+      "modules": [
+        "All modules use prisma client"
+      ],
+      "test_priority": "critical",
+      "notes": "v5.18.0. Client auto-generated. Migrations in prisma/migrations/."
+    },
+    {
+      "name": "Express.js",
+      "type": "web_framework",
+      "function": "HTTP server framework, routing, middleware orchestration",
+      "config_file": "index.js",
+      "env_vars": [
+        "PORT",
+        "NODE_ENV",
+        "CORS_ORIGINS"
+      ],
+      "routes": [
+        "All /api/v1/* routes"
+      ],
+      "modules": [
+        "All routes"
+      ],
+      "test_priority": "critical",
+      "notes": "v4.19.2. Compression (gzip + Brotli), Helmet security, CORS, rate limiting configured."
+    }
+  ],
+  "summary": {
+    "critical_services": [
+      "PostgreSQL (Neon)",
+      "Redis",
+      "Bull Queues",
+      "GeniusPay",
+      "JWT (Authentication)",
+      "Prisma ORM",
+      "Express.js"
+    ],
+    "important_services": [
+      "Mailjet",
+      "Twilio",
+      "Cloudinary",
+      "Node.js Cron Jobs"
+    ],
+    "secondary_services": [
+      "Firebase Cloud Messaging",
+      "Expo Push Service",
+      "Socket.io",
+      "Daily.co",
+      "Sentry"
+    ],
+    "test_strategy": {
+      "phase_1_local": [
+        "PostgreSQL (embedded-postgres)",
+        "Redis (redis-mock)",
+        "Express.js",
+        "Prisma ORM"
+      ],
+      "phase_2_integration": [
+        "Bull Queues",
+        "JWT Authentication",
+        "Cron Jobs"
+      ],
+      "phase_3_optional": [
+        "Mailjet (mock in dev)",
+        "Twilio (mock in dev)",
+        "Cloudinary (mock in dev)",
+        "Firebase/Expo (mock in dev)",
+        "Daily.co (mock in dev)",
+        "Sentry (optional)"
+      ]
+    },
+    "deployment_readiness": {
+      "render_free_tier": [
+        "PostgreSQL: Yes (Neon)",
+        "Redis: Yes (needs REDIS_URL configured)"
+      ],
+      "required_env_vars_production": [
+        "DATABASE_URL",
+        "DIRECT_URL",
+        "JWT_SECRET",
+        "NODE_ENV",
+        "REDIS_URL (required in prod)",
+        "MAILJET_API_KEY",
+        "MAILJET_SECRET_KEY"
+      ],
+      "optional_env_vars_production": [
+        "SENTRY_DSN",
+        "DAILY_API_KEY",
+        "TWILIO_*",
+        "CLOUDINARY_*",
+        "FIREBASE_SERVICE_ACCOUNT",
+        "GENIUSPAY_API_KEY"
+      ]
+    }
+  }
+}

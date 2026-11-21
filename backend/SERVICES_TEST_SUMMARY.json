@@ -1,0 +1,235 @@
+{
+  "_note": "MeiliSearch retiré en v0.0.2 (commit 3b386a9). La recherche utilise désormais PostgreSQL directement. config/meilisearch.js supprimé.",
+  "postgresql_search": {
+    "config_file": "/backend/modules/search.js",
+    "env_vars": [],
+    "search_routes": [
+      "GET /api/v1/search/global?q=term",
+      "GET /api/v1/search/global/professionals?q=term",
+      "GET /api/v1/search/global/packages?q=term",
+      "GET /api/v1/search/global/portfolio?q=term",
+      "GET /api/v1/search/global/projects?q=term",
+      "GET /api/v1/search/global/reviews?q=term",
+      "GET /api/search-facets/facets"
+    ],
+    "test_approach": "Read-only PostgreSQL queries. All 6 search endpoints return 200 OK in production.",
+    "can_test_safely": true,
+    "production_status": "ACTIVE - PostgreSQL full-text search"
+  },
+  "mailjet": {
+    "config_file": "/backend/config/mailer.js",
+    "env_vars": [
+      "MAILJET_API_KEY",
+      "MAILJET_SECRET_KEY",
+      "MAILJET_FROM_EMAIL",
+      "MAILJET_FROM_NAME"
+    ],
+    "email_functions": [
+      "sendVerificationEmail(to, code, purpose)",
+      "sendPackageSuspensionEmail(to, packageTitle, reason)",
+      "send(options: {to, subject, html, text})",
+      "logMailjetAccess(userId, ipAddress, userAgent, action, metadata)"
+    ],
+    "email_routes": [
+      "POST /api/auth/verify/request",
+      "POST /api/auth/password-reset/request",
+      "Admin trigger: Package suspension"
+    ],
+    "test_approach": "Dev mode fallback (no real emails sent). Verification codes logged to console/logs instead of emailed. Safe for testing email flow.",
+    "can_test_safely": true,
+    "reason": "Service gracefully degrades to dev mode when credentials missing. No emails actually sent. Perfect for testing without real sends.",
+    "production_status": "NOT CONFIGURED in production .env"
+  },
+  "twilio": {
+    "config_file": "/backend/config/sms.js",
+    "env_vars": [
+      "TWILIO_ACCOUNT_SID",
+      "TWILIO_AUTH_TOKEN",
+      "TWILIO_PHONE_NUMBER"
+    ],
+    "sms_functions": [
+      "sendVerificationSms(toPhone, code)"
+    ],
+    "sms_routes": [
+      "POST /api/auth/phone-verify/request"
+    ],
+    "test_approach": "Test mode fallback (no real SMS sent). Verification codes logged to console/logs instead of sent as SMS. Safe for testing phone verification.",
+    "can_test_safely": true,
+    "reason": "Service gracefully degrades to test mode when credentials missing. No SMS actually sent. Perfect for testing without real sends.",
+    "production_status": "NOT CONFIGURED in production .env"
+  },
+  "redis": {
+    "config_file": "/backend/config/redis.js",
+    "env_vars": [
+      "REDIS_URL"
+    ],
+    "current_production": "rediss://deciding-cow-120586.upstash.io:6379 (Upstash with TLS)",
+    "public_functions": [
+      "initializeRedis()",
+      "get(key)",
+      "set(key, value, ttl)",
+      "deleteKey(key)",
+      "deletePattern(pattern)",
+      "clear()",
+      "disconnect()",
+      "healthCheck()"
+    ],
+    "cache_usage": [
+      "Session tokens & user profiles",
+      "Search result caching",
+      "Analytics aggregations",
+      "Rate limiter counters",
+      "Feature flag cache",
+      "User preferences cache"
+    ],
+    "health_check_routes": [
+      "GET /api/v1/health (includes Redis status)"
+    ],
+    "test_approach": "Health check only (PING command). Read-only, non-destructive verification of Redis connectivity. No cache modifications.",
+    "can_test_safely": true,
+    "reason": "Health checks use PING only (non-destructive). No data modification needed to verify connectivity.",
+    "production_status": "ACTIVE - Production requirement (FATAL error if missing in production)"
+  },
+  "bull_queues": {
+    "config_file": "/backend/config/queue.js",
+    "env_vars": [
+      "REDIS_URL (same as Redis cache)"
+    ],
+    "queue_types": [
+      "emails (Email sending)",
+      "pdfs (PDF generation)",
+      "analytics (Analytics aggregation)",
+      "payments (Payment processing)",
+      "badges (Badge assignment)",
+      "webhooks (Webhook delivery, separate config)"
+    ],
+    "job_stats_functions": [
+      "getQueueStats(queue, queueName)",
+      "retryFailedJobs(queue, queueName, limit)",
+      "cleanOldJobs(queue, queueName, daysOld)"
+    ],
+    "admin_routes": [
+      "GET /api/admin/queues (all queue stats, auth required)",
+      "GET /api/admin/queues/:queueName (specific queue stats, auth required)",
+      "GET /api/admin/queues/:queueName/jobs (list jobs by status, auth required)",
+      "GET /api/admin/queues/:queueName/jobs/:jobId (job details, auth required)",
+      "POST /api/admin/queues/:queueName/retry (retry failed, auth required)",
+      "POST /api/admin/queues/:queueName/jobs/:jobId/retry (retry specific, auth required)",
+      "DELETE /api/admin/queues/:queueName/jobs/:jobId (delete job, auth required)",
+      "POST /api/admin/queues/:queueName/clean (cleanup old jobs, auth required)",
+      "POST /api/admin/queues/:queueName/pause (pause queue, auth required)",
+      "POST /api/admin/queues/:queueName/resume (resume queue, auth required)"
+    ],
+    "diagnostic_endpoints": [
+      "GET /api/bull-status (local-only, tests Bull-Redis connection)"
+    ],
+    "test_approach": "Read-only stats endpoints and diagnostic health checks. No job modifications needed for connectivity testing.",
+    "can_test_safely": true,
+    "reason": "Health checks and stats retrieval are read-only. No jobs modified by diagnostics. Production jobs remain untouched.",
+    "production_status": "ACTIVE - All 5+ queues actively processing jobs"
+  },
+  "firebase_fcm": {
+    "config_file": "/backend/config/firebase-admin.js",
+    "env_vars": [
+      "FIREBASE_SERVICE_ACCOUNT (JSON env var or local file)"
+    ],
+    "public_functions": [
+      "initializeFirebase()",
+      "getMessaging()",
+      "isInitialized()"
+    ],
+    "usage": [
+      "Mobile push notifications (iOS, Android via Expo)"
+    ],
+    "push_notification_routes": [
+      "POST /api/notifications/subscribe (register push token)",
+      "POST /api/notifications/send (send push notification)"
+    ],
+    "fallback_mechanism": "Falls back to Expo push if FCM unavailable (/backend/config/push-notification-fallback.js)",
+    "test_approach": "Initialization status check only. No actual push notifications sent during testing. Graceful disable if credentials missing.",
+    "can_test_safely": true,
+    "reason": "Service gracefully disables if credentials missing. Push fallback ensures app stability. No data modification.",
+    "production_status": "NOT CONFIGURED in production .env (Expo fallback active)"
+  },
+  "sentry": {
+    "config_file": "/backend/index.js (lines 20-27, 542-560)",
+    "env_vars": [
+      "SENTRY_DSN"
+    ],
+    "features": [
+      "Automatic error capture",
+      "Error context breadcrumbs",
+      "Performance monitoring"
+    ],
+    "test_approach": "Passive monitoring only. No testing needed. Missing DSN is safe (logging disabled gracefully).",
+    "can_test_safely": true,
+    "reason": "Sentry is read-only monitoring. No data modification. If DSN missing, logging is disabled gracefully.",
+    "production_status": "NOT CONFIGURED in production .env"
+  },
+  "health_check": {
+    "config_file": "/backend/routes/health.js, /backend/modules/HealthModule.js",
+    "endpoints": [
+      "GET /api/v1/health (full system health)",
+      "GET /api/monitoring/health (monitoring health)"
+    ],
+    "checks_performed": [
+      "Database connectivity (PostgreSQL/Neon)",
+      "Redis cache availability",
+      "External service status (all optional services)"
+    ],
+    "response_format": {
+      "status": "healthy | degraded | unhealthy",
+      "timestamp": "ISO 8601",
+      "services": {
+        "database": "ok | error",
+        "redis": "ok | degraded | error",
+        "firebase": "ok | error | skipped",
+        "sentry": "ok | skipped"
+      }
+    },
+    "test_approach": "Read-only diagnostic endpoint. Non-destructive verification of all services.",
+    "can_test_safely": true,
+    "reason": "Health checks use PING/ECHO commands only. No data modification."
+  },
+  "monitoring": {
+    "config_file": "/backend/routes/monitoring.js",
+    "endpoints": [
+      "GET /api/monitoring/health (health status)",
+      "GET /api/monitoring/metrics (Prometheus metrics)",
+      "GET /api/monitoring/admin/monitoring (dashboard metrics, admin auth)",
+      "GET /api/monitoring/admin/alerts (active alerts, admin auth)",
+      "POST /api/monitoring/admin/alerts/config (configure thresholds, admin auth)",
+      "GET /api/monitoring/admin/alerts/config (get thresholds, admin auth)",
+      "GET /api/monitoring/admin/performance/top-routes (route performance, admin auth)",
+      "GET /api/monitoring/admin/performance/database (DB performance, admin auth)",
+      "GET /api/monitoring/admin/business/metrics (business KPIs, admin auth)",
+      "POST /api/monitoring/admin/monitoring/reset (reset metrics, admin auth)"
+    ],
+    "test_approach": "Read-only metrics collection. Non-destructive performance monitoring.",
+    "can_test_safely": true,
+    "reason": "Monitoring queries are passive. No data modification. Metrics collected from request/response inspection only."
+  },
+  "summary": {
+    "total_services": 7,
+    "configured_in_production": 3,
+    "not_configured_in_production": 4,
+    "configured_services": [
+      "PostgreSQL (Neon)",
+      "Redis (Upstash)",
+      "PostgreSQL Full-Text Search"
+    ],
+    "optional_services": [
+      "Mailjet (email)",
+      "Twilio (SMS)",
+      "Firebase FCM (push notifications)",
+      "Sentry (error tracking)"
+    ],
+    "safe_for_testing": "ALL SERVICES",
+    "test_risk_level": "LOW - Only read-only health checks and diagnostic endpoints",
+    "can_test_all_safely": true,
+    "reason_all_safe": "All services implement graceful fallback modes when not configured. Health checks are non-destructive. Admin endpoints are read-only for stats. No data modification required for any test.",
+    "quick_test_command": "curl -X GET 'https://manawa-v0-0-2.onrender.com/api/v1/health'",
+    "quick_queue_test": "curl -X GET 'http://localhost:4000/api/bull-status' (local only)",
+    "full_monitoring": "curl -X GET 'https://manawa-v0-0-2.onrender.com/api/monitoring/metrics'"
+  }
+}

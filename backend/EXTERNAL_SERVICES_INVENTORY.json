@@ -1,0 +1,348 @@
+{
+  "project": "MANAWA Backend",
+  "generated_at": "2026-11-18T18:10:00Z",
+  "_removed_services": {
+    "meilisearch": "Retiré en v0.0.2 (commit 3b386a9). La recherche full-text utilise désormais PostgreSQL directement. config/meilisearch.js supprimé."
+  },
+  "services": {
+    "mailjet": {
+      "name": "Mailjet",
+      "type": "Email Service Provider",
+      "status": "NOT CONFIGURED in production .env",
+      "config_file": "/backend/config/mailer.js",
+      "env_vars": [
+        "MAILJET_API_KEY",
+        "MAILJET_SECRET_KEY",
+        "MAILJET_FROM_EMAIL",
+        "MAILJET_FROM_NAME"
+      ],
+      "env_var_defaults": {
+        "MAILJET_FROM_EMAIL": "noreply@manawa.app",
+        "MAILJET_FROM_NAME": "MANAWA"
+      },
+      "initialization": {
+        "mode": "Graceful fallback to dev mode if credentials missing",
+        "timeout": 5000,
+        "api_version": "v3.1"
+      },
+      "circuit_breaker": "Enabled (3-minute window)",
+      "rate_limiter": "Adaptive rate limiting enabled",
+      "email_functions": [
+        "sendVerificationEmail(to, code, 'verify'|'reset') → HTML formatted email",
+        "sendPackageSuspensionEmail(to, packageTitle, reason) → suspension notification",
+        "send(options: {to, subject, html, text}) → generic email send",
+        "logMailjetAccess(userId, ipAddress, userAgent, action, metadata) → audit trail"
+      ],
+      "email_routes": [
+        "POST /api/auth/verify/request - Email verification code",
+        "POST /api/auth/password-reset/request - Password reset code",
+        "Admin trigger: Package suspension notification"
+      ],
+      "dev_mode_behavior": "Codes are logged instead of sent (logs include verification code)",
+      "test_approach": "DEV MODE (non-production credentials) - NO REAL EMAIL SENDS. All emails logged to console/logs.",
+      "can_test_safely": true,
+      "reason": "Service degrades gracefully to dev mode when credentials are missing. No emails sent in dev mode, only logged. Perfect for testing without risk.",
+      "production_risk": "MEDIUM - Email feature disabled if credentials missing, but authentication still works (codes logged to backend)"
+    },
+    "twilio": {
+      "name": "Twilio",
+      "type": "SMS Gateway",
+      "status": "NOT CONFIGURED in production .env",
+      "config_file": "/backend/config/sms.js",
+      "env_vars": [
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_AUTH_TOKEN",
+        "TWILIO_PHONE_NUMBER"
+      ],
+      "initialization": {
+        "mode": "Graceful fallback to test mode if credentials missing",
+        "timeout": 5000
+      },
+      "circuit_breaker": "Enabled",
+      "rate_limiter": "Adaptive rate limiting enabled",
+      "sms_functions": [
+        "sendVerificationSms(toPhone, code) → sends SMS with verification code"
+      ],
+      "sms_routes": [
+        "POST /api/auth/phone-verify/request - SMS verification code"
+      ],
+      "test_mode_behavior": "SMS codes are logged instead of sent (logs include phone and code)",
+      "test_approach": "TEST MODE (non-production credentials) - NO REAL SMS SENDS. All codes logged to console/logs.",
+      "can_test_safely": true,
+      "reason": "Service gracefully degrades to test mode when credentials are missing. No SMS sent, only logged.",
+      "production_risk": "MEDIUM - SMS feature disabled if credentials missing, but authentication still works (codes logged)"
+    },
+    "redis": {
+      "name": "Redis",
+      "type": "Cache & Session Store",
+      "status": "CONFIGURED in production (Upstash)",
+      "config_file": "/backend/config/redis.js",
+      "env_vars": [
+        "REDIS_URL (required in production)"
+      ],
+      "env_var_format": "redis://password@host:port or rediss://password@host:port (TLS)",
+      "current_production_config": "rediss:// (Upstash with TLS) at deciding-cow-120586.upstash.io:6379",
+      "initialization": {
+        "mode": "Automatic connection on startup",
+        "production_enforcement": "FATAL error if REDIS_URL missing in production",
+        "fallback_strategy": "In-memory cache fallback in development mode",
+        "connection_timeout": 10000,
+        "circuit_breaker": "Enabled (3-minute window)",
+        "retry_strategy": "min(times * 50, 2000)"
+      },
+      "public_functions": [
+        "initializeRedis() → connects to Redis",
+        "get(key) → retrieves cached value",
+        "set(key, value, ttl=3600) → caches value with TTL",
+        "deleteKey(key) → removes cache entry",
+        "deletePattern(pattern) → removes matching keys",
+        "clear() → clears entire cache",
+        "disconnect() → graceful shutdown",
+        "healthCheck() → checks Redis availability"
+      ],
+      "cache_usage": [
+        "Session tokens & user profiles",
+        "Search result caching",
+        "Analytics aggregations",
+        "Rate limiter counters",
+        "Feature flag cache",
+        "User preferences cache"
+      ],
+      "health_check_routes": [
+        "GET /api/v1/health → includes Redis status"
+      ],
+      "test_approach": "HEALTH CHECK ONLY (read-only, non-destructive). Use GET /api/v1/health to verify Redis connectivity. healthCheck() returns status without modifying cache.",
+      "can_test_safely": true,
+      "reason": "Health checks use PING command only (non-destructive). No data modification required to test connectivity.",
+      "production_risk": "CRITICAL - Application requires Redis in production. Fallback is in-memory only (unsafe for production clusters)"
+    },
+    "bull_queues": {
+      "name": "Bull Job Queue",
+      "type": "Job Queue (backed by Redis)",
+      "status": "ACTIVE in production",
+      "config_file": "/backend/config/queue.js",
+      "env_vars": [
+        "REDIS_URL (same as Redis cache)"
+      ],
+      "initialization": {
+        "mode": "Automatic queue creation on startup",
+        "redis_config": "Parsed from REDIS_URL (same as Redis cache)",
+        "max_retries": 3,
+        "retry_backoff": "exponential (2s, 4s, 8s)",
+        "cleanup_policy": "Completed jobs after 24h, Failed jobs after 7d"
+      },
+      "queue_types": [
+        {
+          "name": "emails",
+          "job_type": "Email sending",
+          "status": "Active"
+        },
+        {
+          "name": "pdfs",
+          "job_type": "PDF generation",
+          "status": "Active"
+        },
+        {
+          "name": "analytics",
+          "job_type": "Analytics aggregation",
+          "status": "Active"
+        },
+        {
+          "name": "payments",
+          "job_type": "Payment processing",
+          "status": "Active"
+        },
+        {
+          "name": "badges",
+          "job_type": "Badge assignment",
+          "status": "Active"
+        },
+        {
+          "name": "webhooks",
+          "job_type": "Webhook delivery",
+          "config_file": "/backend/config/webhook-queue-config.js"
+        }
+      ],
+      "job_stats_functions": [
+        "getQueueStats(queue, queueName) → returns job counts",
+        "retryFailedJobs(queue, queueName, limit=10) → retries failed jobs",
+        "cleanOldJobs(queue, queueName, daysOld=7) → cleanup old jobs"
+      ],
+      "admin_routes": [
+        "GET /api/admin/queues - Get all queue stats",
+        "GET /api/admin/queues/:queueName - Get queue stats",
+        "GET /api/admin/queues/:queueName/jobs - List jobs by status",
+        "GET /api/admin/queues/:queueName/jobs/:jobId - Get job details",
+        "POST /api/admin/queues/:queueName/retry - Retry failed jobs",
+        "POST /api/admin/queues/:queueName/jobs/:jobId/retry - Retry specific job",
+        "DELETE /api/admin/queues/:queueName/jobs/:jobId - Delete job",
+        "POST /api/admin/queues/:queueName/clean - Clean old jobs",
+        "POST /api/admin/queues/:queueName/pause - Pause queue",
+        "POST /api/admin/queues/:queueName/resume - Resume queue"
+      ],
+      "diagnostic_endpoint": [
+        "GET /api/bull-status (local-only) - Test Bull queue Redis connection"
+      ],
+      "test_approach": "READ-ONLY testing via diagnostic endpoint. GET /api/bull-status tests Bull-Redis connectivity without modifying queues. Admin stats endpoints show queue status.",
+      "can_test_safely": true,
+      "reason": "Health checks and stats retrieval are read-only operations. No jobs are modified by diagnostics.",
+      "production_risk": "MEDIUM - Job failures can impact features (emails, payments, analytics) but queues auto-retry with exponential backoff"
+    },
+    "firebase_fcm": {
+      "name": "Firebase Cloud Messaging (FCM)",
+      "type": "Push Notification Service",
+      "status": "NOT CONFIGURED in production .env",
+      "config_file": "/backend/config/firebase-admin.js",
+      "env_vars": [
+        "FIREBASE_SERVICE_ACCOUNT (JSON env var or local file)"
+      ],
+      "initialization": {
+        "mode": "Automatic on startup if service account found",
+        "service_account_sources": [
+          "FIREBASE_SERVICE_ACCOUNT environment variable (production)",
+          "Local file: /manawa-01-firebase-adminsdk-fbsvc-96ec269890.json (development)"
+        ],
+        "fallback": "Graceful disable if service account not found"
+      },
+      "public_functions": [
+        "initializeFirebase() → initializes Firebase Admin SDK",
+        "getMessaging() → returns Firebase Messaging instance",
+        "isInitialized() → checks if Firebase is ready"
+      ],
+      "usage": [
+        "Mobile push notifications (iOS, Android via Expo)"
+      ],
+      "push_notification_routes": [
+        "POST /api/notifications/subscribe - Register push token",
+        "POST /api/notifications/send - Send push notification"
+      ],
+      "fallback_mechanism": "/backend/config/push-notification-fallback.js - falls back to Expo push if FCM unavailable",
+      "test_approach": "OPTIONAL - Firebase can be disabled by not providing service account. Health checks via initialization status.",
+      "can_test_safely": true,
+      "reason": "Service gracefully disables if credentials missing. Push notification fallback to Expo ensures app stability.",
+      "production_risk": "LOW - Optional feature. If missing, falls back to Expo push notifications"
+    },
+    "sentry": {
+      "name": "Sentry",
+      "type": "Error Tracking & Monitoring",
+      "status": "NOT CONFIGURED in production .env",
+      "config_file": "/backend/index.js (lines 20-27, 542-560)",
+      "env_vars": [
+        "SENTRY_DSN"
+      ],
+      "initialization": {
+        "mode": "Conditional initialization if SENTRY_DSN provided",
+        "behavior_if_missing": "Error tracking disabled, application continues normally"
+      },
+      "features": [
+        "Automatic error capture",
+        "Error context breadcrumbs",
+        "Performance monitoring"
+      ],
+      "sentry_middleware": [
+        "Sentry.init() - Initialize",
+        "app.use(Sentry.Handlers.requestHandler()) - Request tracking",
+        "app.use(Sentry.Handlers.errorHandler()) - Error capture"
+      ],
+      "test_approach": "NO TESTING NEEDED - Sentry is read-only, non-invasive monitoring. Missing DSN is safe.",
+      "can_test_safely": true,
+      "reason": "Sentry is a passive monitoring service. No modifications to production data. If DSN missing, logging is disabled gracefully."
+    },
+    "health_check": {
+      "name": "System Health Check",
+      "type": "Internal Diagnostics",
+      "config_file": "/backend/routes/health.js, /backend/modules/HealthModule.js",
+      "health_check_routes": [
+        "GET /api/v1/health - Full system health",
+        "GET /api/monitoring/health - Monitoring health"
+      ],
+      "checks_performed": [
+        "Database connectivity (PostgreSQL)",
+        "Redis cache availability",
+        "External service status (Sentry, Firebase, Mailjet, Twilio)"
+      ],
+      "response_format": {
+        "status": "healthy | degraded | unhealthy",
+        "timestamp": "ISO 8601",
+        "services": {
+          "database": "ok | error with message",
+          "redis": "ok | degraded | error",
+          "firebase": "ok | error (if configured)",
+          "sentry": "ok | error (if configured)"
+        }
+      },
+      "test_approach": "READ-ONLY - Health checks are diagnostic-only. GET /api/v1/health does not modify production data.",
+      "can_test_safely": true,
+      "reason": "Health checks use PING, ECHO, and read-only queries to verify connectivity. Non-destructive."
+    },
+    "monitoring": {
+      "name": "Prometheus Metrics & Monitoring Dashboard",
+      "type": "Performance Monitoring",
+      "config_file": "/backend/routes/monitoring.js",
+      "env_vars": [],
+      "admin_routes": [
+        "GET /api/monitoring/health - Health status",
+        "GET /api/monitoring/metrics - Prometheus metrics",
+        "GET /api/monitoring/admin/monitoring - Dashboard metrics",
+        "GET /api/monitoring/admin/alerts - Active alerts",
+        "POST /api/monitoring/admin/alerts/config - Configure thresholds",
+        "GET /api/monitoring/admin/alerts/config - Get alert thresholds",
+        "GET /api/monitoring/admin/performance/top-routes - Performance by route",
+        "GET /api/monitoring/admin/performance/database - DB performance",
+        "GET /api/monitoring/admin/business/metrics - Business KPIs",
+        "POST /api/monitoring/admin/monitoring/reset - Reset metrics"
+      ],
+      "authentication": "Admin-only endpoints require JWT with ADMIN role",
+      "rate_limiting": "Metrics: 100 req/min, Dashboard: 60 req/min",
+      "test_approach": "READ-ONLY - Metrics collection is non-destructive",
+      "can_test_safely": true,
+      "reason": "Monitoring queries do not modify data. Metrics are collected passively."
+    }
+  },
+  "testing_strategy": {
+    "summary": "Most services can be tested safely with non-destructive health checks and diagnostic queries",
+    "safe_to_test_without_modification": [
+      "Redis connectivity (PING)",
+      "Bull queue status",
+      "Firebase initialization status",
+      "Sentry configuration check",
+      "Health check endpoint",
+      "Monitoring metrics collection"
+    ],
+    "requires_actual_configuration": [
+      "Mailjet (currently disabled, needs API key to test actual sending)",
+      "Twilio (currently disabled, needs account SID to test actual SMS)",
+      "Firebase (needs service account JSON to test push notifications)"
+    ],
+    "implementation_approach": {
+      "phase_1_diagnostic": "Run health checks and status endpoints (all services, non-destructive)",
+      "phase_2_connectivity": "Test individual service connections (Redis PING, PostgreSQL search, Bull queue readiness)",
+      "phase_3_optional": "If credentials provided, test actual message sending (Mailjet, Twilio, Firebase)"
+    }
+  },
+  "production_environment": {
+    "database": "PostgreSQL (Neon Cloud pooler endpoint)",
+    "cache": "Redis (Upstash, rediss:// with TLS)",
+    "queues": "Bull backed by same Redis instance",
+    "search": "PostgreSQL full-text search (built-in, active)",
+    "email": "Mailjet (NOT CONFIGURED)",
+    "sms": "Twilio (NOT CONFIGURED)",
+    "push_notifications": "Firebase FCM (NOT CONFIGURED, fallback to Expo)",
+    "error_tracking": "Sentry (NOT CONFIGURED)",
+    "api_base": "https://manawa-v0-0-2.onrender.com (production actuelle) — https://api.manawa.ci est le domaine futur planifié, non encore opérationnel"
+  },
+  "recommendations": {
+    "testing": [
+      "1. Run GET /api/v1/health to verify all services status",
+      "2. Run GET /api/bull-status (local) to test Bull-Redis connectivity",
+      "3. Test search endpoints with query params (GET /api/v1/search/global?q=test)",
+      "4. Verify monitoring endpoints: GET /api/monitoring/metrics (Prometheus format)"
+    ],
+    "configuration": [
+      "For production: Add MAILJET credentials for email verification",
+      "For production: Add TWILIO credentials for SMS verification",
+      "For production: Add FIREBASE_SERVICE_ACCOUNT for push notifications",
+      "For production: Add SENTRY_DSN for error tracking"
+    ]
+  }
+}
