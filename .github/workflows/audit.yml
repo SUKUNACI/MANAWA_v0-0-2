@@ -144,19 +144,19 @@ jobs:
 
             const comment = `## ${statusEmoji} npm Audit Results
 
-| Severity | Count |
-|----------|-------|
-| 🔴 Critical | ${critical} |
-| 🟠 High | ${high} |
-| 🟡 Moderate | ${moderate} |
-| 🔵 Low | ${low} |
-| **Total** | **${total}** |
+            | Severity | Count |
+            |----------|-------|
+            | 🔴 Critical | ${critical} |
+            | 🟠 High | ${high} |
+            | 🟡 Moderate | ${moderate} |
+            | 🔵 Low | ${low} |
+            | **Total** | **${total}** |
 
-**Status:** ${statusText}
+            **Status:** ${statusText}
 
-${critical > 0 || high > 0 ? '### Action Required\nThis PR cannot be merged until critical or high severity vulnerabilities are resolved.' : '### ✅ Approved for Review\nNo blocking vulnerabilities found.'}
+            ${critical > 0 || high > 0 ? '### Action Required\nThis PR cannot be merged until critical or high severity vulnerabilities are resolved.' : '### ✅ Approved for Review\nNo blocking vulnerabilities found.'}
 
-[View detailed audit report](https://github.com/${{ github.repository }}/security/code-scanning)`;
+            [View detailed audit report](https://github.com/${{ github.repository }}/security/code-scanning)`;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
