@@ -393,25 +393,28 @@ describe('FilterHelper', () => {
       expect(applyProjectFilters({ status: 'OPEN' }, null)).toEqual({ status: 'OPEN' });
     });
 
-    it('applies city via location field', () => {
+    it('applies city via city field', () => {
       const result = applyProjectFilters({}, { city: 'Toulouse' });
-      expect(result.location).toEqual({ contains: 'Toulouse', mode: 'insensitive' });
+      expect(result.city).toEqual({ contains: 'Toulouse', mode: 'insensitive' });
     });
 
-    it('applies minBudget and maxBudget', () => {
+    it('applies minBudget and maxBudget as AND conditions', () => {
       const result = applyProjectFilters({}, { minBudget: 1000, maxBudget: 5000 });
-      expect(result.budget).toEqual({ gte: 1000, lte: 5000 });
+      // Both budget filters: uses AND with range overlap logic (budgetMax >= min AND budgetMin <= max)
+      expect(result.AND).toBeDefined();
+      expect(result.AND).toHaveLength(2);
     });
 
     it('applies only minBudget when maxBudget is absent', () => {
       const result = applyProjectFilters({}, { minBudget: 500 });
-      expect(result.budget.gte).toBe(500);
-      expect(result.budget.lte).toBeUndefined();
+      // Single budget filter: merges into OR condition directly on where
+      expect(result.OR).toBeDefined();
+      expect(result.OR.some(c => c.budgetMax !== undefined)).toBe(true);
     });
 
-    it('applies category filter', () => {
+    it('applies category filter via tradeNeeded field', () => {
       const result = applyProjectFilters({}, { category: 'Toiture' });
-      expect(result.category).toEqual({ contains: 'Toiture', mode: 'insensitive' });
+      expect(result.tradeNeeded).toEqual({ contains: 'Toiture', mode: 'insensitive' });
     });
   });
 
@@ -460,7 +463,7 @@ describe('FilterHelper', () => {
 
     it('dispatches to applyProjectFilters', () => {
       const result = applyFilters('projects', {}, { city: 'Paris' });
-      expect(result.location).toBeDefined();
+      expect(result.city).toBeDefined();
     });
 
     it('dispatches to applyReviewFilters', () => {

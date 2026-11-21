@@ -215,20 +215,57 @@ function applyProjectFilters(where, filters) {
   if (!filters || Object.keys(filters).length === 0) return where;
 
   if (filters.city !== undefined) {
-    where.location = {
+    where.city = {
       contains: filters.city,
       mode: 'insensitive',
     };
   }
 
   if (filters.minBudget !== undefined || filters.maxBudget !== undefined) {
-    where.budget = {};
-    if (filters.minBudget !== undefined) where.budget.gte = filters.minBudget;
-    if (filters.maxBudget !== undefined) where.budget.lte = filters.maxBudget;
+    // Budget ranges overlap when: project.budgetMax >= search.minBudget AND project.budgetMin <= search.maxBudget
+    const budgetConditions = [];
+
+    if (filters.minBudget !== undefined) {
+      // Project max must be >= search min (or null, meaning unlimited)
+      budgetConditions.push({
+        OR: [
+          { budgetMax: { gte: filters.minBudget } },
+          { budgetMax: null },
+        ],
+      });
+    }
+
+    if (filters.maxBudget !== undefined) {
+      // Project min must be <= search max (or null, meaning no minimum)
+      budgetConditions.push({
+        OR: [
+          { budgetMin: { lte: filters.maxBudget } },
+          { budgetMin: null },
+        ],
+      });
+    }
+
+    // If both filters provided, both conditions must be true (AND)
+    if (budgetConditions.length === 2) {
+      where.AND = budgetConditions;
+    } else if (budgetConditions.length === 1) {
+      // Single budget filter: wrap in AND with existing conditions
+      if (where.OR) {
+        // Text search exists - preserve it and add budget constraint
+        where.AND = [
+          { OR: where.OR },
+          budgetConditions[0],
+        ];
+        delete where.OR;
+      } else {
+        // No text search - just merge budget conditions
+        Object.assign(where, budgetConditions[0]);
+      }
+    }
   }
 
   if (filters.category !== undefined) {
-    where.category = {
+    where.tradeNeeded = {
       contains: filters.category,
       mode: 'insensitive',
     };
