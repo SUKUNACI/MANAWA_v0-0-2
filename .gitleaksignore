@@ -13,3 +13,16 @@
 # CI test environment variables (not production secrets)
 2d3609dd51ed7718efdb71366c8fb72dd3fdecb8:.github/workflows/ci.yml:generic-api-key:77
 2d3609dd51ed7718efdb71366c8fb72dd3fdecb8:.github/workflows/ci.yml:generic-api-key:174
+
+# C5 documentation — exemples curl utilisant des placeholders JWT, faux positifs confirmés
+9845f9df9fae3a6a443056c284ae52deaf76d28a:backend/TESTING_INDEX.md:curl-auth-header:269
+9845f9df9fae3a6a443056c284ae52deaf76d28a:backend/BACKEND_SERVICES_TEST_GUIDE.md:curl-auth-header:91
+9845f9df9fae3a6a443056c284ae52deaf76d28a:backend/BACKEND_SERVICES_TEST_GUIDE.md:curl-auth-header:161
+9845f9df9fae3a6a443056c284ae52deaf76d28a:backend/BACKEND_SERVICES_TEST_GUIDE.md:curl-auth-header:172
+9845f9df9fae3a6a443056c284ae52deaf76d28a:backend/BACKEND_SERVICES_TEST_GUIDE.md:curl-auth-header:178
+9845f9df9fae3a6a443056c284ae52deaf76d28a:backend/BACKEND_SERVICES_TEST_GUIDE.md:curl-auth-header:348
+9845f9df9fae3a6a443056c284ae52deaf76d28a:backend/BACKEND_SERVICES_TEST_GUIDE.md:curl-auth-header:359
+9845f9df9fae3a6a443056c284ae52deaf76d28a:backend/BACKEND_SERVICES_TEST_GUIDE.md:curl-auth-header:365
+9845f9df9fae3a6a443056c284ae52deaf76d28a:backend/BACKEND_SERVICES_TEST_GUIDE.md:curl-auth-header:371
+9845f9df9fae3a6a443056c284ae52deaf76d28a:backend/SERVICES_TESTING_README.md:curl-auth-header:58
+9845f9df9fae3a6a443056c284ae52deaf76d28a:backend/SERVICES_TESTING_README.md:curl-auth-header:113
