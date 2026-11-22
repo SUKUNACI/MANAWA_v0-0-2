@@ -3,8 +3,9 @@ services:
     name: manawa-api
     runtime: node
     startCommand: cd backend && npm start
-    buildCommand: cd backend && npm ci && npx prisma generate && npx prisma migrate deploy
+    buildCommand: cd backend && npm ci && bash scripts/migrate-deploy.sh
     plan: standard
+    autoDeploy: false
 
     envVars:
       - key: NODE_ENV

@@ -86,7 +86,7 @@ jobs:
           MAILJET_SECRET_KEY: test_mailjet_secret_for_ci
         run: npm test -- --forceExit
 
-      - name: Enforce 75% coverage gate
+      - name: Enforce 80% coverage gate
         working-directory: ${{ env.WORKING_DIR }}
         run: |
           node -e "
@@ -94,7 +94,7 @@ jobs:
             const { lines, branches, functions, statements } = summary.total;
             const min = Math.min(lines.pct, branches.pct, functions.pct, statements.pct);
             console.log('Coverage — lines: ' + lines.pct + '%, branches: ' + branches.pct + '%, functions: ' + functions.pct + '%, statements: ' + statements.pct + '%');
-            if (min < 75) { console.error('COVERAGE GATE FAILED'); process.exit(1); }
+            if (min < 80) { console.error('COVERAGE GATE FAILED: minimum is ' + min + '%, required 80%'); process.exit(1); }
           "
 
       - name: Upload coverage report
@@ -104,17 +104,102 @@ jobs:
           name: coverage-report
           path: backend/coverage/
 
-  secrets-scan:
-    name: Secret & Security Scan
+  gitleaks:
+    name: Scan for secrets
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Gitleaks scan
-        uses: gitleaks/gitleaks-action@v2
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload SARIF report
+        if: always() && hashFiles('results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: results.sarif
+          wait-for-processing: true
+
+  deploy:
+    name: Deploy to Production
+    needs: [test, gitleaks]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Trigger Render deployment
+        id: trigger
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sf \
+            -X POST \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"commitId\":\"${COMMIT_SHA}\"}" \
+            "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys")
+          DEPLOY_ID=$(echo "${RESPONSE}" | jq -r '.id')
+          echo "deploy_id=${DEPLOY_ID}" >> "${GITHUB_OUTPUT}"
+          echo "Triggered deploy ${DEPLOY_ID} for commit ${COMMIT_SHA}"
+
+      - name: Wait for deployment to complete
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          DEPLOY_ID: ${{ steps.trigger.outputs.deploy_id }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          MAX_ATTEMPTS=90
+          ATTEMPT=0
+          while [ "${ATTEMPT}" -lt "${MAX_ATTEMPTS}" ]; do
+            RESPONSE=$(curl -sf \
+              -H "Authorization: Bearer ${RENDER_API_KEY}" \
+              "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys/${DEPLOY_ID}")
+            STATUS=$(echo "${RESPONSE}" | jq -r '.status')
+            DEPLOYED_SHA=$(echo "${RESPONSE}" | jq -r '.commit.id // ""')
+            echo "Attempt $((ATTEMPT + 1))/${MAX_ATTEMPTS} - status: ${STATUS}"
+            case "${STATUS}" in
+              live)
+                if [ "${DEPLOYED_SHA}" != "${EXPECTED_SHA}" ]; then
+                  echo "SHA mismatch: expected ${EXPECTED_SHA}, deployed ${DEPLOYED_SHA}"
+                  exit 1
+                fi
+                echo "Deploy ${DEPLOY_ID} is live (SHA: ${DEPLOYED_SHA})"
+                exit 0
+                ;;
+              build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
+                echo "Deploy failed with status: ${STATUS}"
+                exit 1
+                ;;
+            esac
+            ATTEMPT=$((ATTEMPT + 1))
+            sleep 10
+          done
+          echo "Deploy timed out after $((MAX_ATTEMPTS * 10)) seconds"
+          exit 1
+
+      - name: Health check
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          set -euo pipefail
+          SERVICE_URL=$(curl -sf \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            "https://api.render.com/v1/services/${RENDER_SERVICE_ID}" \
+            | jq -r '.serviceDetails.url')
+          echo "Health check: ${SERVICE_URL}/api/v1/health"
+          curl -sf "${SERVICE_URL}/api/v1/health"
+          echo "Health check passed"
