@@ -303,6 +303,32 @@ describe('2FA Authentication Routes', () => {
       expect(response.status).toBe(401);
     });
 
+    test('should return 401 2FA_TOKEN_MISMATCH when body.userId differs from JWT userId', async () => {
+      const attackerUUID = uuidv4();
+
+      const response = await request(app)
+        .post('/api/v1/auth/2fa/verify')
+        .send({ twoFAToken: validTwoFAToken, userId: attackerUUID, totpCode: '123456' });
+
+      expect(response.status).toBe(401);
+      expect(response.body.code).toBe('2FA_TOKEN_MISMATCH');
+    });
+
+    test('should succeed when body.userId matches JWT userId', async () => {
+      const totpCode = require('speakeasy').totp({
+        secret: testUser.twoFASecret,
+        encoding: 'base32',
+      });
+
+      const response = await request(app)
+        .post('/api/v1/auth/2fa/verify')
+        .send({ twoFAToken: validTwoFAToken, userId: testUser.id, totpCode });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('token');
+      expect(response.body).toHaveProperty('refreshToken');
+    });
+
     test('should fail if 2FA not enabled', async () => {
       const user = await prisma.user.create({
         data: {

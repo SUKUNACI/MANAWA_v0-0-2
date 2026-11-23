@@ -100,6 +100,12 @@ router.post(
         return res.status(401).json({ error: 'Token 2FA invalide', code: '2FA_TOKEN_INVALID' });
       }
 
+      // If the caller supplies a userId in the body, it must match the JWT.
+      // The JWT remains the authoritative identity source — body.userId never overrides it.
+      if (req.body.userId !== undefined && req.body.userId !== decoded.userId) {
+        return res.status(401).json({ error: 'Token 2FA invalide', code: '2FA_TOKEN_MISMATCH' });
+      }
+
       const userId = decoded.userId;
       const result = await twoFactor.verify(userId, { totpCode, backupCode });
       res.json({ message: 'Authentification à 2 facteurs réussie', ...result });
@@ -178,3 +184,5 @@ router.get('/status', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+// Exported for test teardown — allows resetting the rate-limit counter between unit tests.
+module.exports.twoFAVerifyLimiter = twoFAVerifyLimiter;

@@ -69,6 +69,7 @@ const prisma = require('../../config/db');
 const twoFAUtils = require('../../utils/2fa');
 const twoFAConfig = require('../../config/2fa');
 const auth2FARouter = require('../../routes/auth-2fa');
+const { twoFAVerifyLimiter } = require('../../routes/auth-2fa');
 
 const app = express();
 app.use(express.json());
@@ -284,6 +285,12 @@ describe('POST /api/v1/auth/2fa/verify', () => {
     jest.clearAllMocks();
   });
 
+  afterEach(async () => {
+    // Reset the in-memory rate-limit counter for Supertest's IP between tests.
+    // Production behavior (10 req / 15 min) is unchanged — only the test counter is cleared.
+    await twoFAVerifyLimiter.resetKey('127.0.0.1');
+  });
+
   // Cas 1 — absence de twoFAToken
   test('should return 400 if twoFAToken is absent', async () => {
     const res = await request(app)
@@ -397,10 +404,22 @@ describe('POST /api/v1/auth/2fa/verify', () => {
     expect(res.body.message).toContain('réussie');
   });
 
-  // Cas 8 — tentative de substitution d'identité via userId ignoré dans le body
-  test('should ignore userId in body and use identity from JWT', async () => {
+  // Cas 8 — body.userId différent du JWT → 401 2FA_TOKEN_MISMATCH (tentative de substitution d'identité)
+  test('should return 401 2FA_TOKEN_MISMATCH when body.userId differs from JWT userId', async () => {
     const attackerUUID = uuidv4();
 
+    const res = await request(app)
+      .post('/api/v1/auth/2fa/verify')
+      .send({ twoFAToken: makeTwoFAToken(), userId: attackerUUID, totpCode: '123456' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe('2FA_TOKEN_MISMATCH');
+    // DB must not have been queried — rejected before reaching business logic
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  // Cas 11 — body.userId absent → JWT userId utilisé normalement, 200
+  test('should succeed normally when body.userId is absent', async () => {
     prisma.user.findUnique.mockResolvedValue({
       id: TEST_UUID,
       email: 'victim@example.com',
@@ -418,10 +437,11 @@ describe('POST /api/v1/auth/2fa/verify', () => {
 
     const res = await request(app)
       .post('/api/v1/auth/2fa/verify')
-      .send({ twoFAToken: makeTwoFAToken(), userId: attackerUUID, totpCode: '123456' });
+      .send({ twoFAToken: makeTwoFAToken(), totpCode: '123456' });
 
     expect(res.status).toBe(200);
-    // DB was queried with userId from JWT (TEST_UUID), not the attacker's UUID
+    expect(res.body).toHaveProperty('token');
+    // DB queried with userId from JWT
     expect(prisma.user.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: TEST_UUID } })
     );
