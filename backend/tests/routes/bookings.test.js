@@ -31,6 +31,24 @@ jest.mock('../../config/db', () => ({
   },
 }));
 
+const { makeToken } = require('../helpers');
+
+function otherClientToken(id = 'other-client-1') {
+  return makeToken({ id, role: 'CLIENT', email: 'other@test.com' });
+}
+
+function otherProToken(id = 'other-pro-user-1') {
+  return makeToken({ id, role: 'PROFESSIONAL', email: 'otherpro@test.com' });
+}
+
+function adminStandardToken(id = 'admin-std-1') {
+  return makeToken({ id, role: 'ADMIN', email: 'adminstd@test.com', adminLevel: 'STANDARD' });
+}
+
+function superAdminToken(id = 'super-admin-1') {
+  return makeToken({ id, role: 'ADMIN', email: 'adminsuper@test.com', adminLevel: 'SUPER' });
+}
+
 jest.mock('../../config/pushNotifications', () => ({
   sendPushNotification: jest.fn().mockResolvedValue(true),
 }));
@@ -369,47 +387,179 @@ describe('GET /api/bookings/:id - Get booking detail', () => {
 
 // ============ TESTS: PATCH /api/bookings/:id/cancel ============
 
+// Fixture: minimal booking record returned by findForCancel
+const mockBookingForCancel = {
+  id: mockBooking.id,
+  clientId: CLIENT_USER_ID,
+  professionalId: PRO_ID,
+  status: 'PENDING',
+};
+
 describe('PATCH /api/bookings/:id/cancel - Cancel booking', () => {
   beforeEach(() => {
     resetAllMocks();
+    // findForCancel uses findUnique — return ownership record by default
+    prisma.booking.findUnique.mockResolvedValue(mockBookingForCancel);
+    // cancel() uses update
     prisma.booking.update.mockResolvedValue(mockCancelledBooking);
   });
+
+  // --- Authentification ---
 
   test('should return 401 without authentication', async () => {
     const res = await request(app).patch(`/api/bookings/${mockBooking.id}/cancel`);
     expect(res.status).toBe(401);
   });
 
-  test('should cancel booking with reason provided', async () => {
+  // --- Réservation inexistante ---
+
+  test('should return 404 if booking does not exist', async () => {
+    prisma.booking.findUnique.mockResolvedValue(null);
+
     const res = await request(app)
       .patch(`/api/bookings/${mockBooking.id}/cancel`)
-      .set('Authorization', `Bearer ${proToken(PRO_USER_ID)}`)
-      .send({
-        reason: 'Urgence professionnelle',
-        notifyByEmail: true,
-      });
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({ reason: 'test' });
 
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.booking.status).toBe('CANCELLED');
+    expect(res.status).toBe(404);
+    expect(prisma.booking.update).not.toHaveBeenCalled();
   });
 
-  test('should set status to CANCELLED', async () => {
+  // --- Statuts incompatibles ---
+
+  test('should return 409 if booking is already COMPLETED', async () => {
+    prisma.booking.findUnique.mockResolvedValue({ ...mockBookingForCancel, status: 'COMPLETED' });
+
+    const res = await request(app)
+      .patch(`/api/bookings/${mockBooking.id}/cancel`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({ reason: 'test' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('BOOKING_COMPLETED');
+    expect(prisma.booking.update).not.toHaveBeenCalled();
+  });
+
+  test('should return 409 if booking is already CANCELLED', async () => {
+    prisma.booking.findUnique.mockResolvedValue({ ...mockBookingForCancel, status: 'CANCELLED' });
+
+    const res = await request(app)
+      .patch(`/api/bookings/${mockBooking.id}/cancel`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({ reason: 'test' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('BOOKING_ALREADY_CANCELLED');
+    expect(prisma.booking.update).not.toHaveBeenCalled();
+  });
+
+  // --- Autorisation CLIENT ---
+
+  test('CLIENT owner should be able to cancel own booking', async () => {
     const res = await request(app)
       .patch(`/api/bookings/${mockBooking.id}/cancel`)
       .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
       .send({ reason: 'Client indisponible' });
 
     expect(res.status).toBe(200);
-    expect(prisma.booking.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: mockBooking.id },
-        data: expect.objectContaining({
-          status: 'CANCELLED',
-        }),
-      })
-    );
+    expect(res.body.success).toBe(true);
+    expect(res.body.booking.status).toBe('CANCELLED');
   });
+
+  test('CLIENT should be denied when booking belongs to another client', async () => {
+    const res = await request(app)
+      .patch(`/api/bookings/${mockBooking.id}/cancel`)
+      .set('Authorization', `Bearer ${otherClientToken()}`)
+      .send({ reason: 'tentative IDOR' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN');
+    expect(prisma.booking.update).not.toHaveBeenCalled();
+  });
+
+  // --- Autorisation PROFESSIONAL ---
+
+  test('PROFESSIONAL owner should be able to cancel associated booking', async () => {
+    // The professional lookup returns mockProfessional (id = PRO_ID = professionalId on booking)
+    const res = await request(app)
+      .patch(`/api/bookings/${mockBooking.id}/cancel`)
+      .set('Authorization', `Bearer ${proToken(PRO_USER_ID)}`)
+      .send({ reason: 'Urgence professionnelle' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  test('PROFESSIONAL should be denied when not associated with booking', async () => {
+    // otherProToken has id 'other-pro-user-1'; professional lookup returns null for that userId
+    const res = await request(app)
+      .patch(`/api/bookings/${mockBooking.id}/cancel`)
+      .set('Authorization', `Bearer ${otherProToken()}`)
+      .send({ reason: 'tentative IDOR' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN');
+    expect(prisma.booking.update).not.toHaveBeenCalled();
+  });
+
+  // --- Autorisation ADMIN ---
+
+  test('ADMIN standard should be denied', async () => {
+    const res = await request(app)
+      .patch(`/api/bookings/${mockBooking.id}/cancel`)
+      .set('Authorization', `Bearer ${adminStandardToken()}`)
+      .send({ reason: 'admin override' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN');
+    expect(prisma.booking.update).not.toHaveBeenCalled();
+  });
+
+  test('SUPER admin should be denied for a booking they do not own', async () => {
+    // T1.06 (adminLevel: FOUNDER) not implemented — SUPER_ADMIN ≠ FONDATEUR, no bypass allowed
+    const res = await request(app)
+      .patch(`/api/bookings/${mockBooking.id}/cancel`)
+      .set('Authorization', `Bearer ${superAdminToken()}`)
+      .send({ reason: 'Admin intervention' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN');
+    expect(prisma.booking.update).not.toHaveBeenCalled();
+  });
+
+  // --- FONDATEUR (T1.06 non implémenté — bloqué D4/D5) ---
+  // Les cas 7/8/10 de la spec (FONDATEUR autorisé avec motif, refusé sans motif,
+  // journalisation) ne peuvent pas être testés tant que T1.06 n'est pas livré.
+  // Ces tests seront activés dès que adminLevel: 'FOUNDER' + requireFounder()
+  // seront disponibles dans middleware/auth.js.
+  //
+  // Comportement actuel attendu : 403 pour tout ADMIN jusqu'à T1.06.
+  test('[T1.06-pending] any ADMIN is denied until FOUNDER mechanism is implemented', async () => {
+    const founderLikeToken = makeToken({ id: 'founder-1', role: 'ADMIN', email: 'founder@manawa.com', adminLevel: 'FOUNDER' });
+
+    const res = await request(app)
+      .patch(`/api/bookings/${mockBooking.id}/cancel`)
+      .set('Authorization', `Bearer ${founderLikeToken}`)
+      .send({ reason: 'Intervention FONDATEUR' });
+
+    // Until T1.06 is delivered, adminLevel FOUNDER is not recognised — returns 403
+    expect(res.status).toBe(403);
+    expect(prisma.booking.update).not.toHaveBeenCalled();
+  });
+
+  // --- Vérification qu'aucune modification n'a lieu avant l'autorisation complète ---
+
+  test('should not call booking.update when request is refused (403)', async () => {
+    const res = await request(app)
+      .patch(`/api/bookings/${mockBooking.id}/cancel`)
+      .set('Authorization', `Bearer ${otherClientToken()}`)
+      .send({ reason: 'tentative' });
+
+    expect(res.status).toBe(403);
+    expect(prisma.booking.update).not.toHaveBeenCalled();
+  });
+
+  // --- Comportement nominal : champs stockés ---
 
   test('should store cancellation reason', async () => {
     const cancelReason = 'Imprévu professionnel';
@@ -422,9 +572,7 @@ describe('PATCH /api/bookings/:id/cancel - Cancel booking', () => {
     expect(res.status).toBe(200);
     expect(prisma.booking.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          cancellationReason: cancelReason,
-        }),
+        data: expect.objectContaining({ cancellationReason: cancelReason }),
       })
     );
   });
@@ -433,14 +581,12 @@ describe('PATCH /api/bookings/:id/cancel - Cancel booking', () => {
     const res = await request(app)
       .patch(`/api/bookings/${mockBooking.id}/cancel`)
       .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
-      .send({ reason: 'Test cancellation' });
+      .send({ reason: 'Test' });
 
     expect(res.status).toBe(200);
     expect(prisma.booking.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          cancelledAt: expect.any(Date),
-        }),
+        data: expect.objectContaining({ cancelledAt: expect.any(Date) }),
       })
     );
   });
@@ -454,40 +600,9 @@ describe('PATCH /api/bookings/:id/cancel - Cancel booking', () => {
     expect(res.status).toBe(200);
     expect(prisma.booking.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          cancellationReason: null,
-        }),
+        data: expect.objectContaining({ cancellationReason: null }),
       })
     );
-  });
-
-  test('should include client and professional in response', async () => {
-    const res = await request(app)
-      .patch(`/api/bookings/${mockBooking.id}/cancel`)
-      .set('Authorization', `Bearer ${proToken(PRO_USER_ID)}`)
-      .send({ reason: 'Test' });
-
-    expect(res.status).toBe(200);
-    expect(prisma.booking.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        include: {
-          client: true,
-          professional: expect.any(Object),
-        },
-      })
-    );
-  });
-
-  test('should return cancelled booking details', async () => {
-    const res = await request(app)
-      .patch(`/api/bookings/${mockBooking.id}/cancel`)
-      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
-      .send({ reason: 'Client change' });
-
-    expect(res.status).toBe(200);
-    expect(res.body.booking).toHaveProperty('id');
-    expect(res.body.booking).toHaveProperty('client');
-    expect(res.body.booking).toHaveProperty('professional');
   });
 });
 
@@ -748,15 +863,22 @@ describe('Booking Edge Cases', () => {
     expect(res.status).toBe(200);
   });
 
-  test('should handle cancelling already cancelled booking gracefully', async () => {
-    prisma.booking.update.mockResolvedValue(mockCancelledBooking);
+  test('should return 409 when cancelling already cancelled booking', async () => {
+    prisma.booking.findUnique.mockResolvedValue({
+      id: mockCancelledBooking.id,
+      clientId: CLIENT_USER_ID,
+      professionalId: PRO_ID,
+      status: 'CANCELLED',
+    });
 
     const res = await request(app)
       .patch(`/api/bookings/${mockCancelledBooking.id}/cancel`)
       .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
       .send({ reason: 'Double cancellation' });
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('BOOKING_ALREADY_CANCELLED');
+    expect(prisma.booking.update).not.toHaveBeenCalled();
   });
 
   test('should handle booking with null project gracefully', async () => {

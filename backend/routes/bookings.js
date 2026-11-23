@@ -104,6 +104,43 @@ router.patch('/:id/cancel', writeLimiter, requireAuth,
   handleValidationErrors,
   async (req, res, next) => {
     try {
+      const existing = await bookingModule.findForCancel(req.params.id);
+      if (!existing) return res.status(404).json({ error: 'Réservation introuvable' });
+
+      // Statuts terminaux — fail-closed
+      if (existing.status === 'COMPLETED') {
+        return res.status(409).json({ error: "Impossible d'annuler une réservation déjà terminée", code: 'BOOKING_COMPLETED' });
+      }
+      if (existing.status === 'CANCELLED') {
+        return res.status(409).json({ error: 'La réservation est déjà annulée', code: 'BOOKING_ALREADY_CANCELLED' });
+      }
+
+      const caller = req.user;
+
+      if (caller.role === 'CLIENT') {
+        if (existing.clientId !== caller.id) {
+          return res.status(403).json({ error: "Accès refusé — vous n'êtes pas propriétaire de cette réservation", code: 'FORBIDDEN' });
+        }
+      } else if (caller.role === 'PROFESSIONAL') {
+        // professionalId on Booking = Professional.id, not Professional.userId
+        const professional = await prisma.professional.findUnique({
+          where: { userId: caller.id },
+          select: { id: true },
+        });
+        if (!professional || existing.professionalId !== professional.id) {
+          return res.status(403).json({ error: "Accès refusé — cette réservation ne vous est pas associée", code: 'FORBIDDEN' });
+        }
+      } else if (caller.role === 'ADMIN') {
+        // FONDATEUR uniquement (adminLevel: 'FOUNDER') — T1.06 non implémenté, bloqué D4/D5
+        // Dès que T1.06 sera livré, remplacer ce bloc par :
+        //   if (caller.adminLevel !== 'FOUNDER') → 403
+        //   if (!reason?.trim()) → 400 motif obligatoire
+        //   await AuditLogModule.createAuditLog({ action: 'BOOKING_CANCEL_FOUNDER', ... })
+        return res.status(403).json({ error: 'Accès refusé — seul le FONDATEUR peut annuler une réservation tierce', code: 'FORBIDDEN' });
+      } else {
+        return res.status(403).json({ error: 'Accès refusé', code: 'FORBIDDEN' });
+      }
+
       const { reason, notifyByEmail } = req.body;
       const booking = await bookingModule.cancel(req.params.id, { reason, notifyByEmail });
       res.json({ success: true, booking });

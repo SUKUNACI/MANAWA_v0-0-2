@@ -177,7 +177,20 @@ class BookingModule {
   }
 
   /**
+   * Load a booking's ownership and status fields for pre-cancel authorization checks.
+   * @param {string} bookingId
+   * @returns {Promise<object|null>}
+   */
+  async findForCancel(bookingId) {
+    return this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: { id: true, clientId: true, professionalId: true, status: true },
+    });
+  }
+
+  /**
    * Cancel booking (→ CANCELLED state)
+   * Authorization must be verified by the caller before invoking this method.
    * @param {string} bookingId - Booking ID
    * @param {object} opts - { reason, notifyByEmail }
    * @returns {Promise<object>}
