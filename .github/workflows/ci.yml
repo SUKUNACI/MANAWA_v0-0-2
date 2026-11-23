@@ -104,6 +104,158 @@ jobs:
           name: coverage-report
           path: backend/coverage/
 
+  concurrency-integration:
+    name: T1.03 — Concurrency Integration Test (real PostgreSQL)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: manawa
+          POSTGRES_PASSWORD: manawa_test
+          POSTGRES_DB: manawa_concurrency_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npm ci
+
+      - name: Push schema to test database
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          DATABASE_URL: postgresql://manawa:manawa_test@localhost:5433/manawa_concurrency_test
+          DIRECT_URL: postgresql://manawa:manawa_test@localhost:5433/manawa_concurrency_test
+        run: npx prisma db push --accept-data-loss
+
+      - name: Run concurrency integration test
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          NODE_ENV: test
+          INTEGRATION_PG_URL: postgresql://manawa:manawa_test@localhost:5433/manawa_concurrency_test
+          DATABASE_URL: postgresql://manawa:manawa_test@localhost:5433/manawa_concurrency_test
+          JWT_SECRET: ${{ secrets.CI_JWT_SECRET || 'test-secret-min-32-characters-for-ci-only' }}
+        # Run with an inline config that excludes integration/ from ignore patterns.
+        # --json writes machine-readable results to concurrency-test-report.json.
+        # --outputFile must be an absolute-style path relative to the working-directory.
+        run: |
+          npx jest \
+            --config='{"testEnvironment":"node","clearMocks":true,"testTimeout":60000}' \
+            "tests/integration/password-reset-concurrency.test.js" \
+            --no-coverage \
+            --forceExit \
+            --verbose \
+            --json \
+            --outputFile=concurrency-test-report.json
+
+      - name: Verify concurrency test results (no phantom pass)
+        working-directory: ${{ env.WORKING_DIR }}
+        # Parse the Jest JSON report and assert:
+        #   - report file exists and is valid JSON
+        #   - exactly 1 test suite ran (numTotalTestSuites == 1)
+        #   - the T1.03 describe block is present in assertionResults
+        #   - exactly 6 tests passed (numPassedTests == 6)
+        #   - 0 tests failed (numFailedTests == 0)
+        #   - 0 tests skipped (numPendingTests == 0)
+        #   - 0 test suites failed (numFailedTestSuites == 0)
+        # Note: testFilePath may be null when Jest runs with an inline --config on some
+        # platforms. The check uses assertionResults[].ancestorTitles instead, which is
+        # always populated and contains the describe() label written in the test file.
+        # Exits non-zero on any violation — the job fails and blocks the merge.
+        run: |
+          node -e "
+            const fs = require('fs');
+            const reportPath = 'concurrency-test-report.json';
+
+            if (!fs.existsSync(reportPath)) {
+              console.error('FAIL: concurrency-test-report.json not found — Jest did not produce a report.');
+              process.exit(1);
+            }
+
+            let report;
+            try {
+              report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+            } catch (e) {
+              console.error('FAIL: concurrency-test-report.json is not valid JSON:', e.message);
+              process.exit(1);
+            }
+
+            const T1_03_MARKER   = 'T1.03';
+            const EXPECTED_TESTS = 6;
+
+            const passed       = report.numPassedTests;
+            const failed       = report.numFailedTests;
+            const pending      = report.numPendingTests;
+            const suiteFailed  = report.numFailedTestSuites;
+            const totalSuites  = report.numTotalTestSuites;
+
+            console.log('Jest concurrency report:');
+            console.log('  numTotalTestSuites:   ' + totalSuites);
+            console.log('  numPassedTests:       ' + passed);
+            console.log('  numFailedTests:       ' + failed);
+            console.log('  numPendingTests:      ' + pending);
+            console.log('  numFailedTestSuites:  ' + suiteFailed);
+
+            // Verify the T1.03 describe block is present in at least one result
+            const allTests = (report.testResults || []).flatMap(s => s.assertionResults || []);
+            const t103Present = allTests.some(t =>
+              (t.ancestorTitles || []).some(a => a.includes(T1_03_MARKER)) ||
+              (t.fullName || '').includes(T1_03_MARKER)
+            );
+
+            if (!t103Present) {
+              console.error('FAIL: T1.03 marker not found in assertionResults — test suite did not run.');
+              process.exit(1);
+            }
+
+            if (totalSuites < 1) {
+              console.error('FAIL: 0 test suites in report — nothing ran.');
+              process.exit(1);
+            }
+            if (passed < EXPECTED_TESTS) {
+              console.error('FAIL: expected at least ' + EXPECTED_TESTS + ' passed tests, got ' + passed);
+              process.exit(1);
+            }
+            if (failed > 0) {
+              console.error('FAIL: ' + failed + ' test(s) failed — atomicity not verified.');
+              process.exit(1);
+            }
+            if (pending > 0) {
+              console.error('FAIL: ' + pending + ' test(s) were skipped — phantom pass risk.');
+              process.exit(1);
+            }
+            if (suiteFailed > 0) {
+              console.error('FAIL: ' + suiteFailed + ' test suite(s) failed.');
+              process.exit(1);
+            }
+
+            console.log('PASS: T1.03 marker confirmed. ' + passed + '/' + EXPECTED_TESTS + ' concurrency tests verified on real PostgreSQL.');
+          "
+
+      - name: Upload concurrency test report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: concurrency-test-report
+          path: backend/concurrency-test-report.json
+
   secrets-scan:
     name: Secret & Security Scan
     runs-on: ubuntu-latest

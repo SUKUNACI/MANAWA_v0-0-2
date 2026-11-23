@@ -43,17 +43,26 @@ async function requireAuth(req, res, next) {
       where: { id: payload.id },
       select: {
         id: true, role: true, email: true, suspended: true, deletedAt: true, adminLevel: true,
-        adminPermissions: true, adminRoleTypeId: true,
+        adminPermissions: true, adminRoleTypeId: true, mustChangePassword: true,
         adminRoleType: { select: { slug: true } }
       }
     });
     if (!user || user.deletedAt) return res.status(401).json({ error: 'Utilisateur introuvable' });
     if (user.suspended) return res.status(403).json({ error: 'Votre compte a été suspendu' });
+    // D2: block all authenticated routes until admin-triggered password reset is completed.
+    // Routes exempt by design (complete-password-reset, logout) do not use requireAuth.
+    if (user.mustChangePassword) {
+      return res.status(403).json({
+        error: 'Vous devez définir un nouveau mot de passe avant de continuer.',
+        code: 'PASSWORD_CHANGE_REQUIRED',
+      });
+    }
     req.user = {
       id: user.id, role: user.role, email: user.email, adminLevel: user.adminLevel,
       adminPermissions: user.adminPermissions || null,
       adminRoleTypeId: user.adminRoleTypeId || null,
-      adminRoleSlug: user.adminRoleType?.slug || null
+      adminRoleSlug: user.adminRoleType?.slug || null,
+      mustChangePassword: user.mustChangePassword,
     };
     next();
   } catch (err) {
@@ -169,4 +178,21 @@ async function requireEmailVerified(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth, requireAdminAuth, requireRole, optionalAuth, requireSuperAdmin, requireAdminOrSuper, requirePermission, requireEmailVerified, requireRoleAccess };
+// Blocks access when mustChangePassword is true.
+// Apply after requireAuth on any route that should be inaccessible until the user
+// has completed an admin-triggered password reset.
+async function requirePasswordChangeCompleted(req, res, next) {
+  const user = await prisma.user.findUnique({
+    where: { id: req.user.id },
+    select: { mustChangePassword: true },
+  });
+  if (user && user.mustChangePassword) {
+    return res.status(403).json({
+      error: 'Vous devez définir un nouveau mot de passe avant de continuer.',
+      code: 'PASSWORD_CHANGE_REQUIRED',
+    });
+  }
+  next();
+}
+
+module.exports = { requireAuth, requireAdminAuth, requireRole, optionalAuth, requireSuperAdmin, requireAdminOrSuper, requirePermission, requireEmailVerified, requireRoleAccess, requirePasswordChangeCompleted };

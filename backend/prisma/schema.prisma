@@ -41,6 +41,7 @@ model User {
   securityAnswerHash     String?
   expoPushToken          String?
   deletedAt              DateTime?
+  mustChangePassword     Boolean                 @default(false)
   twoFAEnabled           Boolean                 @default(false)
   twoFASecret            String?
   twoFABackupCodes       Json?

@@ -140,6 +140,14 @@ class AuthModule {
       throw Object.assign(new Error('Compte suspendu'), { status: 403 });
     }
 
+    // D2: refuse token renewal until the admin-triggered password reset is completed.
+    if (stored.user.mustChangePassword) {
+      throw Object.assign(
+        new Error('Vous devez terminer la réinitialisation de votre mot de passe avant de continuer.'),
+        { status: 403, code: 'PASSWORD_CHANGE_REQUIRED' }
+      );
+    }
+
     // Token rotation
     await this.prisma.refreshToken.delete({ where: { id: stored.id } });
     const newAccessToken = this.generateAccessToken(stored.user);

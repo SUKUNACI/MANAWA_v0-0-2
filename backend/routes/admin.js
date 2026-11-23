@@ -10,6 +10,7 @@ const prisma = require('../config/db');
 const logger = require('../utils/logger');
 const AdminModule = require('../modules/admin');
 const AuditLogModule = require('../modules/AuditLogModule');
+const mailer = require('../config/mailer');
 
 const router = express.Router();
 const admin = new AdminModule(prisma);
@@ -156,13 +157,14 @@ router.delete('/professionals/:id/complaint', async (req, res) => {
 
 router.post('/users/:id/reset-password', async (req, res) => {
   try {
-    const result = await admin.resetUserPassword(req.params.id);
-    await logAdminAction(req, 'USER_PASSWORD_RESET', 'USER', req.params.id, {
+    const result = await admin.resetUserPassword(req.params.id, mailer);
+    await logAdminAction(req, 'USER_PASSWORD_RESET_LINK_SENT', 'USER', req.params.id, {
       reason: req.body?.reason || 'admin_request',
+      mechanism: 'secure_link',
     });
     res.json(result);
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message, code: err.code });
   }
 });
 

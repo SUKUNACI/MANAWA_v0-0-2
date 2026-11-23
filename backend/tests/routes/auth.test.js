@@ -109,6 +109,7 @@ jest.mock('../../middleware/auth', () => ({
     next();
   },
   requireEmailVerified: (req, res, next) => next(),
+  requirePasswordChangeCompleted: (req, res, next) => next(),
 }));
 
 // ── Mock logger ───────────────────────────────────────────────────────────────
@@ -554,6 +555,43 @@ describe('POST /api/auth/refresh', () => {
 
     expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/suspendu/i);
+  });
+
+  test('403 PASSWORD_CHANGE_REQUIRED — mustChangePassword=true bloque le refresh (D2)', async () => {
+    prisma.refreshToken.findUnique.mockResolvedValue({
+      id:        'rt-5',
+      token:     'valid-refresh-token',
+      expiresAt: futureDate,
+      user:      { ...mockClientUser, mustChangePassword: true },
+    });
+
+    const res = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: 'valid-refresh-token' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('PASSWORD_CHANGE_REQUIRED');
+    expect(res.body.error).toMatch(/réinitialisation/i);
+    // Token rotation must NOT happen — no new tokens issued
+    expect(prisma.refreshToken.delete).not.toHaveBeenCalled();
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+  });
+
+  test('200 — mustChangePassword=false ne bloque pas le refresh (fonctionnement normal)', async () => {
+    prisma.refreshToken.findUnique.mockResolvedValue({
+      id:        'rt-6',
+      token:     'valid-refresh-token',
+      expiresAt: futureDate,
+      user:      { ...mockClientUser, mustChangePassword: false },
+    });
+
+    const res = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: 'valid-refresh-token' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('token');
+    expect(res.body).toHaveProperty('refreshToken');
   });
 });
 

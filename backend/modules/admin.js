@@ -157,21 +157,192 @@ class AdminModule {
 
   // ---- Users ----
 
-  async resetUserPassword(userId) {
-    try {
-      const user = await this.prisma.user.findUnique({ where: { id: userId } });
-      if (!user) throw Object.assign(new Error('Utilisateur introuvable'), { status: 404 });
+  /**
+   * Initiate a secure admin-triggered password reset (D1=Option B, D2=yes, D3=fail-closed).
+   * Generates a cryptographically secure token, stores only its SHA-256 hash, sends a
+   * one-time reset link to the user's email, and sets mustChangePassword=true.
+   * Never returns a password or token in the HTTP response.
+   * Throws HTTP 503 if email delivery fails (D3), cleaning up any stored token.
+   *
+   * @param {string} userId
+   * @param {object} mailer - { send, isConfigured } from config/mailer
+   * @returns {Promise<{ initiated: true }>}
+   */
+  async resetUserPassword(userId, mailer) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, firstName: true },
+    });
+    if (!user) throw Object.assign(new Error('Utilisateur introuvable'), { status: 404 });
 
-      const temporaryPassword = crypto.randomBytes(12).toString('hex');
-      const passwordHash = await bcrypt.hash(temporaryPassword, 10);
-      await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
-
-      logger.info('[AdminModule] Password reset', { userId });
-      return { temporaryPassword };
-    } catch (err) {
-      logger.error('[AdminModule] resetUserPassword failed', { userId, error: err.message });
-      throw err;
+    // D3: reject immediately if mailer is not configured — no silent partial success
+    if (!mailer.isConfigured) {
+      throw Object.assign(
+        new Error("Service email non disponible — réinitialisation impossible"),
+        { status: 503, code: 'EMAIL_SERVICE_UNAVAILABLE' }
+      );
     }
+
+    // Generate a 48-byte (96 hex chars) cryptographically secure raw token
+    const rawToken = crypto.randomBytes(48).toString('hex');
+    // Store only the SHA-256 hash — raw token never persisted
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    // 2-hour TTL, coherent with the project's existing OTP conventions
+    const expiry = new Date(Date.now() + 2 * 60 * 60 * 1000);
+
+    // Write hash + expiry + mustChangePassword atomically
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordResetCode: tokenHash,
+        passwordResetExpiry: expiry,
+        mustChangePassword: true,
+      },
+    });
+
+    // Build reset link — raw token is only ever sent via email
+    const baseUrl = process.env.APP_URL || 'http://localhost:3000';
+    const resetLink = `${baseUrl}/reset-password?token=${rawToken}&userId=${userId}`;
+
+    const html = `
+      <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;background:#0A0D14;color:#fff;border-radius:12px;">
+        <h2 style="color:#F97316;margin-bottom:8px;">MANAWA</h2>
+        <p style="color:#9CA3AF;margin-bottom:24px;">Réinitialisation de votre mot de passe</p>
+        <div style="background:#1A1F2E;border-radius:10px;padding:24px;margin-bottom:24px;">
+          <p style="color:#9CA3AF;font-size:14px;margin-bottom:16px;">
+            Un administrateur MANAWA a demandé une réinitialisation de votre mot de passe.
+          </p>
+          <a href="${resetLink}" style="display:inline-block;background:#F97316;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;">
+            Définir mon nouveau mot de passe
+          </a>
+        </div>
+        <p style="color:#9CA3AF;font-size:13px;">Ce lien expire dans <strong style="color:#fff;">2 heures</strong> et ne peut être utilisé qu'une seule fois.</p>
+        <p style="color:#6B7280;font-size:12px;margin-top:24px;">Si vous n'attendiez pas cet email, contactez l'équipe support MANAWA immédiatement.</p>
+      </div>`;
+
+    const text = `Un administrateur MANAWA a demandé une réinitialisation de votre mot de passe.\n\nCliquez sur ce lien pour définir votre nouveau mot de passe :\n${resetLink}\n\nCe lien expire dans 2 heures et ne peut être utilisé qu'une seule fois.`;
+
+    let emailResult;
+    try {
+      emailResult = await mailer.send({
+        to: user.email,
+        subject: 'Réinitialisation de votre mot de passe — MANAWA',
+        html,
+        text,
+      });
+    } catch (emailErr) {
+      // D3: rollback the token and mustChangePassword on email failure
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { passwordResetCode: null, passwordResetExpiry: null, mustChangePassword: false },
+      }).then(
+        () => logger.info('[AdminModule] resetUserPassword email failed — rollback succeeded', { userId }),
+        (rbErr) => logger.error('[AdminModule] resetUserPassword email failed — ROLLBACK FAILED — token may still be active', { userId, rollbackError: rbErr.message })
+      );
+      throw Object.assign(
+        new Error("Service email indisponible — réinitialisation annulée"),
+        { status: 503, code: 'EMAIL_SERVICE_UNAVAILABLE' }
+      );
+    }
+
+    // D3: treat sent:false (non-throw path, e.g. circuit-open) as failure too
+    if (!emailResult?.sent) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { passwordResetCode: null, passwordResetExpiry: null, mustChangePassword: false },
+      }).then(
+        () => logger.info('[AdminModule] resetUserPassword email not sent — rollback succeeded', { userId }),
+        (rbErr) => logger.error('[AdminModule] resetUserPassword email not sent — ROLLBACK FAILED — token may still be active', { userId, rollbackError: rbErr.message })
+      );
+      throw Object.assign(
+        new Error("Service email indisponible — réinitialisation annulée"),
+        { status: 503, code: 'EMAIL_SERVICE_UNAVAILABLE' }
+      );
+    }
+
+    logger.info('[AdminModule] Password reset link sent', { userId });
+    return { initiated: true };
+  }
+
+  /**
+   * Complete an admin-triggered password reset using the raw one-time token.
+   * Validates token hash, expiry, password strength, sets new hash,
+   * clears mustChangePassword and all refresh tokens (session invalidation).
+   *
+   * @param {string} userId
+   * @param {string} rawToken - the token from the reset link
+   * @param {string} newPassword
+   * @returns {Promise<{ reset: true }>}
+   */
+  async completePasswordReset(userId, rawToken, newPassword) {
+    if (!newPassword || newPassword.length < 8) {
+      throw Object.assign(new Error('Le mot de passe doit faire au moins 8 caractères'), { status: 400 });
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true, passwordResetCode: true, passwordResetExpiry: true,
+        passwordHash: true, mustChangePassword: true,
+      },
+    });
+
+    if (!user || !user.passwordResetCode) {
+      throw Object.assign(new Error('Lien de réinitialisation invalide'), { status: 400, code: 'RESET_TOKEN_INVALID' });
+    }
+
+    if (new Date() > user.passwordResetExpiry) {
+      throw Object.assign(new Error('Lien expiré — demandez une nouvelle réinitialisation'), { status: 400, code: 'RESET_TOKEN_EXPIRED' });
+    }
+
+    const incomingHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    // Constant-time comparison to prevent timing attacks
+    const storedHashBuf = Buffer.from(user.passwordResetCode, 'hex');
+    const incomingHashBuf = Buffer.from(incomingHash, 'hex');
+    const tokenValid =
+      storedHashBuf.length === incomingHashBuf.length &&
+      crypto.timingSafeEqual(storedHashBuf, incomingHashBuf);
+
+    if (!tokenValid) {
+      throw Object.assign(new Error('Lien de réinitialisation invalide'), { status: 400, code: 'RESET_TOKEN_INVALID' });
+    }
+
+    const isSamePassword = await bcrypt.compare(newPassword, user.passwordHash);
+    if (isSamePassword) {
+      throw Object.assign(new Error("Le nouveau mot de passe doit être différent de l'ancien"), { status: 400 });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const now = new Date();
+
+    // Single transaction: atomically consume token + update password + invalidate sessions.
+    // The WHERE clause on passwordResetCode prevents TOCTOU (concurrent request finds 0 rows).
+    // The WHERE clause on passwordResetExpiry re-checks expiry at write time, not just at read.
+    // deleteMany inside the same transaction ensures sessions are wiped iff the UPDATE succeeds.
+    const [updateResult] = await this.prisma.$transaction([
+      this.prisma.$queryRaw`
+        UPDATE "User"
+        SET "passwordHash"        = ${passwordHash},
+            "passwordResetCode"   = NULL,
+            "passwordResetExpiry" = NULL,
+            "mustChangePassword"  = false
+        WHERE id = ${userId}
+          AND "passwordResetCode"   = ${user.passwordResetCode}
+          AND "passwordResetExpiry" > ${now}
+        RETURNING id
+      `,
+      this.prisma.refreshToken.deleteMany({ where: { userId } }),
+    ]);
+
+    if (!updateResult || updateResult.length === 0) {
+      throw Object.assign(
+        new Error('Lien de réinitialisation expiré ou déjà utilisé'),
+        { status: 400, code: 'RESET_TOKEN_INVALID' }
+      );
+    }
+
+    logger.info('[AdminModule] Password reset completed', { userId });
+    return { reset: true };
   }
 
   // ---- Finances ----
