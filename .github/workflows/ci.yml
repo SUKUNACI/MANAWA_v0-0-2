@@ -18,7 +18,7 @@ env:
 
 jobs:
   test:
-    name: Tests & Coverage Gate (80%)
+    name: Tests & Coverage Gate (75%)
     runs-on: ubuntu-latest
 
     services:
