@@ -288,7 +288,10 @@ describe('POST /api/v1/auth/2fa/verify', () => {
   afterEach(async () => {
     // Reset the in-memory rate-limit counter for Supertest's IP between tests.
     // Production behavior (10 req / 15 min) is unchanged — only the test counter is cleared.
-    await twoFAVerifyLimiter.resetKey('127.0.0.1');
+    // Guard: under the global jest mock in tests/setup.js, resetKey is absent — skip safely.
+    if (typeof twoFAVerifyLimiter.resetKey === 'function') {
+      await twoFAVerifyLimiter.resetKey('127.0.0.1');
+    }
   });
 
   // Cas 1 — absence de twoFAToken
