@@ -304,7 +304,7 @@ app.use((req, res, next) => {
   if (req.originalUrl === '/api/payments/webhooks/geniuspay' ||
       req.originalUrl === '/api/payments/notify' ||
       req.originalUrl === '/api/subscriptions/notify' ||
-      req.originalUrl === '/api/v1/payments/webhooks/geniuspay' ||
+      req.originalUrl === '/api/v1/webhooks/geniuspay' ||
       req.originalUrl === '/api/v1/payments/notify' ||
       req.originalUrl === '/api/v1/subscriptions/notify') {
     return next();
@@ -332,7 +332,7 @@ const apiV0Redirect = (req, res, next) => {
   if (req.path.match(/^\/api\/(?!v[0-9])/) && req.method !== 'OPTIONS') {
     const targetPath = `/api/v1${req.path.substring(4)}`;
     const fullUrl = targetPath + (req.url.includes('?') ? '?' + req.url.split('?')[1] : '');
-    return res.redirect(301, fullUrl);
+    return res.redirect(308, fullUrl);
   }
   next();
 };
