@@ -61,6 +61,38 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: npm ci
 
+      - name: Wait for PostgreSQL to be ready
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          node -e "
+          const { Client } = require('pg');
+          const client = new Client({
+            host: 'localhost',
+            port: 5432,
+            user: 'manawa',
+            password: 'manawa_test',
+            database: 'manawa_test'
+          });
+
+          async function waitForPostgres() {
+            for (let i = 1; i <= 30; i++) {
+              try {
+                await client.connect();
+                console.log('✅ PostgreSQL is ready!');
+                await client.end();
+                process.exit(0);
+              } catch (err) {
+                console.log(\`⏳ Attempt \${i}/30 — PostgreSQL not ready yet, waiting...\`);
+                await new Promise(r => setTimeout(r, 1000));
+              }
+            }
+            console.error('❌ PostgreSQL failed to start after 30 seconds');
+            process.exit(1);
+          }
+
+          waitForPostgres();
+          "
+
       - name: Generate Prisma client
         working-directory: ${{ env.WORKING_DIR }}
         env:
