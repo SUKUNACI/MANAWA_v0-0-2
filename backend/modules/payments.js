@@ -59,12 +59,14 @@ class PaymentsModule {
   }
 
   /**
-   * Process payment (mock or Stripe)
+   * Process payment via GeniusPay
+   * Note: All payments processed via GeniusPay webhooks (payment.success event)
+   * @deprecated This method kept for backward compatibility only
    * @param {string} paymentId - Payment ID
-   * @param {object} opts - { stripeToken, metadata }
+   * @param {object} opts - Reserved for future use
    * @returns {Promise<object>}
    */
-  async processPayment(paymentId, { stripeToken, metadata = {} } = {}) {
+  async processPayment(paymentId, { metadata = {} } = {}) {
     try {
       const payment = await this.prisma.payment.findUnique({
         where: { id: paymentId },

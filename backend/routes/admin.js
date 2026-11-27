@@ -191,8 +191,9 @@ router.get('/finances/commissions', async (req, res) => {
 
 router.patch('/finances/commissions/:professionalId/mark-paid', async (req, res) => {
   try {
-    const { updated } = await admin.markCommissionsPaid();
-    await logAdminAction(req, 'COMMISSIONS_MARK_PAID', 'PROFESSIONAL', req.params.professionalId, {
+    const { professionalId } = req.params;
+    const { updated } = await admin.markCommissionsPaid(professionalId);
+    await logAdminAction(req, 'COMMISSIONS_MARK_PAID', 'PROFESSIONAL', professionalId, {
       updated,
     });
     res.json({ success: true, updated });

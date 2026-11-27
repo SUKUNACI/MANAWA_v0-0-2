@@ -2,7 +2,7 @@
 
 const express = require('express');
 const { body, param, query } = require('express-validator');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireRole } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
 const prisma = require('../config/db');
 const logger = require('../utils/logger');
@@ -10,6 +10,7 @@ const { createPayment: gpCreatePayment } = require('../utils/geniuspay');
 const { logPaymentStatus } = require('../utils/paymentAudit');
 const { buildPaginationQuery } = require('../utils/sorting-helper');
 const { getSortableFields } = require('../config/sortable-fields');
+const PaymentsModule = require('../modules/payments');
 
 const router = express.Router();
 
@@ -221,6 +222,67 @@ router.get(
       if (err.status) return res.status(err.status).json({ error: err.message });
       logger.error('[Payments] Get payment error', { error: err.message });
       return res.status(500).json({ error: 'Erreur lors de la récupération du paiement' });
+    }
+  }
+);
+
+// POST /api/v1/payments/:paymentId/refund — refund a payment
+router.post(
+  '/:paymentId/refund',
+  requireAuth,
+  requireRole('ADMIN'),
+  [
+    param('paymentId').isUUID().withMessage('paymentId must be a valid UUID'),
+    body('reason').trim().notEmpty().withMessage('reason is required').isLength({ max: 500 }).withMessage('reason must not exceed 500 characters'),
+  ],
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const { paymentId } = req.params;
+      const { reason } = req.body;
+
+      const payment = await prisma.payment.findUnique({
+        where: { id: paymentId },
+        include: { quote: { select: { id: true, clientId: true, professionalId: true, amount: true } } },
+      });
+
+      if (!payment) {
+        return res.status(404).json({ error: 'Paiement non trouvé' });
+      }
+
+      const paymentsModule = new PaymentsModule(prisma);
+      const refunded = await paymentsModule.refundPayment(paymentId, reason, { initiatedBy: req.user.id });
+
+      await logPaymentStatus({
+        paymentId,
+        fromStatus: payment.status,
+        toStatus: refunded.status,
+        reason: 'admin_refund',
+      });
+
+      logger.info('[Payments] Payment refunded by admin', {
+        paymentId,
+        amount: payment.amount,
+        reason,
+        adminId: req.user.id,
+      });
+
+      return res.json({
+        success: true,
+        data: refunded,
+      });
+    } catch (err) {
+      if (err.message.includes('not found')) {
+        return res.status(404).json({ error: 'Paiement non trouvé' });
+      }
+      if (err.message.includes('Only')) {
+        return res.status(400).json({ error: err.message });
+      }
+      if (err.message.includes('terminal state')) {
+        return res.status(409).json({ error: 'Le paiement a déjà été remboursé ou annulé' });
+      }
+      logger.error('[Payments] Refund error', { error: err.message, paymentId: req.params.paymentId });
+      return res.status(500).json({ error: 'Erreur lors du remboursement' });
     }
   }
 );

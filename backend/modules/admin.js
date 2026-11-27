@@ -436,12 +436,27 @@ class AdminModule {
     }
   }
 
-  async markCommissionsPaid() {
+  async markCommissionsPaid(professionalId = null) {
     try {
-      const payments = await this.prisma.payment.findMany({ where: { commissionPaid: false } });
+      const where = { commissionPaid: false };
+      if (professionalId) {
+        where.quote = { professionalId };
+      }
+
+      const payments = await this.prisma.payment.findMany({ where });
+      if (payments.length === 0) {
+        return { updated: 0 };
+      }
+
       await Promise.all(payments.map(p =>
         this.prisma.payment.update({ where: { id: p.id }, data: { commissionPaid: true } })
       ));
+
+      logger.info('[AdminModule] Commissions marked as paid', {
+        count: payments.length,
+        professionalId,
+      });
+
       return { updated: payments.length };
     } catch (err) {
       logger.error('[AdminModule] markCommissionsPaid failed', { error: err.message });
