@@ -300,59 +300,19 @@ async function gatherInput() {
 
   rl.close();
 
-  // Helper function: Get password with REAL masking via stdin raw mode
+  // Helper: saisie du mot de passe sans écho, compatible Windows/npm
   const getPasswordWithMasking = (promptText) => {
     return new Promise((resolve) => {
-      process.stdout.write(`${colors.cyan}${promptText}${colors.reset}`);
-
-      let password = '';
-      let isProcessing = false;
-
-      const handleData = (chunk) => {
-        if (isProcessing) return;
-        isProcessing = true;
-
-        try {
-          for (let i = 0; i < chunk.length; i++) {
-            const byte = chunk[i];
-            const char = String.fromCharCode(byte);
-
-            // Ctrl+C = 3
-            if (byte === 3) {
-              process.stdin.setRawMode(false);
-              process.exit(0);
-            }
-            // Enter/Return = 13 or 10
-            else if (byte === 13 || byte === 10) {
-              process.stdin.removeListener('data', handleData);
-              process.stdin.setRawMode(false);
-              process.stdin.pause();
-              process.stdout.write('\n');
-              resolve(password);
-              return;
-            }
-            // Backspace = 127 or 8
-            else if (byte === 127 || byte === 8) {
-              if (password.length > 0) {
-                password = password.slice(0, -1);
-                process.stdout.write('\b \b');
-              }
-            }
-            // Printable characters (ASCII 32-126)
-            else if (byte >= 32 && byte <= 126) {
-              password += char;
-              process.stdout.write('*');
-            }
-          }
-        } finally {
-          isProcessing = false;
-        }
-      };
-
-      process.stdin.setRawMode(true);
-      process.stdin.resume();
-      process.stdin.setEncoding(null);
-      process.stdin.on('data', handleData);
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        terminal: false,
+      });
+      rl.question(`${colors.cyan}${promptText}${colors.reset}`, (answer) => {
+        rl.close();
+        process.stdout.write('\n');
+        resolve(answer);
+      });
     });
   };
 
