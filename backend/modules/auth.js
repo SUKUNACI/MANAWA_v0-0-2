@@ -248,6 +248,46 @@ class AuthModule {
     return { token: newToken, csrfToken };
   }
 
+  // ---- Password change ----
+
+  async changePassword(userId, currentPassword, newPassword) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, passwordHash: true },
+    });
+
+    if (!user) {
+      throw Object.assign(new Error('Utilisateur non trouvé'), { status: 404, code: 'USER_NOT_FOUND' });
+    }
+
+    const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isValid) {
+      throw Object.assign(new Error('Mot de passe actuel incorrect'), { status: 401, code: 'INVALID_CURRENT_PASSWORD' });
+    }
+
+    const isSamePassword = await bcrypt.compare(newPassword, user.passwordHash);
+    if (isSamePassword) {
+      throw Object.assign(new Error('Le nouveau mot de passe doit être différent de l\'ancien'), { status: 409, code: 'PASSWORD_UNCHANGED' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash,
+        mustChangePassword: false,
+      },
+    });
+
+    await this.prisma.refreshToken.deleteMany({
+      where: { userId },
+    });
+
+    logger.info('[AuthModule] Password changed', { userId });
+    return { changed: true };
+  }
+
   // ---- Account unlock (admin action) ----
 
   async unlockAccount(email, bruteForceMiddleware) {
