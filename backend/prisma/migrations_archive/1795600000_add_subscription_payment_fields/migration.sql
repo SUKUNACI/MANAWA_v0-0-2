@@ -23,5 +23,5 @@ CREATE INDEX IF NOT EXISTS "Subscription_geniuspayRef_idx"
   ON "Subscription" ("geniuspayRef")
   WHERE "geniuspayRef" IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS "Subscription_status_grace_idx"
+CREATE INDEX IF NOT EXISTS "Subscription_status_gracePeriodEndsAt_idx"
   ON "Subscription" ("status", "gracePeriodEndsAt");

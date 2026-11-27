@@ -57,10 +57,9 @@ ALTER TABLE "SubscriptionPaymentAttempt"
   ADD CONSTRAINT "SubscriptionPaymentAttempt_idempotencyKey_key"
   UNIQUE ("idempotencyKey");
 
--- Partial unique index: geniuspayRef must be unique when present, NULLs allowed freely
+-- Unique index: geniuspayRef must be unique when present, NULLs allowed freely
 CREATE UNIQUE INDEX IF NOT EXISTS "SubscriptionPaymentAttempt_geniuspayRef_key"
-  ON "SubscriptionPaymentAttempt" ("geniuspayRef")
-  WHERE "geniuspayRef" IS NOT NULL;
+  ON "SubscriptionPaymentAttempt" ("geniuspayRef");
 
 -- 3. Foreign key
 
@@ -75,9 +74,6 @@ ALTER TABLE "SubscriptionPaymentAttempt"
 CREATE INDEX IF NOT EXISTS "SubscriptionPaymentAttempt_subscriptionId_idx"
   ON "SubscriptionPaymentAttempt" ("subscriptionId");
 
-CREATE INDEX IF NOT EXISTS "SubscriptionPaymentAttempt_geniuspayRef_idx"
-  ON "SubscriptionPaymentAttempt" ("geniuspayRef")
-  WHERE "geniuspayRef" IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS "SubscriptionPaymentAttempt_status_idx"
   ON "SubscriptionPaymentAttempt" ("status");
