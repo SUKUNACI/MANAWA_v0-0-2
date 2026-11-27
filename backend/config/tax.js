@@ -4,6 +4,8 @@
  * TVA Côte d'Ivoire : 18% (Code Général des Impôts ivoirien, Art. 339)
  */
 
+const { DEFAULT_COMMISSION_RATE } = require('./commission');
+
 const TAX_RATES = {
   CI: {
     country:     'Côte d\'Ivoire',
@@ -67,8 +69,7 @@ function extractHtFromTtc(amountTtcXof, countryCode = DEFAULT_COUNTRY) {
  * Retourne { commissionHt, commissionTva, commissionTtc, professionalNet }
  */
 function calculateCommission(transactionAmountXof, countryCode = DEFAULT_COUNTRY) {
-  const COMMISSION_RATE = 0.15;
-  const commissionHt   = Math.round(transactionAmountXof * COMMISSION_RATE);
+  const commissionHt   = Math.round(transactionAmountXof * DEFAULT_COMMISSION_RATE);
   const { tva: commissionTva, ttc: commissionTtc } = calculateTax(commissionHt, countryCode);
   const professionalNet = transactionAmountXof - commissionTtc;
 
@@ -77,7 +78,7 @@ function calculateCommission(transactionAmountXof, countryCode = DEFAULT_COUNTRY
     commissionHt,
     commissionTva,
     commissionTtc,
-    commissionRate:   COMMISSION_RATE,
+    commissionRate:   DEFAULT_COMMISSION_RATE,
     professionalNet,
   };
 }

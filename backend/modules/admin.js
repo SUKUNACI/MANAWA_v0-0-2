@@ -3,12 +3,11 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const logger = require('../utils/logger');
+const { DEFAULT_COMMISSION_RATE } = require('../config/commission');
 
 /**
  * Admin Module — Dashboard KPIs, professional management, finance, support, messaging
  */
-
-const DEFAULT_COMMISSION_RATE = 0.08;
 
 class AdminModule {
   constructor(prisma) {

@@ -1,3 +1,5 @@
+const PAYMENT_STATUSES = require('../config/payment-status');
+
 class FinanceModule {
   constructor(prisma) {
     this.prisma = prisma;
@@ -73,27 +75,27 @@ class FinanceModule {
   async getSummary() {
     // Execute 4 concurrent aggregations
     const [totalRevenue, monthlyRevenue, pendingPayments, completedPayments] = await Promise.all([
-      // Total revenue (all-time COMPLETED)
+      // Total revenue (all-time SUCCEEDED)
       this.prisma.payment.aggregate({
-        where: { status: 'COMPLETED' },
+        where: { status: PAYMENT_STATUSES.SUCCEEDED },
         _sum: { amount: true },
       }),
-      // Monthly revenue (last 30 days COMPLETED)
+      // Monthly revenue (last 30 days SUCCEEDED)
       this.prisma.payment.aggregate({
         where: {
-          status: 'COMPLETED',
+          status: PAYMENT_STATUSES.SUCCEEDED,
           createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
         },
         _sum: { amount: true },
       }),
       // Pending payments count
       this.prisma.payment.aggregate({
-        where: { status: 'PENDING' },
+        where: { status: PAYMENT_STATUSES.PENDING },
         _count: true,
       }),
       // Completed payments count
       this.prisma.payment.aggregate({
-        where: { status: 'COMPLETED' },
+        where: { status: PAYMENT_STATUSES.SUCCEEDED },
         _count: true,
       }),
     ]);
