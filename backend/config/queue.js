@@ -105,12 +105,11 @@ const setupQueueErrorHandlers = (queue, queueName) => {
   });
 
   queue.on('failed', (job, err) => {
-    // Log once on final failure only to prevent log flood during retries
-    if (job.attemptsMade >= job.opts.attempts) {
-      logger.error(`[Queue ${queueName}] Job ${job.id} final failure after ${job.attemptsMade} attempts:`, {
-        error: err.message,
-      });
-    }
+    logger.warn(`[Queue ${queueName}] Job ${job.id} failed (attempt ${job.attemptsMade}/${job.opts.attempts}):`, {
+      jobData: job.data,
+      error: err.message,
+      stack: err.stack,
+    });
   });
 
   queue.on('completed', (job) => {

@@ -22,13 +22,6 @@ function formatLog(level, message, data = {}) {
 }
 
 function writeLog(file, entry) {
-  // Only write logs to disk in production mode
-  // Development/test: console logging only. Use LOG_TO_DISK=true to opt-in to disk writes.
-  // Production should use Sentry/Datadog instead (see JIRA-P2)
-  const writeEnabled = process.env.NODE_ENV === 'production' || process.env.LOG_TO_DISK === 'true';
-  if (!writeEnabled) {
-    return; // Disable disk logging by default to prevent 2.74GB flood
-  }
   try {
     fs.appendFileSync(file, entry + '\n', 'utf8');
   } catch (err) {
