@@ -140,6 +140,14 @@ class AuthModule {
       throw Object.assign(new Error('Compte suspendu'), { status: 403 });
     }
 
+    // D2: refuse token renewal until the admin-triggered password reset is completed.
+    if (stored.user.mustChangePassword) {
+      throw Object.assign(
+        new Error('Vous devez terminer la réinitialisation de votre mot de passe avant de continuer.'),
+        { status: 403, code: 'PASSWORD_CHANGE_REQUIRED' }
+      );
+    }
+
     // Token rotation
     await this.prisma.refreshToken.delete({ where: { id: stored.id } });
     const newAccessToken = this.generateAccessToken(stored.user);
@@ -238,6 +246,46 @@ class AuthModule {
     const newToken = this.generateAccessToken(user);
     const csrfToken = crypto.randomBytes(32).toString('hex');
     return { token: newToken, csrfToken };
+  }
+
+  // ---- Password change ----
+
+  async changePassword(userId, currentPassword, newPassword) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, passwordHash: true },
+    });
+
+    if (!user) {
+      throw Object.assign(new Error('Utilisateur non trouvé'), { status: 404, code: 'USER_NOT_FOUND' });
+    }
+
+    const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isValid) {
+      throw Object.assign(new Error('Mot de passe actuel incorrect'), { status: 401, code: 'INVALID_CURRENT_PASSWORD' });
+    }
+
+    const isSamePassword = await bcrypt.compare(newPassword, user.passwordHash);
+    if (isSamePassword) {
+      throw Object.assign(new Error('Le nouveau mot de passe doit être différent de l\'ancien'), { status: 409, code: 'PASSWORD_UNCHANGED' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash,
+        mustChangePassword: false,
+      },
+    });
+
+    await this.prisma.refreshToken.deleteMany({
+      where: { userId },
+    });
+
+    logger.info('[AuthModule] Password changed', { userId });
+    return { changed: true };
   }
 
   // ---- Account unlock (admin action) ----

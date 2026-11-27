@@ -3,6 +3,8 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-key-manawa-min-3
 process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://manawa:manawa_test@localhost:5432/manawa_test';
 process.env.PORT = '4001';
 process.env.ROTATION_HASH_KEY = process.env.ROTATION_HASH_KEY || 'test_rotation_hash_key_12345';
+process.env.IDENTITY_AES_KEY = process.env.IDENTITY_AES_KEY || 'a'.repeat(64);
+process.env.IDENTITY_HMAC_SECRET = process.env.IDENTITY_HMAC_SECRET || 'b'.repeat(64);
 
 // Désactiver Sentry en test
 process.env.SENTRY_DSN = '';

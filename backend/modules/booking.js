@@ -108,10 +108,10 @@ class BookingModule {
 
   /**
    * Create a new booking from a quote
-   * @param {object} opts - { quoteId, clientId, professionalId, projectId, date }
+   * @param {object} opts - { quoteId, clientId, professionalId, projectId, date, startTime, endTime, note }
    * @returns {Promise<object>} Created booking
    */
-  async createFromQuote({ quoteId, clientId, professionalId, projectId, date }) {
+  async createFromQuote({ quoteId, clientId, professionalId, projectId, date, startTime, endTime, note }) {
     try {
       // Verify professional exists and is verified
       const professional = await this.prisma.professional.findUnique({
@@ -136,6 +136,9 @@ class BookingModule {
           projectId,
           quoteId,
           date: new Date(date),
+          startTime,
+          endTime,
+          note,
         },
         include: {
           client: true,
@@ -177,7 +180,20 @@ class BookingModule {
   }
 
   /**
+   * Load a booking's ownership and status fields for pre-cancel authorization checks.
+   * @param {string} bookingId
+   * @returns {Promise<object|null>}
+   */
+  async findForCancel(bookingId) {
+    return this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: { id: true, clientId: true, professionalId: true, status: true },
+    });
+  }
+
+  /**
    * Cancel booking (→ CANCELLED state)
+   * Authorization must be verified by the caller before invoking this method.
    * @param {string} bookingId - Booking ID
    * @param {object} opts - { reason, notifyByEmail }
    * @returns {Promise<object>}

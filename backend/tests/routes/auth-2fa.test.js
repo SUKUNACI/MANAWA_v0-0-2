@@ -190,6 +190,8 @@ describe('2FA Authentication Routes', () => {
   });
 
   describe('POST /api/v1/auth/2fa/verify', () => {
+    let validTwoFAToken;
+
     beforeEach(async () => {
       // Setup 2FA for test user
       const { backupCodes, hashedBackupCodes } = await twoFAUtils.regenerateBackupCodes();
@@ -204,6 +206,37 @@ describe('2FA Authentication Routes', () => {
           twoFAEnabledAt: new Date(),
         },
       });
+
+      // Build a valid twoFAToken as the login endpoint would
+      validTwoFAToken = jwt.sign(
+        { userId: testUser.id, type: '2fa_login' },
+        process.env.JWT_SECRET,
+        { expiresIn: '10m' }
+      );
+    });
+
+    test('should return 400 if twoFAToken is absent', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/2fa/verify')
+        .send({ totpCode: '123456' });
+
+      expect(response.status).toBe(400);
+    });
+
+    test('should return 401 with 2FA_TOKEN_EXPIRED for expired twoFAToken', async () => {
+      const expiredToken = jwt.sign(
+        { userId: testUser.id, type: '2fa_login' },
+        process.env.JWT_SECRET,
+        { expiresIn: '0s' }
+      );
+      await new Promise((r) => setTimeout(r, 50));
+
+      const response = await request(app)
+        .post('/api/v1/auth/2fa/verify')
+        .send({ twoFAToken: expiredToken, totpCode: '123456' });
+
+      expect(response.status).toBe(401);
+      expect(response.body.code).toBe('2FA_TOKEN_EXPIRED');
     });
 
     test('should verify valid TOTP code', async () => {
@@ -214,10 +247,7 @@ describe('2FA Authentication Routes', () => {
 
       const response = await request(app)
         .post('/api/v1/auth/2fa/verify')
-        .send({
-          userId: testUser.id,
-          totpCode,
-        });
+        .send({ twoFAToken: validTwoFAToken, totpCode });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('token');
@@ -228,10 +258,7 @@ describe('2FA Authentication Routes', () => {
     test('should reject invalid TOTP code', async () => {
       const response = await request(app)
         .post('/api/v1/auth/2fa/verify')
-        .send({
-          userId: testUser.id,
-          totpCode: '000000',
-        });
+        .send({ twoFAToken: validTwoFAToken, totpCode: '000000' });
 
       expect(response.status).toBe(401);
       expect(response.body.error).toContain('invalide');
@@ -248,10 +275,7 @@ describe('2FA Authentication Routes', () => {
 
       const response = await request(app)
         .post('/api/v1/auth/2fa/verify')
-        .send({
-          userId: testUser.id,
-          backupCode: backupCodes[0],
-        });
+        .send({ twoFAToken: validTwoFAToken, backupCode: backupCodes[0] });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('token');
@@ -266,23 +290,43 @@ describe('2FA Authentication Routes', () => {
         data: { twoFABackupCodes: hashedBackupCodes },
       });
 
-      // Use backup code
+      // First use — must succeed
       await request(app)
         .post('/api/v1/auth/2fa/verify')
-        .send({
-          userId: testUser.id,
-          backupCode: backupCodes[0],
-        });
+        .send({ twoFAToken: validTwoFAToken, backupCode: backupCodes[0] });
 
-      // Try to use same code again
+      // Second use of same code — must fail (code marked used)
       const response = await request(app)
         .post('/api/v1/auth/2fa/verify')
-        .send({
-          userId: testUser.id,
-          backupCode: backupCodes[0],
-        });
+        .send({ twoFAToken: validTwoFAToken, backupCode: backupCodes[0] });
 
       expect(response.status).toBe(401);
+    });
+
+    test('should return 401 2FA_TOKEN_MISMATCH when body.userId differs from JWT userId', async () => {
+      const attackerUUID = uuidv4();
+
+      const response = await request(app)
+        .post('/api/v1/auth/2fa/verify')
+        .send({ twoFAToken: validTwoFAToken, userId: attackerUUID, totpCode: '123456' });
+
+      expect(response.status).toBe(401);
+      expect(response.body.code).toBe('2FA_TOKEN_MISMATCH');
+    });
+
+    test('should succeed when body.userId matches JWT userId', async () => {
+      const totpCode = require('speakeasy').totp({
+        secret: testUser.twoFASecret,
+        encoding: 'base32',
+      });
+
+      const response = await request(app)
+        .post('/api/v1/auth/2fa/verify')
+        .send({ twoFAToken: validTwoFAToken, userId: testUser.id, totpCode });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('token');
+      expect(response.body).toHaveProperty('refreshToken');
     });
 
     test('should fail if 2FA not enabled', async () => {
@@ -298,12 +342,15 @@ describe('2FA Authentication Routes', () => {
         },
       });
 
+      const tokenForUser = jwt.sign(
+        { userId: user.id, type: '2fa_login' },
+        process.env.JWT_SECRET,
+        { expiresIn: '10m' }
+      );
+
       const response = await request(app)
         .post('/api/v1/auth/2fa/verify')
-        .send({
-          userId: user.id,
-          totpCode: '000000',
-        });
+        .send({ twoFAToken: tokenForUser, totpCode: '000000' });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('non activé');

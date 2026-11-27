@@ -23,6 +23,10 @@ jest.mock('../../config/db', () => ({
     findFirst: jest.fn(),
     update:    jest.fn(),
   },
+  booking: {
+    findUnique: jest.fn(),
+    update:    jest.fn(),
+  },
   notification: {
     create: jest.fn(),
   },
@@ -58,6 +62,7 @@ jest.mock('../../config/sortable-fields', () => ({
 const prisma           = require('../../config/db');
 const geniuspay        = require('../../utils/geniuspay');
 const { logPaymentStatus } = require('../../utils/paymentAudit');
+const logger           = require('../../utils/logger');
 const webhookRoutes    = require('../../routes/webhooks-geniuspay');
 
 // ── Monter l'app ──────────────────────────────────────────────────────────────
@@ -96,8 +101,10 @@ const mockPayment = {
 
 function buildPayload(eventType, data = {}) {
   return {
-    event: { type: eventType },
-    data:  { reference: 'gp-ref-123', ...data },
+    event: eventType,
+    timestamp: Math.floor(Date.now() / 1000),
+    data: { reference: 'gp-ref-123', ...data },
+    environment: 'sandbox',
   };
 }
 
@@ -125,7 +132,7 @@ describe('Vérification signature et timestamp', () => {
   test('400 — headers signature + timestamp absents', async () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
-      .send(buildPayload('payment.succeeded'));
+      .send(buildPayload('payment.success'));
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/Missing signature or timestamp/i);
@@ -135,7 +142,7 @@ describe('Vérification signature et timestamp', () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
       .set('x-webhook-timestamp', TIMESTAMP)
-      .send(buildPayload('payment.succeeded'));
+      .send(buildPayload('payment.success'));
 
     expect(res.status).toBe(400);
   });
@@ -144,7 +151,7 @@ describe('Vérification signature et timestamp', () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
       .set('x-webhook-signature', VALID_SIG)
-      .send(buildPayload('payment.succeeded'));
+      .send(buildPayload('payment.success'));
 
     expect(res.status).toBe(400);
   });
@@ -155,7 +162,7 @@ describe('Vérification signature et timestamp', () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
       .set(validHeaders())
-      .send(buildPayload('payment.succeeded'));
+      .send(buildPayload('payment.success'));
 
     expect(res.status).toBe(401);
     expect(res.body.error).toMatch(/Invalid signature/i);
@@ -167,10 +174,31 @@ describe('Vérification signature et timestamp', () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
       .set(validHeaders())
-      .send(buildPayload('payment.succeeded'));
+      .send(buildPayload('payment.success'));
 
     expect(res.status).toBe(401);
     expect(res.body.error).toMatch(/timestamp too old/i);
+  });
+
+  test('400 — X-Webhook-Event en contradiction avec event du payload', async () => {
+    const res = await request(app)
+      .post('/webhooks/geniuspay')
+      .set(validHeaders())
+      .set('x-webhook-event', 'payment.failed') // Header says failed
+      .send(buildPayload('payment.success')); // But payload says success
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/Event type mismatch/i);
+  });
+
+  test('200 — X-Webhook-Event cohérent avec event du payload (validation réussie)', async () => {
+    const res = await request(app)
+      .post('/webhooks/geniuspay')
+      .set(validHeaders())
+      .set('x-webhook-event', 'payment.success') // Header matches payload
+      .send(buildPayload('payment.success'));
+
+    expect(res.status).toBe(200);
   });
 });
 
@@ -182,7 +210,7 @@ describe('Événement payment.succeeded', () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
       .set(validHeaders())
-      .send(buildPayload('payment.succeeded', { amount: 5000 }));
+      .send(buildPayload('payment.success', { amount: 5000 }));
 
     expect(res.status).toBe(200);
     expect(res.body.received).toBe(true);
@@ -200,7 +228,7 @@ describe('Événement payment.succeeded', () => {
     await request(app)
       .post('/webhooks/geniuspay')
       .set(validHeaders())
-      .send(buildPayload('payment.succeeded', { amount: 5000 }));
+      .send(buildPayload('payment.success', { amount: 5000 }));
 
     expect(logPaymentStatus).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -217,18 +245,18 @@ describe('Événement payment.succeeded', () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
       .set(validHeaders())
-      .send(buildPayload('payment.succeeded', { amount: 5000 }));
+      .send(buildPayload('payment.success', { amount: 5000 }));
 
     expect(res.status).toBe(200);
     // Aucune mise à jour ne doit être effectuée
     expect(prisma.payment.update).not.toHaveBeenCalled();
   });
 
-  test('200 — mismatch de montant → statut failed', async () => {
+  test('200 — montant inférieur de 1 XOF → statut failed (validation stricte)', async () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
       .set(validHeaders())
-      .send(buildPayload('payment.succeeded', { amount: 5010 })); // Écart > 1 XOF
+      .send(buildPayload('payment.success', { amount: 4999 }));
 
     expect(res.status).toBe(200);
     expect(prisma.payment.update).toHaveBeenCalledWith(
@@ -239,30 +267,85 @@ describe('Événement payment.succeeded', () => {
     );
   });
 
-  test('200 — montant à ±1 XOF → succeeded (tolérance)', async () => {
+  test('200 — montant supérieur de 1 XOF → statut failed (validation stricte)', async () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
       .set(validHeaders())
-      .send(buildPayload('payment.succeeded', { amount: 5001 })); // Écart = 1 → OK
+      .send(buildPayload('payment.success', { amount: 5001 }));
 
     expect(res.status).toBe(200);
     expect(prisma.payment.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ status: 'succeeded' }),
+        where: { id: 'payment-1' },
+        data:  expect.objectContaining({ status: 'failed' }),
       })
     );
   });
 
-  test('200 — alias payment.completed traité comme payment.succeeded', async () => {
+  test('200 — payment.completed non officiel est ignoré (pas de mise à jour)', async () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
       .set(validHeaders())
       .send(buildPayload('payment.completed', { amount: 5000 }));
 
+    // payment.completed n'est pas un événement officiel GeniusPay
+    // Le webhook est reçu (200) mais non traité
+    expect(res.status).toBe(200);
+    expect(prisma.payment.update).not.toHaveBeenCalled();
+  });
+
+  test('200 — montant absent → statut failed', async () => {
+    const res = await request(app)
+      .post('/webhooks/geniuspay')
+      .set(validHeaders())
+      .send(buildPayload('payment.success', {})); // pas d'amount
+
     expect(res.status).toBe(200);
     expect(prisma.payment.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ status: 'succeeded' }),
+        data: expect.objectContaining({ status: 'failed' }),
+      })
+    );
+  });
+
+  test('200 — montant non numérique → statut failed', async () => {
+    const res = await request(app)
+      .post('/webhooks/geniuspay')
+      .set(validHeaders())
+      .send(buildPayload('payment.success', { amount: 'invalid' }));
+
+    expect(res.status).toBe(200);
+    expect(prisma.payment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'failed' }),
+      })
+    );
+  });
+
+  test('200 — montant zéro → statut failed', async () => {
+    const res = await request(app)
+      .post('/webhooks/geniuspay')
+      .set(validHeaders())
+      .send(buildPayload('payment.success', { amount: 0 }));
+
+    expect(res.status).toBe(200);
+    expect(prisma.payment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'failed' }),
+      })
+    );
+  });
+
+  test('200 — montant négatif → statut failed', async () => {
+    const res = await request(app)
+      .post('/webhooks/geniuspay')
+      .set(validHeaders())
+      .send(buildPayload('payment.success', { amount: -5000 }));
+
+    expect(res.status).toBe(200);
+    expect(prisma.payment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'failed' }),
       })
     );
   });
@@ -380,7 +463,7 @@ describe('Paiement introuvable', () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
       .set(validHeaders())
-      .send(buildPayload('payment.succeeded', { reference: 'unknown-ref' }));
+      .send(buildPayload('payment.success', { reference: 'unknown-ref' }));
 
     expect(res.status).toBe(200);
     expect(res.body.received).toBe(true);
@@ -433,7 +516,7 @@ describe('Notifications client', () => {
     await request(app)
       .post('/webhooks/geniuspay')
       .set(validHeaders())
-      .send(buildPayload('payment.succeeded', { amount: 5000 }));
+      .send(buildPayload('payment.success', { amount: 5000 }));
 
     expect(prisma.notification.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -467,7 +550,7 @@ describe('Notifications client', () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
       .set(validHeaders())
-      .send(buildPayload('payment.succeeded', { amount: 5000 }));
+      .send(buildPayload('payment.success', { amount: 5000 }));
 
     expect(res.status).toBe(200);
     expect(res.body.received).toBe(true);
@@ -482,7 +565,7 @@ describe('Notifications client', () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
       .set(validHeaders())
-      .send(buildPayload('payment.succeeded', { amount: 5000 }));
+      .send(buildPayload('payment.success', { amount: 5000 }));
 
     expect(res.status).toBe(200);
     expect(prisma.notification.create).not.toHaveBeenCalled();
@@ -497,10 +580,143 @@ describe('Notifications client', () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
       .set(validHeaders())
-      .send(buildPayload('payment.succeeded', { amount: 5000 }));
+      .send(buildPayload('payment.success', { amount: 5000 }));
 
     expect(res.status).toBe(200);
     expect(prisma.notification.create).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// T2.03 — Webhook booking confirmation
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('T2.03 — Webhook booking confirmation', () => {
+  test('payment.success confirme le booking associé au quote', async () => {
+    // Arrange
+    const mockBooking = {
+      id: 'booking-t2-03',
+      status: 'PENDING',
+    };
+
+    prisma.payment.findFirst.mockResolvedValue({
+      ...mockPayment,
+      quoteId: 'quote-123',
+    });
+
+    prisma.booking.findUnique.mockResolvedValue(mockBooking);
+    prisma.booking.update.mockResolvedValue({
+      ...mockBooking,
+      status: 'CONFIRMED',
+      confirmedAt: new Date('2026-11-27T10:00:00Z'),
+    });
+
+    // Act
+    const res = await request(app)
+      .post('/webhooks/geniuspay')
+      .set(validHeaders())
+      .send(buildPayload('payment.success', { amount: 5000 }));
+
+    // Assert
+    expect(res.status).toBe(200);
+    expect(prisma.booking.findUnique).toHaveBeenCalledWith({
+      where: { quoteId: 'quote-123' },
+      select: { id: true, status: true },
+    });
+    expect(prisma.booking.update).toHaveBeenCalledWith({
+      where: { id: 'booking-t2-03' },
+      data: {
+        status: 'CONFIRMED',
+        confirmedAt: expect.any(Date),
+      },
+    });
+    expect(logger.info).toHaveBeenCalledWith(
+      '[Webhook GeniusPay] Confirming booking after successful payment',
+      expect.objectContaining({
+        paymentId: 'payment-1',
+        quoteId: 'quote-123',
+        bookingId: 'booking-t2-03',
+        fromStatus: 'PENDING',
+      })
+    );
+  });
+
+  test('T2.03 idempotence: booking déjà CONFIRMED ne se reconfirme pas', async () => {
+    // Arrange
+    prisma.payment.findFirst.mockResolvedValue({
+      ...mockPayment,
+      quoteId: 'quote-456',
+    });
+
+    prisma.booking.findUnique.mockResolvedValue({
+      id: 'booking-confirmed',
+      status: 'CONFIRMED',
+    });
+
+    // Act
+    const res = await request(app)
+      .post('/webhooks/geniuspay')
+      .set(validHeaders())
+      .send(buildPayload('payment.success', { amount: 5000 }));
+
+    // Assert
+    expect(res.status).toBe(200);
+    expect(prisma.booking.findUnique).toHaveBeenCalled();
+    expect(prisma.booking.update).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      '[Webhook GeniusPay] Booking already in terminal state, skipping confirmation',
+      expect.objectContaining({
+        bookingId: 'booking-confirmed',
+        currentStatus: 'CONFIRMED',
+      })
+    );
+  });
+
+  test('T2.03 error resilience: erreur booking ne bloque pas paiement', async () => {
+    // Arrange
+    prisma.payment.findFirst.mockResolvedValue({
+      ...mockPayment,
+      quoteId: 'quote-789',
+    });
+
+    prisma.payment.update.mockResolvedValue({ id: 'payment-1', status: 'succeeded' });
+    prisma.booking.findUnique.mockRejectedValue(new Error('DB connection failed'));
+
+    // Act
+    const res = await request(app)
+      .post('/webhooks/geniuspay')
+      .set(validHeaders())
+      .send(buildPayload('payment.success', { amount: 5000 }));
+
+    // Assert
+    expect(res.status).toBe(200);
+    expect(prisma.payment.update).toHaveBeenCalled();
+    expect(prisma.booking.update).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      '[Webhook GeniusPay] Failed to confirm booking after payment',
+      expect.objectContaining({
+        paymentId: 'payment-1',
+        quoteId: 'quote-789',
+      })
+    );
+  });
+
+  test('T2.03 sans quoteId: ne tente pas de confirmer booking', async () => {
+    // Arrange
+    prisma.payment.findFirst.mockResolvedValue({
+      ...mockPayment,
+      quoteId: null, // Pas de quote → pas de booking
+    });
+
+    // Act
+    const res = await request(app)
+      .post('/webhooks/geniuspay')
+      .set(validHeaders())
+      .send(buildPayload('payment.success', { amount: 5000 }));
+
+    // Assert
+    expect(res.status).toBe(200);
+    expect(prisma.booking.findUnique).not.toHaveBeenCalled();
+    expect(prisma.booking.update).not.toHaveBeenCalled();
   });
 });
 
@@ -514,7 +730,7 @@ describe('Résilience erreur interne', () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
       .set(validHeaders())
-      .send(buildPayload('payment.succeeded', { amount: 5000 }));
+      .send(buildPayload('payment.success', { amount: 5000 }));
 
     // La route catch-all renvoie 200 pour éviter les retries GeniusPay
     expect(res.status).toBe(200);
@@ -527,7 +743,7 @@ describe('Résilience erreur interne', () => {
     const res = await request(app)
       .post('/webhooks/geniuspay')
       .set(validHeaders())
-      .send(buildPayload('payment.succeeded', { amount: 5000 }));
+      .send(buildPayload('payment.success', { amount: 5000 }));
 
     expect(res.status).toBe(200);
     expect(res.body.received).toBe(true);

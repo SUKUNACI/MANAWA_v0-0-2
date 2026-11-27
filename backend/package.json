@@ -21,7 +21,9 @@
     "audit:html": "scripts/audit.sh --html",
     "audit:critical": "scripts/audit.sh --level=critical",
     "minify": "node scripts/minify.js",
-    "minify:watch": "watch 'npm run minify' public/admin"
+    "minify:watch": "watch 'npm run minify' public/admin",
+    "bootstrap:super-admin": "node scripts/bootstrap-super-admin.js",
+    "logs:rotate": "bash scripts/rotate-logs.sh"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",

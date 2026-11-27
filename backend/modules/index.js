@@ -40,10 +40,9 @@ const MobileModule = require('./mobile');
 /**
  * Create module instances with Prisma dependency injection
  * @param {object} prisma - Prisma client instance
- * @param {object} stripe - Optional Stripe client
  * @returns {object} All module instances
  */
-function createModules(prisma, stripe = null) {
+function createModules(prisma) {
   const searchModule = new SearchModule(prisma);
   return {
     search: searchModule,
@@ -54,7 +53,7 @@ function createModules(prisma, stripe = null) {
     notificationTemplate: new NotificationTemplateModule(prisma),
     booking: new BookingModule(prisma),
     analytics: new AnalyticsModule(prisma),
-    payments: new PaymentsModule(prisma, stripe),
+    payments: new PaymentsModule(prisma),
     admin: new AdminModule(prisma),
     auth: new AuthModule(prisma),
     twoFactor: new TwoFactorModule(prisma),

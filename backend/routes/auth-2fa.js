@@ -4,6 +4,8 @@
  */
 
 const express = require('express');
+const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const logger = require('../utils/logger');
@@ -55,14 +57,24 @@ router.post(
   }
 );
 
+// Rate limit 2FA verify — 10 attempts per 15 min per IP to slow brute-force on TOTP codes
+const twoFAVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Trop de tentatives de vérification 2FA, réessayez dans 15 minutes', code: 'TOO_MANY_2FA_ATTEMPTS' },
+});
+
 /**
  * POST /api/v1/auth/2fa/verify
  * Verify TOTP or backup code as the second authentication factor during login.
+ * Requires a valid twoFAToken (short-lived JWT, type 2fa_login) issued during first-factor login.
+ * The user identity is extracted from the JWT — the body userId field is intentionally ignored.
  */
 router.post(
   '/verify',
+  twoFAVerifyLimiter,
   [
-    body('userId').notEmpty().isUUID(),
+    body('twoFAToken').notEmpty().withMessage('twoFAToken requis'),
     body('totpCode').optional().trim().matches(/^\d{6}$/),
     body('backupCode').optional().trim(),
   ],
@@ -71,11 +83,34 @@ router.post(
       const errors = validationResult(req);
       if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-      const { userId, totpCode, backupCode } = req.body;
+      const { twoFAToken, totpCode, backupCode } = req.body;
+
+      let decoded;
+      try {
+        decoded = jwt.verify(twoFAToken, process.env.JWT_SECRET);
+      } catch (jwtErr) {
+        const isExpired = jwtErr.name === 'TokenExpiredError';
+        return res.status(401).json({
+          error: isExpired ? 'Token 2FA expiré' : 'Token 2FA invalide',
+          code: isExpired ? '2FA_TOKEN_EXPIRED' : '2FA_TOKEN_INVALID',
+        });
+      }
+
+      if (decoded.type !== '2fa_login') {
+        return res.status(401).json({ error: 'Token 2FA invalide', code: '2FA_TOKEN_INVALID' });
+      }
+
+      // If the caller supplies a userId in the body, it must match the JWT.
+      // The JWT remains the authoritative identity source — body.userId never overrides it.
+      if (req.body.userId !== undefined && req.body.userId !== decoded.userId) {
+        return res.status(401).json({ error: 'Token 2FA invalide', code: '2FA_TOKEN_MISMATCH' });
+      }
+
+      const userId = decoded.userId;
       const result = await twoFactor.verify(userId, { totpCode, backupCode });
       res.json({ message: 'Authentification à 2 facteurs réussie', ...result });
     } catch (err) {
-      logger.error('Error verifying 2FA', { userId: req.body?.userId, error: err.message });
+      logger.error('Error verifying 2FA', { error: err.message });
       if (err.status && err.status < 500) return res.status(err.status).json({ error: err.message });
       res.status(500).json({ error: 'Erreur lors de la vérification 2FA', code: 'VERIFY_ERROR' });
     }
@@ -149,3 +184,5 @@ router.get('/status', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+// Exported for test teardown — allows resetting the rate-limit counter between unit tests.
+module.exports.twoFAVerifyLimiter = twoFAVerifyLimiter;

@@ -9,7 +9,8 @@ const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const prisma = require('../config/db');
 const logger = require('../utils/logger');
-const { requireAuth, requireRole } = require('../middleware/auth');
+const { requireAuth, requireRole, requirePasswordChangeCompleted } = require('../middleware/auth');
+const AdminModule = require('../modules/admin');
 const bruteForceMiddleware = require('../middleware/bruteForceMiddleware');
 const bruteForceConfig = require('../config/brute-force');
 const AuthModule = require('../modules/auth');
@@ -170,7 +171,7 @@ router.post('/refresh', async (req, res) => {
     logger.error('Refresh token error', { error: err.message, code: err.code, stack: err.stack });
     const requestId = `req-${Date.now()}`;
     if (err.status && err.status < 500) {
-      return res.status(err.status).json({ error: err.message, requestId });
+      return res.status(err.status).json({ error: err.message, code: err.code, requestId });
     }
     res.status(500).json({ error: 'Erreur interne du serveur', code: err.code || 'UNKNOWN_ERROR', requestId });
   }
@@ -190,8 +191,8 @@ router.post('/logout', async (req, res) => {
   }
 });
 
-// PATCH /api/auth/password-change
-router.patch('/password-change', requireAuth, async (req, res) => {
+// PATCH /api/auth/password-change — blocked when mustChangePassword=true (use complete-password-reset instead)
+router.patch('/password-change', requireAuth, requirePasswordChangeCompleted, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) {
@@ -309,8 +310,34 @@ router.post('/unlock', requireAuth, requireRole('ADMIN'), async (req, res) => {
   }
 });
 
+// POST /api/auth/complete-password-reset
+// Validates the one-time token from an admin-triggered reset link, sets the new password,
+// and lifts the mustChangePassword restriction. No authentication required (user has no session).
+router.post('/complete-password-reset', async (req, res) => {
+  const adminModule = new AdminModule(prisma);
+  try {
+    const { userId, token, newPassword } = req.body;
+    if (!userId || !token || !newPassword) {
+      return res.status(400).json({ error: 'userId, token et newPassword requis' });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'Le mot de passe doit faire au moins 8 caractères' });
+    }
+
+    const result = await adminModule.completePasswordReset(userId, token, newPassword);
+
+    await logAuditEvent('PASSWORD_RESET_COMPLETED', 'USER', userId, userId, { mechanism: 'admin_reset_link' }, req);
+
+    res.json(result);
+  } catch (err) {
+    logger.error('complete-password-reset error', { error: err.message });
+    if (err.status && err.status < 500) return res.status(err.status).json({ error: err.message, code: err.code });
+    res.status(500).json({ error: 'Erreur interne', code: err.code || 'UNKNOWN_ERROR' });
+  }
+});
+
 // GET /api/auth/login-history
-router.get('/login-history', requireAuth, async (req, res) => {
+router.get('/login-history', requireAuth, requirePasswordChangeCompleted, async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 20, 100);
     const history = await bruteForceMiddleware.getLoginHistory(req.user.id, limit);
@@ -322,7 +349,7 @@ router.get('/login-history', requireAuth, async (req, res) => {
 });
 
 // GET /api/auth/admin/user/:id/security
-router.get('/admin/user/:id/security', requireAuth, requireRole('ADMIN'), async (req, res) => {
+router.get('/admin/user/:id/security', requireAuth, requirePasswordChangeCompleted, requireRole('ADMIN'), async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.params.id },

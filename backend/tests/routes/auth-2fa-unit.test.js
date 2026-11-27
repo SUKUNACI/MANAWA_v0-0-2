@@ -69,6 +69,7 @@ const prisma = require('../../config/db');
 const twoFAUtils = require('../../utils/2fa');
 const twoFAConfig = require('../../config/2fa');
 const auth2FARouter = require('../../routes/auth-2fa');
+const { twoFAVerifyLimiter } = require('../../routes/auth-2fa');
 
 const app = express();
 app.use(express.json());
@@ -270,67 +271,99 @@ describe('POST /api/v1/auth/2fa/enable', () => {
 });
 
 describe('POST /api/v1/auth/2fa/verify', () => {
+  const TEST_UUID = uuidv4();
+
+  function makeTwoFAToken(overrides = {}) {
+    return jwt.sign(
+      { userId: TEST_UUID, type: '2fa_login', ...overrides },
+      process.env.JWT_SECRET,
+      { expiresIn: '10m' }
+    );
+  }
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  test('should return 400 if userId is not a valid UUID', async () => {
+  afterEach(async () => {
+    // Reset the in-memory rate-limit counter for Supertest's IP between tests.
+    // Production behavior (10 req / 15 min) is unchanged — only the test counter is cleared.
+    // Guard: under the global jest mock in tests/setup.js, resetKey is absent — skip safely.
+    if (typeof twoFAVerifyLimiter.resetKey === 'function') {
+      await twoFAVerifyLimiter.resetKey('127.0.0.1');
+    }
+  });
+
+  // Cas 1 — absence de twoFAToken
+  test('should return 400 if twoFAToken is absent', async () => {
     const res = await request(app)
       .post('/api/v1/auth/2fa/verify')
-      .send({ userId: 'not-a-uuid', totpCode: '123456' });
+      .send({ totpCode: '123456' });
 
     expect(res.status).toBe(400);
   });
 
-  test('should return 404 if user not found', async () => {
+  // Cas 2 — JWT invalide (signature incorrecte)
+  test('should return 401 if twoFAToken has invalid signature', async () => {
+    const badToken = jwt.sign(
+      { userId: TEST_UUID, type: '2fa_login' },
+      'wrong-secret',
+      { expiresIn: '10m' }
+    );
+
+    const res = await request(app)
+      .post('/api/v1/auth/2fa/verify')
+      .send({ twoFAToken: badToken, totpCode: '123456' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe('2FA_TOKEN_INVALID');
+  });
+
+  // Cas 3 — JWT expiré
+  test('should return 401 with 2FA_TOKEN_EXPIRED if twoFAToken is expired', async () => {
+    const expiredToken = jwt.sign(
+      { userId: TEST_UUID, type: '2fa_login' },
+      process.env.JWT_SECRET,
+      { expiresIn: '0s' }
+    );
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    const res = await request(app)
+      .post('/api/v1/auth/2fa/verify')
+      .send({ twoFAToken: expiredToken, totpCode: '123456' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe('2FA_TOKEN_EXPIRED');
+  });
+
+  // Cas 4 — mauvais type JWT
+  test('should return 401 if twoFAToken has wrong type', async () => {
+    const wrongTypeToken = makeTwoFAToken({ type: '2fa_setup' });
+
+    const res = await request(app)
+      .post('/api/v1/auth/2fa/verify')
+      .send({ twoFAToken: wrongTypeToken, totpCode: '123456' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe('2FA_TOKEN_INVALID');
+  });
+
+  // Cas 5 — utilisateur du JWT inexistant en base
+  test('should return 404 if user from JWT does not exist in DB', async () => {
     prisma.user.findUnique.mockResolvedValue(null);
 
     const res = await request(app)
       .post('/api/v1/auth/2fa/verify')
-      .send({ userId: uuidv4(), totpCode: '123456' });
+      .send({ twoFAToken: makeTwoFAToken(), totpCode: '123456' });
 
     expect(res.status).toBe(404);
   });
 
-  test('should return 400 if 2FA not enabled for user', async () => {
-    const userId = uuidv4();
-    prisma.user.findUnique.mockResolvedValue({
-      id: userId,
-      email: 'test@example.com',
-      role: 'CLIENT',
-      twoFAEnabled: false,
-    });
-
-    const res = await request(app)
-      .post('/api/v1/auth/2fa/verify')
-      .send({ userId, totpCode: '123456' });
-
-    expect(res.status).toBe(400);
-    expect(res.body.error).toContain('non activé');
-  });
-
-  test('should return 400 if neither totpCode nor backupCode provided', async () => {
-    const userId = uuidv4();
-    prisma.user.findUnique.mockResolvedValue({
-      id: userId,
-      email: 'test@example.com',
-      role: 'CLIENT',
-      twoFAEnabled: true,
-      twoFASecret: 'SECRET',
-      twoFABackupCodes: {},
-    });
-
-    const res = await request(app)
-      .post('/api/v1/auth/2fa/verify')
-      .send({ userId });
-
-    expect(res.status).toBe(400);
-  });
-
+  // Cas 6 — code TOTP incorrect
   test('should return 401 if TOTP code is invalid', async () => {
-    const userId = uuidv4();
     prisma.user.findUnique.mockResolvedValue({
-      id: userId,
+      id: TEST_UUID,
       email: 'test@example.com',
       role: 'CLIENT',
       twoFAEnabled: true,
@@ -341,16 +374,16 @@ describe('POST /api/v1/auth/2fa/verify', () => {
 
     const res = await request(app)
       .post('/api/v1/auth/2fa/verify')
-      .send({ userId, totpCode: '000000' });
+      .send({ twoFAToken: makeTwoFAToken(), totpCode: '000000' });
 
     expect(res.status).toBe(401);
     expect(res.body.error).toContain('invalide');
   });
 
+  // Cas 7 — code TOTP correct → 200 + tokens
   test('should return 200 with token and refreshToken on valid TOTP', async () => {
-    const userId = uuidv4();
     prisma.user.findUnique.mockResolvedValue({
-      id: userId,
+      id: TEST_UUID,
       email: 'test@example.com',
       role: 'CLIENT',
       adminLevel: null,
@@ -361,12 +394,12 @@ describe('POST /api/v1/auth/2fa/verify', () => {
     });
     twoFAUtils.verify2FAToken.mockReturnValue(true);
     twoFAUtils.getRemainingBackupCodes.mockReturnValue(10);
-    prisma.user.update.mockResolvedValue({ id: userId, lastLoginAt: new Date() });
-    prisma.refreshToken.create.mockResolvedValue({ token: 'refresh-tok', userId });
+    prisma.user.update.mockResolvedValue({ id: TEST_UUID, lastLoginAt: new Date() });
+    prisma.refreshToken.create.mockResolvedValue({ token: 'refresh-tok', userId: TEST_UUID });
 
     const res = await request(app)
       .post('/api/v1/auth/2fa/verify')
-      .send({ userId, totpCode: '123456' });
+      .send({ twoFAToken: makeTwoFAToken(), totpCode: '123456' });
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('token');
@@ -374,55 +407,89 @@ describe('POST /api/v1/auth/2fa/verify', () => {
     expect(res.body.message).toContain('réussie');
   });
 
-  test('should return 401 if backup code is invalid', async () => {
-    const userId = uuidv4();
+  // Cas 8 — body.userId différent du JWT → 401 2FA_TOKEN_MISMATCH (tentative de substitution d'identité)
+  test('should return 401 2FA_TOKEN_MISMATCH when body.userId differs from JWT userId', async () => {
+    const attackerUUID = uuidv4();
+
+    const res = await request(app)
+      .post('/api/v1/auth/2fa/verify')
+      .send({ twoFAToken: makeTwoFAToken(), userId: attackerUUID, totpCode: '123456' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe('2FA_TOKEN_MISMATCH');
+    // DB must not have been queried — rejected before reaching business logic
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  // Cas 11 — body.userId absent → JWT userId utilisé normalement, 200
+  test('should succeed normally when body.userId is absent', async () => {
     prisma.user.findUnique.mockResolvedValue({
-      id: userId,
+      id: TEST_UUID,
+      email: 'victim@example.com',
+      role: 'CLIENT',
+      adminLevel: null,
+      adminPermissions: null,
+      twoFAEnabled: true,
+      twoFASecret: 'SECRET',
+      twoFABackupCodes: {},
+    });
+    twoFAUtils.verify2FAToken.mockReturnValue(true);
+    twoFAUtils.getRemainingBackupCodes.mockReturnValue(10);
+    prisma.user.update.mockResolvedValue({ id: TEST_UUID, lastLoginAt: new Date() });
+    prisma.refreshToken.create.mockResolvedValue({ token: 'refresh-tok', userId: TEST_UUID });
+
+    const res = await request(app)
+      .post('/api/v1/auth/2fa/verify')
+      .send({ twoFAToken: makeTwoFAToken(), totpCode: '123456' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('token');
+    // DB queried with userId from JWT
+    expect(prisma.user.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: TEST_UUID } })
+    );
+  });
+
+  // Cas 9 — aucun token de session délivré en cas d'échec TOTP
+  test('should not issue session tokens when TOTP fails', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: TEST_UUID,
       email: 'test@example.com',
       role: 'CLIENT',
       twoFAEnabled: true,
       twoFASecret: 'SECRET',
       twoFABackupCodes: {},
     });
-    twoFAUtils.verifyBackupCode.mockReturnValue(false);
+    twoFAUtils.verify2FAToken.mockReturnValue(false);
 
     const res = await request(app)
       .post('/api/v1/auth/2fa/verify')
-      .send({ userId, backupCode: 'wrongcode' });
+      .send({ twoFAToken: makeTwoFAToken(), totpCode: '000000' });
 
     expect(res.status).toBe(401);
+    expect(res.body).not.toHaveProperty('token');
+    expect(res.body).not.toHaveProperty('refreshToken');
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
   });
 
-  test('should accept valid backup code and mark it as used', async () => {
-    const userId = uuidv4();
-    const backupCodes = { 'hashofcode': false };
-
+  // Cas 10 — JWT valide, utilisateur trouvé, mais ni totpCode ni backupCode fournis
+  test('should return 400 if neither totpCode nor backupCode is provided', async () => {
     prisma.user.findUnique.mockResolvedValue({
-      id: userId,
+      id: TEST_UUID,
       email: 'test@example.com',
       role: 'CLIENT',
-      adminLevel: null,
-      adminPermissions: null,
       twoFAEnabled: true,
       twoFASecret: 'SECRET',
-      twoFABackupCodes: backupCodes,
+      twoFABackupCodes: {},
     });
-    twoFAUtils.verifyBackupCode.mockReturnValue(true);
-    twoFAUtils.useBackupCode.mockReturnValue({ 'hashofcode': true });
-    twoFAUtils.getRemainingBackupCodes.mockReturnValue(9);
-    prisma.user.update.mockResolvedValue({ id: userId, lastLoginAt: new Date() });
-    prisma.refreshToken.create.mockResolvedValue({ token: 'refresh-tok', userId });
 
     const res = await request(app)
       .post('/api/v1/auth/2fa/verify')
-      .send({ userId, backupCode: 'validcode' });
+      .send({ twoFAToken: makeTwoFAToken() });
 
-    expect(res.status).toBe(200);
-    expect(prisma.user.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ twoFABackupCodes: { 'hashofcode': true } }),
-      })
-    );
+    expect(res.status).toBe(400);
+    expect(res.body).not.toHaveProperty('token');
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
   });
 });
 

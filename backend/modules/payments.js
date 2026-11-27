@@ -1,24 +1,17 @@
 'use strict';
 
 const logger = require('../utils/logger');
+const geniuspay = require('../utils/geniuspay');
+const PAYMENT_STATUSES = require('../config/payment-status');
 
 /**
- * Payments Module — Centralized payment processing and Stripe integration
+ * Payments Module — Centralized payment processing via GeniusPay
  * Handles payment creation, webhook handling, and refunds
  */
 
-const PAYMENT_STATUSES = {
-  PENDING: 'PENDING',           // Awaiting payment
-  PROCESSING: 'PROCESSING',     // Payment in progress
-  COMPLETED: 'COMPLETED',       // Payment successful
-  FAILED: 'FAILED',             // Payment failed
-  REFUNDED: 'REFUNDED',         // Payment refunded
-};
-
 class PaymentsModule {
-  constructor(prisma, stripe = null) {
+  constructor(prisma) {
     this.prisma = prisma;
-    this.stripe = stripe; // Optional Stripe client
   }
 
   /**
@@ -66,12 +59,14 @@ class PaymentsModule {
   }
 
   /**
-   * Process payment (mock or Stripe)
+   * Process payment via GeniusPay
+   * Note: All payments processed via GeniusPay webhooks (payment.success event)
+   * @deprecated This method kept for backward compatibility only
    * @param {string} paymentId - Payment ID
-   * @param {object} opts - { stripeToken, metadata }
+   * @param {object} opts - Reserved for future use
    * @returns {Promise<object>}
    */
-  async processPayment(paymentId, { stripeToken, metadata = {} } = {}) {
+  async processPayment(paymentId, { metadata = {} } = {}) {
     try {
       const payment = await this.prisma.payment.findUnique({
         where: { id: paymentId },
@@ -81,49 +76,8 @@ class PaymentsModule {
         throw new Error('Payment not found');
       }
 
-      // Update to PROCESSING
-      await this.prisma.payment.update({
-        where: { id: paymentId },
-        data: { status: PAYMENT_STATUSES.PROCESSING },
-      });
-
-      // If Stripe client available, process real payment
-      if (this.stripe && stripeToken) {
-        try {
-          const intent = await this.stripe.paymentIntents.create({
-            amount: Math.round(payment.amount * 100), // Convert to cents
-            currency: payment.currency.toLowerCase(),
-            source: stripeToken,
-            metadata: { paymentId, ...metadata },
-            description: payment.description,
-          });
-
-          // Mark as COMPLETED
-          const updated = await this.prisma.payment.update({
-            where: { id: paymentId },
-            data: {
-              status: PAYMENT_STATUSES.COMPLETED,
-              stripePaymentIntentId: intent.id,
-              completedAt: new Date(),
-            },
-          });
-
-          logger.info('[PaymentsModule] Payment processed', { paymentId, stripeIntentId: intent.id });
-          return updated;
-        } catch (stripeErr) {
-          // Mark as FAILED if Stripe rejects
-          await this.prisma.payment.update({
-            where: { id: paymentId },
-            data: {
-              status: PAYMENT_STATUSES.FAILED,
-              errorMessage: stripeErr.message,
-            },
-          });
-          throw stripeErr;
-        }
-      }
-
-      // Mock mode: auto-complete (for testing)
+      // All payments processed via GeniusPay webhooks
+      // This method is kept for backward compatibility but no longer processes direct payments
       const updated = await this.prisma.payment.update({
         where: { id: paymentId },
         data: {
@@ -156,24 +110,33 @@ class PaymentsModule {
         throw new Error('Payment not found');
       }
 
-      if (payment.status !== PAYMENT_STATUSES.COMPLETED) {
-        throw new Error('Only completed payments can be refunded');
+      if (payment.status !== PAYMENT_STATUSES.SUCCEEDED) {
+        throw new Error('Only succeeded payments can be refunded');
       }
 
-      // If Stripe integration available, process refund
-      if (this.stripe && payment.stripePaymentIntentId) {
-        try {
-          await this.stripe.refunds.create({
-            payment_intent: payment.stripePaymentIntentId,
-            metadata: { refundReason: reason, ...metadata },
-          });
-        } catch (stripeErr) {
-          logger.error('[PaymentsModule] Stripe refund failed', { paymentId, error: stripeErr.message });
-          throw stripeErr;
-        }
+      if (!payment.geniuspayRef) {
+        throw new Error('Payment has no GeniusPay reference for refund');
       }
 
-      // Update payment status
+      // Process refund via GeniusPay
+      try {
+        await geniuspay.refundPayment(payment.geniuspayRef, payment.amount, reason);
+        logger.info('[PaymentsModule] GeniusPay refund initiated', {
+          paymentId,
+          geniuspayRef: payment.geniuspayRef,
+          amount: payment.amount,
+          reason,
+        });
+      } catch (gpayErr) {
+        logger.error('[PaymentsModule] GeniusPay refund failed', {
+          paymentId,
+          geniuspayRef: payment.geniuspayRef,
+          error: gpayErr.message,
+        });
+        throw gpayErr;
+      }
+
+      // Update payment status after successful refund
       const updated = await this.prisma.payment.update({
         where: { id: paymentId },
         data: {
@@ -187,60 +150,6 @@ class PaymentsModule {
       return updated;
     } catch (err) {
       logger.error('[PaymentsModule] refundPayment failed', { paymentId, error: err.message });
-      throw err;
-    }
-  }
-
-  /**
-   * Handle Stripe webhook event
-   * @param {object} event - Stripe webhook event
-   * @returns {Promise<object>}
-   */
-  async handleStripeWebhook(event) {
-    try {
-      const { type, data } = event;
-
-      switch (type) {
-        case 'payment_intent.succeeded': {
-          const { id: stripeIntentId } = data.object;
-          await this.prisma.payment.updateMany({
-            where: { stripePaymentIntentId: stripeIntentId },
-            data: { status: PAYMENT_STATUSES.COMPLETED, completedAt: new Date() },
-          });
-          logger.info('[PaymentsModule] Webhook: payment succeeded', { stripeIntentId });
-          break;
-        }
-
-        case 'payment_intent.payment_failed': {
-          const { id: stripeIntentId, last_payment_error } = data.object;
-          await this.prisma.payment.updateMany({
-            where: { stripePaymentIntentId: stripeIntentId },
-            data: {
-              status: PAYMENT_STATUSES.FAILED,
-              errorMessage: last_payment_error?.message,
-            },
-          });
-          logger.warn('[PaymentsModule] Webhook: payment failed', { stripeIntentId });
-          break;
-        }
-
-        case 'charge.refunded': {
-          const { payment_intent: stripeIntentId } = data.object;
-          await this.prisma.payment.updateMany({
-            where: { stripePaymentIntentId: stripeIntentId },
-            data: { status: PAYMENT_STATUSES.REFUNDED, refundedAt: new Date() },
-          });
-          logger.info('[PaymentsModule] Webhook: charge refunded', { stripeIntentId });
-          break;
-        }
-
-        default:
-          logger.debug('[PaymentsModule] Unhandled webhook event', { type });
-      }
-
-      return { success: true, event: type };
-    } catch (err) {
-      logger.error('[PaymentsModule] handleStripeWebhook failed', { error: err.message });
       throw err;
     }
   }

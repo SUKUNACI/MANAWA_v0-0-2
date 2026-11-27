@@ -87,4 +87,46 @@ function decryptDocumentNumber(encryptedBase64) {
   return decipher.update(ciphertext) + decipher.final('utf8');
 }
 
-module.exports = { hashDocumentNumber, encryptDocumentNumber, decryptDocumentNumber };
+/**
+ * Encrypts an arbitrary string with AES-256-GCM (no normalization).
+ * Returns a prefixed base64 string: 'enc:v1:' + base64(iv + tag + ciphertext).
+ * Used for secrets like TOTP tokens that must remain unchanged.
+ */
+const PREFIX = 'enc:v1:';
+
+function encryptString(plainText) {
+  if (typeof plainText !== 'string' || plainText.length === 0) {
+    throw new Error('[identityCrypto] encryptString: input must be a non-empty string');
+  }
+  const key = requireSecret('IDENTITY_AES_KEY');
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+  const encrypted = Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return PREFIX + Buffer.concat([iv, tag, encrypted]).toString('base64');
+}
+
+/**
+ * Decrypts a string encrypted by encryptString.
+ * Returns the original plaintext, or the input unchanged if it's not encrypted (legacy plaintext).
+ */
+function decryptString(value) {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error('[identityCrypto] decryptString: input must be a non-empty string');
+  }
+  if (!value.startsWith(PREFIX)) return value; // legacy plaintext
+  const key = requireSecret('IDENTITY_AES_KEY');
+  const buf = Buffer.from(value.slice(PREFIX.length), 'base64');
+  if (buf.length < IV_LENGTH + TAG_LENGTH + 1) {
+    throw new Error('[identityCrypto] decryptString: ciphertext too short');
+  }
+  const iv = buf.subarray(0, IV_LENGTH);
+  const tag = buf.subarray(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
+  const ciphertext = buf.subarray(IV_LENGTH + TAG_LENGTH);
+  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+  decipher.setAuthTag(tag);
+  return decipher.update(ciphertext) + decipher.final('utf8');
+}
+
+module.exports = { hashDocumentNumber, encryptDocumentNumber, decryptDocumentNumber,
+                   encryptString, decryptString };

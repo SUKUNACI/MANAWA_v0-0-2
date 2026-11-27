@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('../utils/logger');
+const { DEFAULT_COMMISSION_RATE } = require('../config/commission');
 
 /**
  * Analytics Advanced Module — Retention, Distribution, Funnels, Revenue
@@ -11,7 +12,7 @@ class AnalyticsAdvancedModule {
   constructor(prisma) {
     this.prisma = prisma;
     this.TIER_PRICES = { ESSENTIEL: 25, PRO: 50, ELITE: 100, GRATUIT: 0 };
-    this.COMMISSION_RATE = 0.15;
+    this.COMMISSION_RATE = DEFAULT_COMMISSION_RATE;
   }
 
   // ─── RETENTION METRICS ───────────────────────────────────────────────────

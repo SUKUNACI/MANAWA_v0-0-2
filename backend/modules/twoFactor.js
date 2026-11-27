@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const logger = require('../utils/logger');
+const { encryptString, decryptString } = require('../utils/identityCrypto');
 
 /**
  * TwoFactor Module — TOTP setup, verification, backup codes, enable/disable
@@ -81,7 +82,7 @@ class TwoFactorModule {
     const user = await this.prisma.user.update({
       where: { id: userId },
       data: {
-        twoFASecret: decoded.secret,
+        twoFASecret: encryptString(decoded.secret),
         twoFAEnabled: true,
         twoFABackupCodes: decoded.hashedBackupCodes,
         twoFAEnabledAt: new Date(),
@@ -119,7 +120,8 @@ class TwoFactorModule {
     let usedBackupCode = false;
 
     if (totpCode) {
-      verified = this.twoFAUtils.verify2FAToken(totpCode, user.twoFASecret);
+      if (!user.twoFASecret) throw Object.assign(new Error('Secret 2FA manquant'), { status: 400 });
+      verified = this.twoFAUtils.verify2FAToken(totpCode, decryptString(user.twoFASecret));
     } else {
       verified = this.twoFAUtils.verifyBackupCode(backupCode, user.twoFABackupCodes);
       usedBackupCode = true;
@@ -166,7 +168,8 @@ class TwoFactorModule {
 
     if (!user || !user.twoFAEnabled) throw Object.assign(new Error('2FA non activé'), { status: 400 });
 
-    if (!this.twoFAUtils.verify2FAToken(totpCode, user.twoFASecret)) {
+    if (!user.twoFASecret) throw Object.assign(new Error('Secret 2FA manquant'), { status: 400 });
+    if (!this.twoFAUtils.verify2FAToken(totpCode, decryptString(user.twoFASecret))) {
       throw Object.assign(new Error('Code TOTP invalide'), { status: 401 });
     }
 
@@ -191,7 +194,8 @@ class TwoFactorModule {
     const passwordValid = await bcrypt.compare(password, user.passwordHash);
     if (!passwordValid) throw Object.assign(new Error('Mot de passe incorrect'), { status: 401 });
 
-    if (!this.twoFAUtils.verify2FAToken(totpCode, user.twoFASecret)) {
+    if (!user.twoFASecret) throw Object.assign(new Error('Secret 2FA manquant'), { status: 400 });
+    if (!this.twoFAUtils.verify2FAToken(totpCode, decryptString(user.twoFASecret))) {
       throw Object.assign(new Error('Code TOTP invalide'), { status: 401 });
     }
 

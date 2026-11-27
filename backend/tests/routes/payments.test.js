@@ -49,6 +49,20 @@ jest.mock('../../utils/logger', () => ({
   debug: jest.fn(),
 }));
 
+// ── Mock PaymentsModule ───────────────────────────────────────────────────────
+jest.mock('../../modules/payments', () => {
+  return jest.fn().mockImplementation(() => ({
+    refundPayment: jest.fn().mockImplementation(async (paymentId, reason, metadata) => {
+      return {
+        id: paymentId,
+        status: 'refunded',
+        refundReason: reason,
+        refundedAt: new Date(),
+      };
+    }),
+  }));
+});
+
 // ── Mock sorting helpers ──────────────────────────────────────────────────────
 jest.mock('../../utils/sorting-helper', () => ({
   buildPaginationQuery: jest.fn().mockReturnValue({ skip: 0, take: 20 }),
@@ -108,6 +122,7 @@ const mockQuote = {
   clientId: CLIENT_ID,
   projectId: 'project-1',
   amount: 100000,
+  status: 'ACCEPTED',
   client: mockClient,
   professional: { id: 'pro-1', userId: PRO_ID },
 };
@@ -377,6 +392,38 @@ describe('POST /api/payments/create — logique métier', () => {
       .send({ quoteId: QUOTE_ID, amount: 50000 });
 
     expect(res.status).toBe(500);
+  });
+
+  it('retourne 409 si le devis est PENDING', async () => {
+    prisma.quote.findUnique.mockResolvedValue({
+      ...mockQuote,
+      status: 'PENDING',
+    });
+
+    const res = await request(app)
+      .post('/api/payments/create')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_ID)}`)
+      .send({ quoteId: QUOTE_ID, amount: 50000 });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('QUOTE_NOT_ACCEPTED');
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('retourne 409 si le devis est REFUSED', async () => {
+    prisma.quote.findUnique.mockResolvedValue({
+      ...mockQuote,
+      status: 'REFUSED',
+    });
+
+    const res = await request(app)
+      .post('/api/payments/create')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_ID)}`)
+      .send({ quoteId: QUOTE_ID, amount: 50000 });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('QUOTE_NOT_ACCEPTED');
+    expect(prisma.payment.create).not.toHaveBeenCalled();
   });
 });
 
@@ -721,4 +768,86 @@ describe('GET /api/payments/stats/overview — admin', () => {
 
     expect(res.status).toBe(500);
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// POST /api/payments/:paymentId/refund — Refund payment (admin only)
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('POST /api/payments/:paymentId/refund', () => {
+  const REFUND_PAYMENT_ID = 'c4e3b2a1-1234-4abc-8def-000000000003';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('admin with valid reason → 200 with refunded payment', async () => {
+    const mockPayment = {
+      id: REFUND_PAYMENT_ID,
+      status: 'succeeded',
+      amount: 50000,
+      geniuspayRef: 'gp-ref-123',
+      quote: { id: QUOTE_ID, clientId: CLIENT_ID, professionalId: PRO_ID, amount: 50000 },
+    };
+
+    prisma.payment.findUnique.mockResolvedValue(mockPayment);
+    prisma.payment.update.mockResolvedValue({
+      ...mockPayment,
+      status: 'refunded',
+      refundedAt: new Date(),
+      refundReason: 'Admin refund test',
+    });
+
+    const res = await request(app)
+      .post(`/api/payments/${REFUND_PAYMENT_ID}/refund`)
+      .set('Authorization', `Bearer ${adminToken(ADMIN_ID)}`)
+      .send({ reason: 'Admin refund test' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.status).toBe('refunded');
+    expect(prisma.payment.findUnique).toHaveBeenCalledWith({
+      where: { id: REFUND_PAYMENT_ID },
+      include: { quote: { select: { id: true, clientId: true, professionalId: true, amount: true } } },
+    });
+  });
+
+  it('non-admin → 403 Forbidden', async () => {
+    const res = await request(app)
+      .post(`/api/payments/${REFUND_PAYMENT_ID}/refund`)
+      .set('Authorization', `Bearer ${clientToken(CLIENT_ID)}`)
+      .send({ reason: 'Should fail' });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('missing reason → 400 Bad Request', async () => {
+    const res = await request(app)
+      .post(`/api/payments/${REFUND_PAYMENT_ID}/refund`)
+      .set('Authorization', `Bearer ${adminToken(ADMIN_ID)}`)
+      .send({});
+
+    expect(res.status).toBe(400);
+  });
+
+  it('reason exceeds 500 chars → 400 Bad Request', async () => {
+    const longReason = 'a'.repeat(501);
+    const res = await request(app)
+      .post(`/api/payments/${REFUND_PAYMENT_ID}/refund`)
+      .set('Authorization', `Bearer ${adminToken(ADMIN_ID)}`)
+      .send({ reason: longReason });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('payment not found → 404 Not Found', async () => {
+    prisma.payment.findUnique.mockResolvedValue(null);
+
+    const res = await request(app)
+      .post(`/api/payments/${REFUND_PAYMENT_ID}/refund`)
+      .set('Authorization', `Bearer ${adminToken(ADMIN_ID)}`)
+      .send({ reason: 'Should fail' });
+
+    expect(res.status).toBe(404);
+  });
+
 });

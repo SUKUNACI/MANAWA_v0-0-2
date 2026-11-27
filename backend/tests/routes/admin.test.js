@@ -94,6 +94,17 @@ jest.mock('../../middleware/auth', () => ({
   },
 }));
 
+// ── Mock mailer (requis par resetUserPassword — D1/D3) ────────────────────────
+jest.mock('../../config/mailer', () => ({
+  isConfigured: true,
+  send: jest.fn().mockResolvedValue({ sent: true }),
+}));
+
+// ── Mock AuditLogModule ────────────────────────────────────────────────────────
+jest.mock('../../modules/AuditLogModule', () => ({
+  createAuditLog: jest.fn().mockResolvedValue({}),
+}));
+
 const prisma     = require('../../config/db');
 const appConfig  = require('../../utils/appConfig');
 const adminRoutes = require('../../routes/admin');
@@ -715,35 +726,38 @@ describe('POST /api/admin/users/:id/reset-password', () => {
     prisma.user.update.mockResolvedValue(mockUser);
   });
 
-  it('génère et retourne un mot de passe temporaire', async () => {
+  it('retourne { initiated: true } sans mot de passe temporaire (D1)', async () => {
     const res = await request(app)
       .post(`/api/admin/users/${USER_ID}/reset-password`)
       .set('Authorization', `Bearer ${adminToken(ADMIN_ID)}`);
 
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('temporaryPassword');
-    expect(typeof res.body.temporaryPassword).toBe('string');
-    expect(res.body.temporaryPassword.length).toBeGreaterThan(0);
+    expect(res.body).toEqual({ initiated: true });
+    expect(res.body).not.toHaveProperty('temporaryPassword');
   });
 
-  it('génère un mot de passe différent à chaque appel', async () => {
-    const r1 = await request(app)
-      .post(`/api/admin/users/${USER_ID}/reset-password`)
-      .set('Authorization', `Bearer ${adminToken(ADMIN_ID)}`);
-    const r2 = await request(app)
-      .post(`/api/admin/users/${USER_ID}/reset-password`)
-      .set('Authorization', `Bearer ${adminToken(ADMIN_ID)}`);
-
-    expect(r1.body.temporaryPassword).not.toBe(r2.body.temporaryPassword);
-  });
-
-  it('stocke un hash bcrypt valide', async () => {
+  it('stocke un hash SHA-256 (64 chars) dans passwordResetCode (D1)', async () => {
     await request(app)
       .post(`/api/admin/users/${USER_ID}/reset-password`)
       .set('Authorization', `Bearer ${adminToken(ADMIN_ID)}`);
 
-    const hash = prisma.user.update.mock.calls[0][0].data.passwordHash;
-    expect(hash).toMatch(/^\$2[aby]\$/);
+    const updateCall = prisma.user.update.mock.calls.find(
+      (c) => c[0].data?.passwordResetCode !== undefined && c[0].data?.passwordResetCode !== null
+    );
+    expect(updateCall).toBeDefined();
+    expect(updateCall[0].data.passwordResetCode).toHaveLength(64);
+  });
+
+  it('active mustChangePassword=true lors du reset (D2)', async () => {
+    await request(app)
+      .post(`/api/admin/users/${USER_ID}/reset-password`)
+      .set('Authorization', `Bearer ${adminToken(ADMIN_ID)}`);
+
+    const updateCall = prisma.user.update.mock.calls.find(
+      (c) => c[0].data?.mustChangePassword !== undefined
+    );
+    expect(updateCall).toBeDefined();
+    expect(updateCall[0].data.mustChangePassword).toBe(true);
   });
 
   it('retourne 404 si utilisateur introuvable', async () => {

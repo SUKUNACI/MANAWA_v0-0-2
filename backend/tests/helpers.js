@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
 
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-key-manawa-min-32-chars-xx';
+
 function makeToken(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1d' });
 }

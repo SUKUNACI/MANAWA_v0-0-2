@@ -12,13 +12,7 @@ function deepFreeze(obj) {
 
 const ROTATION_CONFIG = deepFreeze({
   // API Keys
-  STRIPE_API_KEY: {
-    type: 'api_key',
-    interval: 90,
-    method: 'auto',
-    provider: 'stripe',
-    endpoint: '/v1/api_keys',
-  },
+  // STRIPE_API_KEY removed — Manawa uses GeniusPay exclusively
   SENDGRID_API_KEY: {
     type: 'api_key',
     interval: 180,
