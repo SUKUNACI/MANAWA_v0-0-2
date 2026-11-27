@@ -57,6 +57,7 @@ describe('Payments Security — Amount Server-Calculated', () => {
       id: quoteId,
       clientId: userId,
       amount: 100000,
+      status: 'ACCEPTED',
       client: { id: userId },
       professional: { id: 'prof-123' },
     });
@@ -84,7 +85,7 @@ describe('Payments Security — Amount Server-Calculated', () => {
 
   test('Idempotency: Same quoteId + isDeposit = same key (not Date.now())', async () => {
     prisma.quote.findUnique.mockResolvedValue({
-      id: quoteId, clientId: userId, amount: 100000,
+      id: quoteId, clientId: userId, amount: 100000, status: 'ACCEPTED',
       client: { id: userId }, professional: { id: 'prof-123' },
     });
     prisma.payment.findUnique.mockResolvedValue(null);

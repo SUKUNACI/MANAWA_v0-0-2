@@ -40,6 +40,13 @@ router.post(
         return res.status(403).json({ error: 'Non autorisé' });
       }
 
+      if (quote.status !== 'ACCEPTED') {
+        return res.status(409).json({
+          error: 'Le devis doit être accepté avant paiement',
+          code: 'QUOTE_NOT_ACCEPTED',
+        });
+      }
+
       // Calculate amount server-side from quote
       const baseAmount = parseFloat(quote.amount) || 0;
       if (baseAmount <= 0) {

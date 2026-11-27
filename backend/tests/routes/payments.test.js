@@ -108,6 +108,7 @@ const mockQuote = {
   clientId: CLIENT_ID,
   projectId: 'project-1',
   amount: 100000,
+  status: 'ACCEPTED',
   client: mockClient,
   professional: { id: 'pro-1', userId: PRO_ID },
 };
@@ -377,6 +378,38 @@ describe('POST /api/payments/create — logique métier', () => {
       .send({ quoteId: QUOTE_ID, amount: 50000 });
 
     expect(res.status).toBe(500);
+  });
+
+  it('retourne 409 si le devis est PENDING', async () => {
+    prisma.quote.findUnique.mockResolvedValue({
+      ...mockQuote,
+      status: 'PENDING',
+    });
+
+    const res = await request(app)
+      .post('/api/payments/create')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_ID)}`)
+      .send({ quoteId: QUOTE_ID, amount: 50000 });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('QUOTE_NOT_ACCEPTED');
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('retourne 409 si le devis est REFUSED', async () => {
+    prisma.quote.findUnique.mockResolvedValue({
+      ...mockQuote,
+      status: 'REFUSED',
+    });
+
+    const res = await request(app)
+      .post('/api/payments/create')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_ID)}`)
+      .send({ quoteId: QUOTE_ID, amount: 50000 });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('QUOTE_NOT_ACCEPTED');
+    expect(prisma.payment.create).not.toHaveBeenCalled();
   });
 });
 
