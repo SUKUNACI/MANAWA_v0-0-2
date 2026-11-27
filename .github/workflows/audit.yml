@@ -6,6 +6,7 @@ on:
       - main
       - develop
       - masterchef
+      - secondaire
     paths:
       - 'backend/package.json'
       - 'backend/package-lock.json'
@@ -15,6 +16,7 @@ on:
       - main
       - develop
       - masterchef
+      - secondaire
     paths:
       - 'backend/package.json'
       - 'backend/package-lock.json'
