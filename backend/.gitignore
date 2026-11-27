@@ -1,2 +1,7 @@
-backend/coverage/
+coverage/
+logs/
+node_modules/
+.env
+.env.local
+*.log
 # Gitleaks: ignore coverage files (generated, no secrets)

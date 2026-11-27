@@ -31,6 +31,7 @@ backup_*.json
 
 # Logs
 *.log
+logs/
 npm-debug.log*
 
 # Audit reports
@@ -45,3 +46,7 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# P12: Sensitive exports and audit recovery (moved to secure location)
+recovery-exports/
+backend/audit-recovery.js

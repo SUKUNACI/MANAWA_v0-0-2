@@ -22,6 +22,11 @@ function formatLog(level, message, data = {}) {
 }
 
 function writeLog(file, entry) {
+  // Only write logs to disk in test environments with explicit opt-in
+  // Production should use Sentry/Datadog instead (see JIRA-P2)
+  if (process.env.LOG_TO_DISK !== 'true') {
+    return; // Disable disk logging by default to prevent 2.74GB flood
+  }
   try {
     fs.appendFileSync(file, entry + '\n', 'utf8');
   } catch (err) {
