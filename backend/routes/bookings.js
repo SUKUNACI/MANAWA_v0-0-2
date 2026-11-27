@@ -4,13 +4,15 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { param, query, body } = require('express-validator');
 const prisma = require('../config/db');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireRole } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validateInput');
 const { applyPageBasedPagination, validatePageBasedPaginationQuery } = require('../utils/pagination-helper');
 const BookingModule = require('../modules/booking');
 
 const router = express.Router();
 const bookingModule = new BookingModule(prisma);
+
+const timeFormatRegex = /^\d{2}:\d{2}$/;
 
 const readLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -73,6 +75,90 @@ router.get('/', readLimiter, requireAuth,
         bookings,
         pagination: { page: Math.floor(offset / limit) + 1, limit, total, totalPages: pageCount },
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// POST /api/bookings — Create a booking from an accepted quote
+router.post(
+  '/',
+  writeLimiter,
+  requireAuth,
+  requireRole("CLIENT"),
+  [
+    body('quoteId').isUUID().withMessage('quoteId must be a valid UUID'),
+    body('date').trim().notEmpty().withMessage('date is required').custom((val) => {
+      const d = new Date(val);
+      if (isNaN(d.getTime())) throw new Error('date must be a valid date');
+      return true;
+    }),
+    body('startTime').matches(timeFormatRegex).withMessage('startTime must be HH:MM format'),
+    body('endTime').matches(timeFormatRegex).withMessage('endTime must be HH:MM format'),
+    body('note').optional().trim().isLength({ max: 500 }).withMessage('note must be max 500 characters'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
+    try {
+      const { quoteId, date, startTime, endTime, note } = req.body;
+
+      const quote = await prisma.quote.findUnique({
+        where: { id: quoteId },
+        include: { project: { select: { clientId: true } }, professional: { select: { id: true, verifiedByAdmin: true } } },
+      });
+
+      if (!quote) {
+        return res.status(404).json({ error: 'Devis introuvable', code: 'QUOTE_NOT_FOUND' });
+      }
+
+      if (quote.project.clientId !== req.user.id) {
+        return res.status(403).json({ code: 'FORBIDDEN' });
+      }
+
+      if (quote.status !== 'ACCEPTED') {
+        return res.status(409).json({ error: 'Le devis doit être accepté', code: 'QUOTE_NOT_ACCEPTED' });
+      }
+
+      if (!quote.professional.verifiedByAdmin) {
+        return res.status(409).json({ error: 'Professionnel non vérifié', code: 'PROFESSIONAL_NOT_VERIFIED' });
+      }
+
+      if (startTime >= endTime) {
+        return res.status(400).json({ code: 'INVALID_TIME_RANGE' });
+      }
+
+      const dateObj = new Date(date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (dateObj < today) {
+        return res.status(400).json({ code: 'DATE_IN_PAST' });
+      }
+
+      const existing = await prisma.booking.findUnique({ where: { quoteId } });
+      if (existing) {
+        return res.status(409).json({ code: 'BOOKING_ALREADY_EXISTS' });
+      }
+
+      try {
+        const booking = await bookingModule.createFromQuote({
+          quoteId,
+          clientId: req.user.id,
+          professionalId: quote.professional.id,
+          projectId: quote.projectId,
+          date,
+          startTime,
+          endTime,
+          note,
+        });
+
+        return res.status(201).json(booking);
+      } catch (err) {
+        if (err.code === 'P2002' && err.meta?.target?.includes('quoteId')) {
+          return res.status(409).json({ code: 'BOOKING_ALREADY_EXISTS' });
+        }
+        throw err;
+      }
     } catch (err) {
       next(err);
     }

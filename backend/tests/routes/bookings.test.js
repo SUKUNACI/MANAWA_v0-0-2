@@ -17,6 +17,9 @@ jest.mock('../../config/db', () => ({
     findUnique: jest.fn(),
     update: jest.fn(),
   },
+  quote: {
+    findUnique: jest.fn(),
+  },
   user: {
     findUnique: jest.fn(),
   },
@@ -65,6 +68,13 @@ jest.mock('../../middleware/auth', () => ({
       req.user.role = req.user.role || 'CLIENT';
     } catch {
       return res.status(401).json({ error: 'Token invalide' });
+    }
+    next();
+  },
+  requireRole: (allowedRole) => (req, res, next) => {
+    const allowedRoles = Array.isArray(allowedRole) ? allowedRole : [allowedRole];
+    if (!req.user || !allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Accès refusé', code: 'FORBIDDEN' });
     }
     next();
   },
@@ -120,14 +130,26 @@ const mockProfessional = {
   trade: 'Plombier',
   completedMissionsCount: 5,
   cancelledMissionsCount: 1,
+  verifiedByAdmin: true,
   user: mockProUser,
+};
+
+const QUOTE_ID = 'c4e3b2a1-1234-4abc-8def-000000000001';
+
+const mockQuote = {
+  id: QUOTE_ID,
+  projectId: 'project-1',
+  professionalId: PRO_ID,
+  status: 'ACCEPTED',
+  project: { clientId: CLIENT_USER_ID },
+  professional: { id: PRO_ID, verifiedByAdmin: true },
 };
 
 const mockBooking = {
   id: 'booking-1',
   professionalId: PRO_ID,
   clientId: CLIENT_USER_ID,
-  date: new Date('2026-11-20'),
+  date: new Date('2026-12-20'),
   startTime: '09:00',
   endTime: '11:00',
   status: 'PENDING',
@@ -180,7 +202,215 @@ function resetAllMocks() {
   jest.clearAllMocks();
   setupUserMock(prisma);
   setupProfessionalMock(prisma);
+  // Reset ALL booking mocks to safe defaults
+  prisma.booking.findUnique.mockResolvedValue(null);
+  prisma.booking.findMany.mockResolvedValue([]);
+  prisma.booking.create.mockResolvedValue(null);
+  prisma.booking.update.mockResolvedValue(null);
+  prisma.booking.count.mockResolvedValue(0);
+  // Reset ALL quote mocks to safe defaults
+  prisma.quote.findUnique.mockResolvedValue(null);
 }
+
+// ============ TESTS: POST /api/bookings ============
+
+describe('POST /api/bookings - Create booking from quote', () => {
+  beforeEach(() => {
+    resetAllMocks();
+  });
+
+  test('should return 401 without authentication', async () => {
+    const res = await request(app)
+      .post('/api/bookings')
+      .send({ quoteId: QUOTE_ID, date: '2026-12-20', startTime: '09:00', endTime: '11:00' });
+    expect(res.status).toBe(401);
+  });
+
+  test('should return 403 for non-CLIENT role', async () => {
+    const res = await request(app)
+      .post('/api/bookings')
+      .set('Authorization', `Bearer ${proToken(PRO_USER_ID)}`)
+      .send({ quoteId: QUOTE_ID, date: '2026-12-20', startTime: '09:00', endTime: '11:00' });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN');
+  });
+
+  test('should return 201 and create booking when quote is accepted', async () => {
+    prisma.quote.findUnique.mockResolvedValue(mockQuote);
+    prisma.booking.findUnique.mockResolvedValue(null);
+    prisma.booking.create.mockResolvedValue({
+      id: 'booking-new',
+      quoteId: QUOTE_ID,
+      clientId: CLIENT_USER_ID,
+      professionalId: PRO_ID,
+      projectId: 'project-1',
+      date: new Date('2026-12-20'),
+      startTime: '09:00',
+      endTime: '11:00',
+      status: 'PENDING',
+      note: 'Test note',
+      client: mockClientUser,
+      professional: mockProfessional,
+      project: { id: 'project-1' },
+    });
+
+    const res = await request(app)
+      .post('/api/bookings')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({ quoteId: QUOTE_ID, date: '2026-12-20', startTime: '09:00', endTime: '11:00', note: 'Test note' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBe('booking-new');
+    expect(res.body.status).toBe('PENDING');
+    expect(prisma.booking.create).toHaveBeenCalled();
+  });
+
+  test('should return 404 when quote not found', async () => {
+    prisma.quote.findUnique.mockResolvedValue(null);
+
+    const res = await request(app)
+      .post('/api/bookings')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({ quoteId: QUOTE_ID, date: '2026-12-20', startTime: '09:00', endTime: '11:00' });
+
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('QUOTE_NOT_FOUND');
+    expect(prisma.booking.create).not.toHaveBeenCalled();
+  });
+
+  test('should return 403 when quote belongs to another client', async () => {
+    prisma.quote.findUnique.mockResolvedValue({
+      ...mockQuote,
+      project: { clientId: 'other-client' },
+    });
+
+    const res = await request(app)
+      .post('/api/bookings')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({ quoteId: QUOTE_ID, date: '2026-12-20', startTime: '09:00', endTime: '11:00' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN');
+    expect(prisma.booking.create).not.toHaveBeenCalled();
+  });
+
+  test('should return 409 when quote status is not ACCEPTED', async () => {
+    prisma.quote.findUnique.mockResolvedValue({
+      ...mockQuote,
+      status: 'PENDING',
+    });
+
+    const res = await request(app)
+      .post('/api/bookings')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({ quoteId: QUOTE_ID, date: '2026-12-20', startTime: '09:00', endTime: '11:00' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('QUOTE_NOT_ACCEPTED');
+    expect(prisma.booking.create).not.toHaveBeenCalled();
+  });
+
+  test('should return 409 when professional is not verified', async () => {
+    prisma.quote.findUnique.mockResolvedValue({
+      ...mockQuote,
+      professional: { id: PRO_ID, verifiedByAdmin: false },
+    });
+
+    const res = await request(app)
+      .post('/api/bookings')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({ quoteId: QUOTE_ID, date: '2026-12-20', startTime: '09:00', endTime: '11:00' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('PROFESSIONAL_NOT_VERIFIED');
+    expect(prisma.booking.create).not.toHaveBeenCalled();
+  });
+
+  test('should return 400 when startTime >= endTime', async () => {
+    prisma.quote.findUnique.mockResolvedValue(mockQuote);
+
+    const res = await request(app)
+      .post('/api/bookings')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({ quoteId: QUOTE_ID, date: '2026-12-20', startTime: '10:00', endTime: '09:00' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('INVALID_TIME_RANGE');
+    expect(prisma.booking.create).not.toHaveBeenCalled();
+  });
+
+  test('should return 400 when date is in the past', async () => {
+    prisma.quote.findUnique.mockResolvedValue(mockQuote);
+
+    const res = await request(app)
+      .post('/api/bookings')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({ quoteId: QUOTE_ID, date: '2020-01-01', startTime: '09:00', endTime: '11:00' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('DATE_IN_PAST');
+    expect(prisma.booking.create).not.toHaveBeenCalled();
+  });
+
+  test('should return 409 when booking already exists for this quote', async () => {
+    prisma.quote.findUnique.mockResolvedValue(mockQuote);
+    prisma.booking.findUnique.mockResolvedValue(mockBooking);
+
+    const res = await request(app)
+      .post('/api/bookings')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({ quoteId: QUOTE_ID, date: '2026-12-20', startTime: '09:00', endTime: '11:00' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('BOOKING_ALREADY_EXISTS');
+    expect(prisma.booking.create).not.toHaveBeenCalled();
+  });
+
+  test('should return 400 when date format is invalid', async () => {
+    const res = await request(app)
+      .post('/api/bookings')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({ quoteId: QUOTE_ID, date: 'invalid-date', startTime: '09:00', endTime: '11:00' });
+
+    expect(res.status).toBe(400);
+  });
+
+  test('should return 400 when startTime format is invalid', async () => {
+    const res = await request(app)
+      .post('/api/bookings')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({ quoteId: QUOTE_ID, date: '2026-12-20', startTime: '9:00', endTime: '11:00' });
+
+    expect(res.status).toBe(400);
+  });
+
+  test('should allow optional note field', async () => {
+    prisma.quote.findUnique.mockResolvedValue(mockQuote);
+    prisma.booking.findUnique.mockResolvedValue(null);
+    prisma.booking.create.mockResolvedValue({
+      id: 'booking-new',
+      quoteId: QUOTE_ID,
+      clientId: CLIENT_USER_ID,
+      professionalId: PRO_ID,
+      projectId: 'project-1',
+      date: new Date('2026-12-20'),
+      startTime: '09:00',
+      endTime: '11:00',
+      status: 'PENDING',
+      note: null,
+      client: mockClientUser,
+      professional: mockProfessional,
+      project: { id: 'project-1' },
+    });
+
+    const res = await request(app)
+      .post('/api/bookings')
+      .set('Authorization', `Bearer ${clientToken(CLIENT_USER_ID)}`)
+      .send({ quoteId: QUOTE_ID, date: '2026-12-20', startTime: '09:00', endTime: '11:00' });
+
+    expect(res.status).toBe(201);
+  });
+});
 
 // ============ TESTS: GET /api/bookings ============
 
@@ -656,7 +886,7 @@ describe('Booking Business Logic', () => {
         {
           id: 'exception-1',
           type: 'EXCEPTION',
-          date: new Date('2026-11-20'),
+          date: new Date('2026-12-20'),
           available: false,
           note: 'Vacances',
         },
@@ -810,6 +1040,7 @@ describe('Booking Error Handling', () => {
   });
 
   test('should handle missing required fields in cancel request', async () => {
+    prisma.booking.findUnique.mockResolvedValue(mockBooking);
     prisma.booking.update.mockResolvedValue(mockCancelledBooking);
 
     const res = await request(app)
